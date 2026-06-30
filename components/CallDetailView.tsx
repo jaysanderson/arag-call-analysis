@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CallDetail, CallParagraph } from "@/lib/types";
-import { Chip, Card } from "./ui";
+import { Chip, Card, MediaBadge } from "./ui";
 import { fmtTime, fmtDateTime, colorFor, SENTIMENT_COLOR } from "@/lib/format";
 import { AnalysisPanel } from "./AnalysisPanel";
 import { ChatPanel, type Citation } from "./ChatPanel";
@@ -65,7 +65,7 @@ export function CallDetailView({ call }: { call: CallDetail }) {
             {call.durationSec && <span>· {fmtTime(call.durationSec)}</span>}
             {call.agentName && <span>· Agent: {call.agentName}</span>}
             {call.queue && <span>· {call.queue}</span>}
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs uppercase">{call.mediaType}</span>
+            <MediaBadge type={call.mediaType} />
           </div>
         </div>
         {sentiment && <Chip label={sentiment} className={SENTIMENT_COLOR[sentiment]} />}

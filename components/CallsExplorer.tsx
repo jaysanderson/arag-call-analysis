@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { CallSummary } from "@/lib/types";
-import { Card, Chip } from "./ui";
+import { Card, Chip, MediaBadge } from "./ui";
 import { fmtDate, fmtTime, colorFor, SENTIMENT_COLOR } from "@/lib/format";
 
 type Labelset = { title: string; labels: { title: string }[] };
@@ -103,7 +103,7 @@ export function CallsExplorer() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-500">{c.mediaType}</span>
+                    <MediaBadge type={c.mediaType} />
                     <h3 className="truncate font-medium text-slate-900">{c.title}</h3>
                   </div>
                   <div className="mt-1 flex flex-wrap gap-1.5">

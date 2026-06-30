@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { dashboard } from "@/lib/calls";
-import { Kpi, Card, Chip, SectionTitle } from "@/components/ui";
+import { Kpi, Card, Chip, SectionTitle, MediaBadge } from "@/components/ui";
 import { DashboardCharts } from "@/components/DashboardCharts";
 import { pct, fmtDate, colorFor, SENTIMENT_COLOR } from "@/lib/format";
 
@@ -62,7 +62,7 @@ export default async function Home() {
         <div className="divide-y divide-slate-100">
           {d.recent.map((c) => (
             <Link key={c.id} href={`/calls/${c.id}`} className="flex items-center gap-3 py-2.5 hover:bg-slate-50 -mx-2 px-2 rounded">
-              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase text-slate-500">{c.mediaType}</span>
+              <MediaBadge type={c.mediaType} />
               <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{c.title}</span>
               {c.metrics?.sentiment && (
                 <Chip label={c.metrics.sentiment} className={SENTIMENT_COLOR[c.metrics.sentiment]} />
