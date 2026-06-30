@@ -6,6 +6,9 @@ import { pct, fmtDate, colorFor, SENTIMENT_COLOR } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
+// Drill-down link into the filtered calls list.
+const lc = (labelset: string, label: string) => `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}`;
+
 export default async function Home() {
   let d;
   try {
@@ -35,12 +38,12 @@ export default async function Home() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Kpi label="Total calls" value={String(d.total)} />
-        <Kpi label="First-call resolution" value={pct(d.fcrRate)} accent="text-emerald-600" />
-        <Kpi label="Complaint rate" value={pct(d.complaintRate)} accent="text-rose-600" />
-        <Kpi label="Cross-sell accept" value={pct(d.crossSellAcceptRate)} sub={`${pct(d.crossSellOfferRate)} offered`} accent="text-brand-600" />
-        <Kpi label="Avg compliance" value={String(d.avgCompliance)} sub="0–100" />
-        <Kpi label="Avg CSAT" value={d.avgCsat ? `${d.avgCsat}/5` : "—"} />
+        <Kpi label="Total calls" value={String(d.total)} href="/calls" />
+        <Kpi label="First-call resolution" value={pct(d.fcrRate)} accent="text-emerald-600" href={lc("disposition_flags", "First-Call Resolution")} />
+        <Kpi label="Complaint rate" value={pct(d.complaintRate)} accent="text-rose-600" href={lc("disposition_flags", "Complaint Raised")} />
+        <Kpi label="Cross-sell accept" value={pct(d.crossSellAcceptRate)} sub={`${pct(d.crossSellOfferRate)} offered`} accent="text-brand-600" href={lc("disposition_flags", "Cross-sell Accepted")} />
+        <Kpi label="Avg compliance" value={String(d.avgCompliance)} sub="0–100" href="/calls" />
+        <Kpi label="Avg CSAT" value={d.avgCsat ? `${d.avgCsat}/5` : "—"} href="/calls" />
       </div>
 
       <DashboardCharts

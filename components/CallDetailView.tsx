@@ -71,11 +71,16 @@ export function CallDetailView({ call }: { call: CallDetail }) {
         {sentiment && <Chip label={sentiment} className={SENTIMENT_COLOR[sentiment]} />}
       </div>
 
-      {/* Resource labels */}
+      {/* Resource labels — each drills into the filtered call list */}
       {call.labels.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {call.labels.map((l) => (
-            <Chip key={`${l.labelset}-${l.label}`} label={l.label} className={colorFor(l.labelset)} />
+            <Chip
+              key={`${l.labelset}-${l.label}`}
+              label={l.label}
+              className={colorFor(l.labelset)}
+              href={`/calls?label=${encodeURIComponent(`${l.labelset}/${l.label}`)}`}
+            />
           ))}
         </div>
       )}

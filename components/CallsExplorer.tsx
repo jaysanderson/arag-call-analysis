@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { CallSummary } from "@/lib/types";
 import { Card, Chip } from "./ui";
 import { fmtDate, fmtTime, colorFor, SENTIMENT_COLOR } from "@/lib/format";
@@ -13,11 +14,13 @@ type LabelsetMap = Record<string, Labelset>;
 const FILTER_ORDER = ["call_reason", "call_outcome", "sentiment", "line_of_business", "disposition_flags"];
 
 export function CallsExplorer() {
+  const searchParams = useSearchParams();
   const [labelsets, setLabelsets] = useState<LabelsetMap>({});
   const [calls, setCalls] = useState<CallSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-  const [active, setActive] = useState<Set<string>>(new Set()); // "labelset/label"
+  // Initial filters come from the URL so dashboard / label drill-downs apply.
+  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
+  const [active, setActive] = useState<Set<string>>(() => new Set(searchParams.getAll("label"))); // "labelset/label"
 
   useEffect(() => {
     fetch("/api/labelsets").then((r) => r.json()).then((d) => setLabelsets(d.labelsets ?? {}));
@@ -29,6 +32,9 @@ export function CallsExplorer() {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       active.forEach((a) => params.append("label", a));
+      // Keep the address bar in sync so the view is shareable / back-navigable.
+      const qs = params.toString();
+      window.history.replaceState(null, "", qs ? `/calls?${qs}` : "/calls");
       fetch(`/api/calls?${params}`)
         .then((r) => r.json())
         .then((d) => setCalls(d.calls ?? []))
