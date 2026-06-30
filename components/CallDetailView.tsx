@@ -143,26 +143,73 @@ function Transcript({
   registerRef: (i: number, el: HTMLDivElement | null) => void;
 }) {
   const [q, setQ] = useState("");
-  const filtered = q.trim()
-    ? paragraphs.filter((p) => p.text.toLowerCase().includes(q.toLowerCase()))
-    : paragraphs;
+  const [activeMoments, setActiveMoments] = useState<Set<string>>(new Set());
+
+  // Every distinct text-block (paragraph) label present in this call.
+  const allMoments = useMemo(() => {
+    const seen: string[] = [];
+    for (const p of paragraphs) for (const m of p.moments) if (!seen.includes(m)) seen.push(m);
+    return seen;
+  }, [paragraphs]);
+
+  const toggleMoment = (m: string) =>
+    setActiveMoments((s) => {
+      const n = new Set(s);
+      n.has(m) ? n.delete(m) : n.add(m);
+      return n;
+    });
+
+  const filtered = paragraphs.filter((p) => {
+    const matchesText = !q.trim() || p.text.toLowerCase().includes(q.toLowerCase());
+    const matchesMoment = activeMoments.size === 0 || p.moments.some((m) => activeMoments.has(m));
+    return matchesText && matchesMoment;
+  });
 
   return (
     <Card className="flex flex-col">
-      <div className="flex items-center gap-2 border-b border-slate-100 p-3">
-        <h2 className="text-sm font-semibold text-slate-700">Transcript</h2>
-        <span className="text-xs text-slate-400">{paragraphs.length} segments</span>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search transcript…"
-          className="ml-auto w-44 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none"
-        />
+      <div className="border-b border-slate-100 p-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-700">Transcript</h2>
+          <span className="text-xs text-slate-400">
+            {filtered.length === paragraphs.length ? `${paragraphs.length} segments` : `${filtered.length} of ${paragraphs.length}`}
+          </span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search transcript…"
+            className="ml-auto w-44 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+        {allMoments.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">Filter by moment:</span>
+            {allMoments.map((m) => {
+              const on = activeMoments.has(m);
+              return (
+                <button
+                  key={m}
+                  onClick={() => toggleMoment(m)}
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium transition ${colorFor(m)} ${
+                    on ? "ring-2 ring-brand-500 ring-offset-1" : "opacity-60 hover:opacity-100"
+                  }`}
+                >
+                  {m}
+                </button>
+              );
+            })}
+            {activeMoments.size > 0 && (
+              <button onClick={() => setActiveMoments(new Set())} className="ml-1 text-xs text-brand-600 hover:underline">
+                clear
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <div className="scroll-thin max-h-[560px] overflow-y-auto divide-y divide-slate-50">
         {filtered.map((p) => {
           const isActive = p.index === activeIdx;
           const isFocus = p.index === focusIdx;
+          const turns = splitTurns(p.text, p.speaker);
           return (
             <div
               key={p.index}
@@ -172,29 +219,62 @@ function Transcript({
                 isActive ? "bg-brand-50" : "hover:bg-slate-50"
               } ${isFocus ? "flash" : ""}`}
             >
-              <div className="flex items-center gap-2">
-                {p.startSeconds !== undefined && (
-                  <span className={`font-mono text-xs ${isActive ? "text-brand-600" : "text-slate-400"}`}>
-                    {fmtTime(p.startSeconds)}
-                  </span>
-                )}
-                {p.speaker && (
-                  <span className={`text-xs font-semibold ${p.speaker === "Agent" ? "text-brand-600" : "text-emerald-600"}`}>
-                    {p.speaker}
-                  </span>
-                )}
-                {p.moments.map((m) => (
-                  <Chip key={m} label={m} className={colorFor(m)} />
+              {(p.startSeconds !== undefined || p.moments.length > 0) && (
+                <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                  {p.startSeconds !== undefined && (
+                    <span className={`font-mono text-xs ${isActive ? "text-brand-600" : "text-slate-400"}`}>
+                      {fmtTime(p.startSeconds)}
+                    </span>
+                  )}
+                  {/* In-line block labels double as filter toggles. */}
+                  {p.moments.map((m) => (
+                    <button
+                      key={m}
+                      onClick={(e) => { e.stopPropagation(); toggleMoment(m); }}
+                      title="Filter transcript by this label"
+                    >
+                      <Chip label={m} className={`${colorFor(m)} ${activeMoments.has(m) ? "ring-2 ring-brand-500 ring-offset-1" : ""}`} />
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-1">
+                {turns.map((t, i) => (
+                  <p key={i} className="text-sm leading-relaxed text-slate-700">
+                    {t.speaker && (
+                      <span className={`mr-1.5 text-xs font-semibold ${t.speaker === "Agent" ? "text-brand-600" : "text-emerald-600"}`}>
+                        {t.speaker}:
+                      </span>
+                    )}
+                    {t.text}
+                  </p>
                 ))}
               </div>
-              <p className="mt-1 text-sm leading-relaxed text-slate-700">{p.text}</p>
             </div>
           );
         })}
         {filtered.length === 0 && (
-          <div className="p-6 text-center text-sm text-slate-400">No segments match “{q}”.</div>
+          <div className="p-6 text-center text-sm text-slate-400">No segments match your filters.</div>
         )}
       </div>
     </Card>
   );
+}
+
+/** Split a transcript block back into individual speaker turns for display. */
+function splitTurns(text: string, firstSpeaker?: "Agent" | "Member"): { speaker?: string; text: string }[] {
+  const re = /(Agent|Member):\s*/g;
+  const turns: { speaker?: string; text: string }[] = [];
+  let last = 0;
+  let speaker: string | undefined = firstSpeaker;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const chunk = text.slice(last, m.index).trim();
+    if (chunk) turns.push({ speaker, text: chunk });
+    speaker = m[1];
+    last = re.lastIndex;
+  }
+  const tail = text.slice(last).trim();
+  if (tail) turns.push({ speaker, text: tail });
+  return turns.length ? turns : [{ speaker: firstSpeaker, text }];
 }
