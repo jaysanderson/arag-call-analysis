@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, SectionTitle } from "./ui";
 
 type Datum = { name: string; value: number };
@@ -50,6 +51,7 @@ function HBar({ data, hrefFor }: { data: Datum[]; hrefFor?: HrefFor }) {
 }
 
 function Donut({ data, hrefFor }: { data: Datum[]; hrefFor?: HrefFor }) {
+  const router = useRouter();
   if (!data.length) return <Empty />;
   const total = data.reduce((a, b) => a + b.value, 0) || 1;
   const R = 60, C = 2 * Math.PI * R;
@@ -60,15 +62,20 @@ function Donut({ data, hrefFor }: { data: Datum[]; hrefFor?: HrefFor }) {
         {data.map((d, i) => {
           const frac = d.value / total;
           const dash = frac * C;
+          const href = hrefFor?.(d.name) ?? null;
           const seg = (
             <circle key={d.name} cx="80" cy="80" r={R} fill="none"
               stroke={SENTIMENT_COLORS[d.name] ?? BARS[i % BARS.length]}
-              strokeWidth="24" strokeDasharray={`${dash} ${C - dash}`} strokeDashoffset={-offset} />
+              strokeWidth="24" strokeDasharray={`${dash} ${C - dash}`} strokeDashoffset={-offset}
+              onClick={href ? () => router.push(href) : undefined}
+              className={href ? "cursor-pointer transition-opacity hover:opacity-80" : ""}>
+              {href && <title>{`${d.name} (${d.value}) — view calls`}</title>}
+            </circle>
           );
           offset += dash;
           return seg;
         })}
-        <circle cx="80" cy="80" r="44" fill="white" />
+        <circle cx="80" cy="80" r="44" fill="white" className="pointer-events-none" />
       </svg>
       <div className="space-y-1 text-xs">
         {data.map((d, i) =>
