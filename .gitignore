@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+build/
+dist/
+
+# env / secrets
+.env
+.env.local
+.env*.local
+
+# generated demo media (large binaries)
+scripts/output/
+
+# logs & os
+*.log
+.DS_Store
+npm-debug.log*
+
+# misc
+*.tsbuildinfo
+.vercel

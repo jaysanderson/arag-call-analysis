@@ -1,0 +1,30 @@
+{
+  "name": "call-analysis",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Call intelligence app built entirely on Progress Agentic RAG (ARAG / Nuclia)",
+  "scripts": {
+    "kb:setup": "tsx scripts/setup-kb.ts",
+    "kb:reset": "tsx scripts/reset-kb.ts",
+    "data:gen": "tsx scripts/gen-media.ts",
+    "data:ingest": "tsx scripts/ingest.ts",
+    "seed": "tsx scripts/seed.ts",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^16.1.6",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "tailwindcss": "^4.2.1",
+    "@tailwindcss/postcss": "^4.2.1"
+  }
+}

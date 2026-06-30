@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* Custom brand palette (Tailwind v4 CSS-first theme). */
+@theme {
+  --color-ink-950: #0b1220;
+  --color-ink-900: #0f172a;
+  --color-ink-800: #1e293b;
+  --color-ink-700: #334155;
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html, body { height: 100%; }
+body {
+  background: #f8fafc;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin scrollbars for transcript / chat panels */
+.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
+
+/* Highlight pulse when a transcript paragraph is targeted from a citation */
+@keyframes flash {
+  0% { background-color: rgba(37, 99, 235, 0.18); }
+  100% { background-color: transparent; }
+}
+.flash { animation: flash 1.6s ease-out 1; }
