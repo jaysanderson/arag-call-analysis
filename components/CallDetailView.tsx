@@ -59,7 +59,7 @@ export function CallDetailView({ call }: { call: CallDetail }) {
           <div className="text-xs text-slate-500">
             <a href="/calls" className="hover:underline">Calls</a> / {call.slug}
           </div>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">{call.title}</h1>
+          <h1 className="mt-1 font-display text-2xl font-semibold text-ink-950">{call.title}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
             <span>{fmtDateTime(call.createdISO)}</span>
             {call.durationSec && <span>· {fmtTime(call.durationSec)}</span>}
@@ -172,17 +172,17 @@ function Transcript({
 
   return (
     <Card className="flex flex-col">
-      <div className="border-b border-slate-100 p-3">
+      <div className="border-b border-brand-100 p-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-700">Transcript</h2>
-          <span className="text-xs text-slate-400">
+          <h2 className="text-sm font-semibold text-ink-950">Transcript</h2>
+          <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">
             {filtered.length === paragraphs.length ? `${paragraphs.length} segments` : `${filtered.length} of ${paragraphs.length}`}
           </span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search transcript…"
-            className="ml-auto w-44 rounded-md border border-slate-200 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none"
+            className="ml-auto w-44 rounded-md border border-brand-200 px-2 py-1 text-sm text-ink-950 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
         {allMoments.length > 0 && (
@@ -194,7 +194,7 @@ function Transcript({
                 <button
                   key={m}
                   onClick={() => toggleMoment(m)}
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium transition ${colorFor(m)} ${
+                  className={`rounded-md px-2 py-0.5 text-xs font-medium transition ${colorFor(m)} ${
                     on ? "ring-2 ring-brand-500 ring-offset-1" : "opacity-60 hover:opacity-100"
                   }`}
                 >
@@ -210,7 +210,7 @@ function Transcript({
           </div>
         )}
       </div>
-      <div className="scroll-thin max-h-[560px] overflow-y-auto divide-y divide-slate-50">
+      <div className="scroll-thin max-h-[560px] overflow-y-auto divide-y divide-brand-50">
         {filtered.map((p) => {
           const isActive = p.index === activeIdx;
           const isFocus = p.index === focusIdx;
@@ -221,7 +221,7 @@ function Transcript({
               ref={(el) => registerRef(p.index, el)}
               onClick={() => onSeek(p.startSeconds, p.index)}
               className={`group p-3 transition-colors ${hasMedia ? "cursor-pointer" : ""} ${
-                isActive ? "bg-brand-50" : "hover:bg-slate-50"
+                isActive ? "bg-brand-50" : "hover:bg-brand-50/60"
               } ${isFocus ? "flash" : ""}`}
             >
               {(p.startSeconds !== undefined || p.moments.length > 0) && (

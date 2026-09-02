@@ -1,20 +1,22 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Card } from "./ui";
+import { Card, ConfidenceBadge } from "./ui";
+import { Markdown } from "./Markdown";
+import { deriveConfidence } from "@/lib/confidence";
 
-export type Citation = { key: string; field?: string; start: number; end: number };
+export type Citation = { key: string; field?: string; start: number; end: number; n: number; answerRanges: [number, number][] };
 
-type Msg = { role: "user" | "assistant"; text: string; citations?: Citation[] };
-
-function parseCitationKey(key: string): Citation {
+function parseCitationKey(key: string, answerRanges: [number, number][], n: number): Citation {
   // format: <rid>/<f|a|t|u>/<fieldName>/<start>-<end>
   const parts = key.split("/");
   const range = parts[parts.length - 1] ?? "";
-  const [s, e] = range.split("-").map((n) => parseInt(n, 10));
+  const [s, e] = range.split("-").map((x) => parseInt(x, 10));
   const field = parts.length >= 4 ? `${parts[1]}/${parts[2]}` : undefined;
-  return { key, field, start: isNaN(s) ? 0 : s, end: isNaN(e) ? 0 : e };
+  return { key, field, start: isNaN(s) ? 0 : s, end: isNaN(e) ? 0 : e, n, answerRanges };
 }
+
+type Msg = { role: "user" | "assistant"; text: string; citations?: Citation[]; error?: boolean };
 
 export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: (c: Citation) => void }) {
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -57,8 +59,14 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
           const item = obj.item ?? obj;
           if (item.type === "answer") { answer += item.text ?? ""; flush(); }
           else if (item.type === "citations") {
-            const cmap = item.citations ?? {};
-            citations = Object.keys(cmap).map(parseCitationKey).filter((c) => c.field?.includes("/")); // drop title-only if desired
+            const cmap: Record<string, [number, number][]> = item.citations ?? {};
+            // Number citations in reading order (earliest answer-range offset first)
+            // so inline [1][2][3] markers appear left-to-right through the prose.
+            const withRanges = Object.entries(cmap)
+              .filter(([key]) => key.includes("/")) // drop title/other-field citations
+              .map(([key, ranges]) => ({ key, ranges: ranges ?? [], first: Math.min(...(ranges ?? [[Infinity, Infinity]]).map((r) => r[0])) }))
+              .sort((a, b) => a.first - b.first);
+            citations = withRanges.map((c, i) => parseCitationKey(c.key, c.ranges, i + 1));
             flush();
           }
         }
@@ -67,7 +75,7 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
     } catch (e) {
       setMessages((m) => {
         const copy = [...m];
-        copy[copy.length - 1] = { role: "assistant", text: `Error: ${String(e)}` };
+        copy[copy.length - 1] = { role: "assistant", text: `Sorry, something went wrong answering that. Try again in a moment.`, error: true };
         return copy;
       });
     } finally {
@@ -80,18 +88,18 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
 
   return (
     <Card className="flex flex-col">
-      <div className="border-b border-slate-100 p-3">
-        <h2 className="text-sm font-semibold text-slate-700">Ask this call</h2>
-        <p className="text-xs text-slate-400">Answers are grounded only in this call’s transcript.</p>
+      <div className="border-b border-brand-100 p-3">
+        <h2 className="text-sm font-semibold text-ink-950">Ask this call</h2>
+        <p className="text-xs text-slate-400">Answers are grounded only in this call's own transcript.</p>
       </div>
-      <div ref={scrollRef} className="scroll-thin max-h-[300px] min-h-[120px] space-y-3 overflow-y-auto p-3">
+      <div ref={scrollRef} className="scroll-thin max-h-[420px] min-h-[140px] space-y-3 overflow-y-auto p-3">
         {messages.length === 0 && (
           <div className="flex flex-wrap gap-1.5">
             {suggestions.map((s) => (
               <button
                 key={s}
                 onClick={() => ask(s)}
-                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 hover:border-brand-400 hover:text-brand-600"
+                className="rounded-md border border-brand-200 px-2.5 py-1 text-xs text-slate-600 hover:border-brand-400 hover:text-brand-600"
               >
                 {s}
               </button>
@@ -100,25 +108,37 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
         )}
         {messages.map((m, i) => (
           <div key={i} className={m.role === "user" ? "text-right" : ""}>
-            <div
-              className={`inline-block max-w-[90%] rounded-lg px-3 py-2 text-sm ${
-                m.role === "user" ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-800"
-              }`}
-            >
-              {m.text || (busy ? "…" : "")}
-            </div>
-            {m.citations && m.citations.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {m.citations.map((c, j) => (
-                  <button
-                    key={c.key + j}
-                    onClick={() => onCitation(c)}
-                    className="rounded border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-xs text-brand-700 hover:bg-brand-100"
-                    title="Jump to this moment"
-                  >
-                    ⏱ source {j + 1}
-                  </button>
-                ))}
+            {m.role === "user" ? (
+              <div className="inline-block max-w-[90%] rounded-lg bg-brand-600 px-3 py-2 text-left text-sm text-white">{m.text}</div>
+            ) : (
+              <div className="inline-block max-w-full rounded-lg bg-brand-50 px-3 py-2.5 text-left text-sm text-ink-950">
+                {m.text ? (
+                  <Markdown
+                    text={m.text}
+                    citations={(m.citations ?? []).flatMap((c) => c.answerRanges.map(([, end]) => ({ end, n: c.n })))}
+                    onCite={(n) => {
+                      const c = m.citations?.find((x) => x.n === n);
+                      if (c) onCitation(c);
+                    }}
+                  />
+                ) : (
+                  busy && <span className="text-slate-400">Thinking…</span>
+                )}
+                {m.text && !m.error && !(busy && i === messages.length - 1) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-brand-100 pt-2">
+                    <ConfidenceBadge result={deriveConfidence(m.text.length, (m.citations ?? []).flatMap((c) => c.answerRanges))} />
+                    {(m.citations ?? []).map((c) => (
+                      <button
+                        key={c.key}
+                        onClick={() => onCitation(c)}
+                        className="rounded-md border border-brand-200 bg-white px-1.5 py-0.5 text-[11px] font-medium text-brand-700 hover:bg-brand-100"
+                        title="Jump to this moment in the transcript"
+                      >
+                        [{c.n}] ⏱ source
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -126,19 +146,19 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
       </div>
       <form
         onSubmit={(e) => { e.preventDefault(); if (input.trim() && !busy) { ask(input.trim()); setInput(""); } }}
-        className="flex gap-2 border-t border-slate-100 p-3"
+        className="flex gap-2 border-t border-brand-100 p-3"
       >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about this call…"
           disabled={busy}
-          className="flex-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+          className="flex-1 rounded-md border border-brand-200 px-3 py-1.5 text-sm text-ink-950 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-40"
         >
           {busy ? "…" : "Ask"}
         </button>

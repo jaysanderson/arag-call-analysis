@@ -2,18 +2,19 @@
 
 import type { CallAnalysis, CallMetrics } from "@/lib/types";
 import { Card, Chip } from "./ui";
+import { Markdown } from "./Markdown";
 import { colorFor } from "@/lib/format";
 
 function Score({ label, value }: { label: string; value?: number }) {
   const v = Math.max(0, Math.min(100, value ?? 0));
-  const color = v >= 75 ? "bg-emerald-500" : v >= 50 ? "bg-amber-500" : "bg-rose-500";
+  const color = v >= 75 ? "bg-accent-500" : v >= 50 ? "bg-warn-fg" : "bg-danger-fg";
   return (
     <div>
       <div className="flex justify-between text-xs text-slate-500">
         <span>{label}</span>
-        <span className="font-medium text-slate-700">{value ?? "—"}</span>
+        <span className="font-medium text-ink-950">{value ?? "n/a"}</span>
       </div>
-      <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100">
+      <div className="mt-1 h-1.5 w-full rounded-full bg-brand-50">
         <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${v}%` }} />
       </div>
     </div>
@@ -24,7 +25,7 @@ export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; 
   if (!analysis && !metrics) {
     return (
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-slate-700">AI Analysis</h2>
+        <h2 className="text-sm font-semibold text-ink-950">AI Analysis</h2>
         <p className="mt-2 text-sm text-slate-400">Analysis is still being generated for this call.</p>
       </Card>
     );
@@ -32,9 +33,9 @@ export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; 
   const a = analysis ?? {};
   return (
     <Card className="p-4 space-y-4">
-      <h2 className="text-sm font-semibold text-slate-700">AI Analysis</h2>
+      <h2 className="text-sm font-semibold text-ink-950">AI Analysis</h2>
 
-      {a.executive_summary && <p className="text-sm leading-relaxed text-slate-700">{a.executive_summary}</p>}
+      {a.executive_summary && <Markdown text={a.executive_summary} className="text-sm text-slate-700" />}
 
       {a.key_topics && a.key_topics.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -54,22 +55,22 @@ export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; 
       )}
 
       {a.complaint?.present && (
-        <div className="rounded-lg border border-rose-100 bg-rose-50 p-3">
-          <div className="text-xs font-semibold text-rose-700">
+        <div className="rounded-lg border border-danger-dark/30 bg-danger-bg p-3">
+          <div className="text-xs font-semibold text-danger-fg">
             Complaint{a.complaint.severity ? ` · ${a.complaint.severity}` : ""}
             {a.complaint.category ? ` · ${a.complaint.category}` : ""}
           </div>
-          {a.complaint.quote && <p className="mt-1 text-sm italic text-rose-800">“{a.complaint.quote}”</p>}
+          {a.complaint.quote && <p className="mt-1 text-sm italic text-danger-fg">“{a.complaint.quote}”</p>}
         </div>
       )}
 
       {a.cross_sell?.offered && (
-        <div className={`rounded-lg border p-3 ${a.cross_sell.accepted ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"}`}>
-          <div className={`text-xs font-semibold ${a.cross_sell.accepted ? "text-emerald-700" : "text-amber-700"}`}>
+        <div className={`rounded-lg border p-3 ${a.cross_sell.accepted ? "border-accent-500/30 bg-accent-fill-soft" : "border-warn-fg/20 bg-warn-bg"}`}>
+          <div className={`text-xs font-semibold ${a.cross_sell.accepted ? "text-accent-fg-light" : "text-warn-fg"}`}>
             Cross-sell {a.cross_sell.accepted ? "accepted" : "offered (not accepted)"}
             {a.cross_sell.product ? ` · ${a.cross_sell.product}` : ""}
           </div>
-          {a.cross_sell.objection && <p className="mt-1 text-sm text-amber-800">Objection: {a.cross_sell.objection}</p>}
+          {a.cross_sell.objection && <p className="mt-1 text-sm text-warn-fg">Objection: {a.cross_sell.objection}</p>}
         </div>
       )}
 
@@ -86,7 +87,7 @@ export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; 
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Risk flags</div>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            {a.risk_flags.map((r) => <Chip key={r} label={r} className="bg-rose-100 text-rose-800" />)}
+            {a.risk_flags.map((r) => <Chip key={r} label={r} className="bg-danger-bg text-danger-fg" />)}
           </div>
         </div>
       )}

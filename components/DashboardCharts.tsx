@@ -7,9 +7,9 @@ import { Card, SectionTitle } from "./ui";
 type Datum = { name: string; value: number };
 type HrefFor = (name: string) => string | null;
 
-const BARS = ["#2563eb", "#7c3aed", "#0891b2", "#16a34a", "#ea580c", "#db2777", "#ca8a04", "#475569", "#0d9488", "#dc2626"];
+const BARS = ["#2B2BB2", "#00B563", "#5777EA", "#FFD000", "#4B4BF7", "#00216B", "#90EF8E", "#8892b0", "#00D364", "#1c3f95"];
 const SENTIMENT_COLORS: Record<string, string> = {
-  Positive: "#16a34a", Neutral: "#94a3b8", Negative: "#e11d48", Mixed: "#f59e0b",
+  Positive: "#00B563", Neutral: "#8892b0", Negative: "#e2536b", Mixed: "#e0ab00",
 };
 
 function clickable(href: string | null, key: string, className: string, children: React.ReactNode) {
@@ -69,7 +69,7 @@ function Donut({ data, hrefFor }: { data: Datum[]; hrefFor?: HrefFor }) {
               strokeWidth="24" strokeDasharray={`${dash} ${C - dash}`} strokeDashoffset={-offset}
               onClick={href ? () => router.push(href) : undefined}
               className={href ? "cursor-pointer transition-opacity hover:opacity-80" : ""}>
-              {href && <title>{`${d.name} (${d.value}) — view calls`}</title>}
+              {href && <title>{`${d.name} (${d.value}) - view calls`}</title>}
             </circle>
           );
           offset += dash;
@@ -143,10 +143,10 @@ export function DashboardCharts({
       <Card className="p-4">
         <SectionTitle>Cross-sell funnel</SectionTitle>
         <div className="flex items-end gap-6 px-2 pt-4">
-          <Funnel label="Offered" value={crossSell.offered} max={Math.max(crossSell.offered, 1)} color="#2563eb" href={link("disposition_flags", "Cross-sell Offered")} />
-          <Funnel label="Accepted" value={crossSell.accepted} max={Math.max(crossSell.offered, 1)} color="#16a34a" href={link("disposition_flags", "Cross-sell Accepted")} />
+          <Funnel label="Offered" value={crossSell.offered} max={Math.max(crossSell.offered, 1)} color="#2B2BB2" href={link("disposition_flags", "Cross-sell Offered")} />
+          <Funnel label="Accepted" value={crossSell.accepted} max={Math.max(crossSell.offered, 1)} color="#00B563" href={link("disposition_flags", "Cross-sell Accepted")} />
           <div className="ml-auto text-right">
-            <div className="text-3xl font-semibold text-slate-900">
+            <div className="font-display text-3xl font-semibold text-ink-950">
               {crossSell.offered ? Math.round((crossSell.accepted / crossSell.offered) * 100) : 0}%
             </div>
             <div className="text-xs text-slate-500">accept rate</div>

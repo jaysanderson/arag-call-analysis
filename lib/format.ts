@@ -6,16 +6,16 @@ export function fmtTime(seconds: number): string {
 }
 
 export function fmtDate(iso?: string): string {
-  if (!iso) return "—";
+  if (!iso) return "n/a";
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
+  if (isNaN(d.getTime())) return "n/a";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
 export function fmtDateTime(iso?: string): string {
-  if (!iso) return "—";
+  if (!iso) return "n/a";
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
+  if (isNaN(d.getTime())) return "n/a";
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
@@ -44,8 +44,8 @@ export function colorFor(key: string): string {
 }
 
 export const SENTIMENT_COLOR: Record<string, string> = {
-  Positive: "bg-emerald-100 text-emerald-800",
+  Positive: "bg-accent-fill-soft text-accent-fg-light",
   Neutral: "bg-slate-100 text-slate-700",
-  Negative: "bg-rose-100 text-rose-800",
-  Mixed: "bg-amber-100 text-amber-800",
+  Negative: "bg-danger-bg text-danger-fg",
+  Mixed: "bg-warn-bg text-warn-fg",
 };
