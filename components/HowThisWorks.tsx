@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 type FlowStep = { label: string; detail: string };
@@ -139,35 +139,81 @@ export function HowThisWorks() {
 
 function FlowDiagram({ steps }: { steps: FlowStep[] }) {
   const [active, setActive] = useState(0);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const nodeRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   useEffect(() => {
-    const t = setInterval(() => setActive((a) => (a + 1) % steps.length), 1800);
+    const t = setInterval(() => setActive((a) => (a + 1) % steps.length), 2200);
     return () => clearInterval(t);
   }, [steps.length]);
 
+  // The active step's node always scrolls into view - the auto-advance IS
+  // the scroll affordance, so a step can never sit clipped off-screen with
+  // no way to reach it (the defect a live QA pass caught: the row overflows
+  // with no visible scroll cue, so trailing steps read as cut off).
+  useEffect(() => {
+    nodeRefs.current[active]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [active]);
+
+  const go = (i: number) => setActive(((i % steps.length) + steps.length) % steps.length);
+
   return (
     <div className="mt-5">
-      <div className="scroll-thin-x flex items-stretch gap-0 overflow-x-auto pb-2">
-        {steps.map((s, i) => (
-          <div key={s.label} className="flex items-stretch">
-            <div
-              className={`w-40 shrink-0 rounded-lg border p-3 transition-colors ${
-                i === active ? "border-accent-400 bg-accent-500/10 flow-node-active" : "border-white/15 bg-white/5"
-              }`}
-            >
-              <div className={`text-[10px] font-semibold uppercase tracking-wide ${i === active ? "text-accent-300" : "text-white/40"}`}>
-                Step {i + 1}
+      <div className="relative">
+        {/* Fade + arrow at both edges - an explicit, unmissable "there's more" cue,
+            not just relying on the auto-scroll. */}
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-ink-950 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-ink-950 to-transparent" />
+        <button
+          onClick={() => go(active - 1)}
+          aria-label="Previous step"
+          className="absolute left-0.5 top-1/2 z-20 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-ink-950/90 text-white/70 hover:text-white"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
+        <button
+          onClick={() => go(active + 1)}
+          aria-label="Next step"
+          className="absolute right-0.5 top-1/2 z-20 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-ink-950/90 text-white/70 hover:text-white"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+        </button>
+
+        <div ref={scrollerRef} className="scroll-thin-x flex items-stretch gap-0 overflow-x-auto px-6 pb-2">
+          {steps.map((s, i) => (
+            <div key={s.label} className="flex items-stretch">
+              <div
+                ref={(el) => { nodeRefs.current[i] = el; }}
+                className={`w-40 shrink-0 rounded-lg border p-3 transition-colors ${
+                  i === active ? "border-accent-400 bg-accent-500/10 flow-node-active" : "border-white/15 bg-white/5"
+                }`}
+              >
+                <div className={`text-[10px] font-semibold uppercase tracking-wide ${i === active ? "text-accent-300" : "text-white/40"}`}>
+                  Step {i + 1} of {steps.length}
+                </div>
+                <div className="mt-1 text-sm font-semibold text-white">{s.label}</div>
+                <div className="mt-1 text-[11px] leading-snug text-white/60">{s.detail}</div>
               </div>
-              <div className="mt-1 text-sm font-semibold text-white">{s.label}</div>
-              <div className="mt-1 text-[11px] leading-snug text-white/60">{s.detail}</div>
+              {i < steps.length - 1 && (
+                <svg width="28" height="100%" viewBox="0 0 28 40" className="shrink-0 self-center text-white/30">
+                  <line x1="2" y1="20" x2="24" y2="20" stroke="currentColor" strokeWidth="2" className="flow-line" />
+                  <path d="M18 14l6 6-6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
             </div>
-            {i < steps.length - 1 && (
-              <svg width="28" height="100%" viewBox="0 0 28 40" className="shrink-0 self-center text-white/30">
-                <line x1="2" y1="20" x2="24" y2="20" stroke="currentColor" strokeWidth="2" className="flow-line" />
-                <path d="M18 14l6 6-6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            )}
-          </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Dot pagination - makes "there are N steps" legible at a glance, never just implied by scroll. */}
+      <div className="mt-2 flex justify-center gap-1.5">
+        {steps.map((s, i) => (
+          <button
+            key={s.label}
+            onClick={() => go(i)}
+            aria-label={`Go to step ${i + 1}`}
+            className={`h-1.5 rounded-full transition-all ${i === active ? "w-4 bg-accent-400" : "w-1.5 bg-white/25"}`}
+          />
         ))}
       </div>
     </div>
