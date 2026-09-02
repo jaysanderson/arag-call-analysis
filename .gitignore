@@ -25,3 +25,6 @@ npm-debug.log*
 # misc
 *.tsbuildinfo
 .vercel
+
+# QA scratch screenshots - never committed
+.qa-shots/
