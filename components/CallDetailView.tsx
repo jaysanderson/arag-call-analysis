@@ -62,7 +62,7 @@ export function CallDetailView({ call }: { call: CallDetail }) {
           <h1 className="mt-1 font-display text-2xl font-semibold text-ink-950">{call.title}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
             <span>{fmtDateTime(call.createdISO)}</span>
-            {call.durationSec && <span>· {fmtTime(call.durationSec)}</span>}
+            {!!call.durationSec && <span>· {fmtTime(call.durationSec)}</span>}
             {call.agentName && <span>· Agent: {call.agentName}</span>}
             {call.queue && <span>· {call.queue}</span>}
             <MediaBadge type={call.mediaType} />

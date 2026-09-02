@@ -5,18 +5,29 @@ export function fmtTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+// Both date helpers pin an explicit locale + UTC timezone. Without this,
+// toLocaleDateString/toLocaleString fall back to the RUNTIME's own locale
+// and timezone - which differ between the Node server (Fly's container,
+// typically UTC/en-US ICU defaults) and the viewer's browser (their real
+// locale/timezone), producing a different rendered string on each side.
+// That's a hydration mismatch (React error #418), reproduced live on every
+// call-detail route via fmtDateTime's hour/minute display. Pinning both
+// sides to the same locale/timezone makes the render deterministic.
+const DATE_LOCALE = "en-US";
+const DATE_TZ = "UTC";
+
 export function fmtDate(iso?: string): string {
   if (!iso) return "n/a";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "n/a";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return d.toLocaleDateString(DATE_LOCALE, { year: "numeric", month: "short", day: "numeric", timeZone: DATE_TZ });
 }
 
 export function fmtDateTime(iso?: string): string {
   if (!iso) return "n/a";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "n/a";
-  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return d.toLocaleString(DATE_LOCALE, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: DATE_TZ });
 }
 
 export function pct(n: number, digits = 0): string {

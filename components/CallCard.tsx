@@ -16,7 +16,7 @@ export function CallCard({ call, compact }: { call: CallSummary; compact?: boole
         <div className="space-y-2 p-3">
           <div className="flex items-center gap-1.5">
             <MediaBadge type={call.mediaType} />
-            {call.durationSec && <span className="text-[11px] text-slate-400">{fmtTime(call.durationSec)}</span>}
+            {!!call.durationSec && <span className="text-[11px] text-slate-400">{fmtTime(call.durationSec)}</span>}
           </div>
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-ink-950">{call.title}</h3>
           <div className="flex flex-wrap gap-1">
