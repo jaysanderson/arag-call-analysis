@@ -29,7 +29,7 @@ const FLOWS: { match: (path: string) => boolean; flow: PageFlow }[] = [
         "A supervisor gets a real-time read on the whole queue - resolution rate, complaint rate, cross-sell performance - without anyone tagging a single call by hand.",
       steps: [
         { label: "Ingest", detail: "Each uploaded call recording is transcribed by ARAG into timestamped paragraphs." },
-        { label: "Data-Augmentation agents", detail: "A Labeler agent classifies the whole call (reason, outcome, sentiment); an Ask agent (json output) writes a structured call_metrics field per call." },
+        { label: "Data-Augmentation agents", detail: "A Labeler agent classifies the whole call (reason, outcome, sentiment); an Ask agent extracts a structured call_metrics field per call, parsed from the model's response server-side (ARAG's native DA JSON-schema output isn't available on this platform yet)." },
         { label: "Server proxy", detail: "This app's server (never the browser) calls the Knowledge Box catalog, reads each call's stored call_metrics field, and aggregates across all calls." },
         { label: "Dashboard", detail: "The KPI tiles and charts render the aggregated result - every number here traces to a real ARAG-generated field." },
       ],
@@ -61,9 +61,10 @@ const FLOWS: { match: (path: string) => boolean; flow: PageFlow }[] = [
       steps: [
         { label: "Transcription", detail: "ARAG transcribed the uploaded audio/video into paragraphs carrying start/end timestamps - that's what drives the media scrubber." },
         { label: "Paragraph Labeler", detail: "A paragraph-level Labeler tagged individual transcript blocks (Complaint, Escalation, Cross-sell Pitch, PII, ...) - the chips under each transcript line." },
-        { label: "Ask agent (Generator)", detail: "A Data-Augmentation Ask agent wrote a structured call_analysis JSON field per call - the executive summary, scorecard, complaint/cross-sell detail and notable quotes in the AI Analysis panel." },
+        { label: "Ask agent (Generator)", detail: "A Data-Augmentation Ask agent wrote a structured call_analysis field per call - the executive summary, scorecard, complaint/cross-sell detail and notable quotes in the AI Analysis panel - parsed from the model's JSON response server-side (ARAG's native DA JSON-schema output isn't available on this platform yet)." },
         { label: "Scoped /ask + citations", detail: "The chat panel calls this app's own /api/calls/[id]/ask route, which calls the Knowledge Box /ask scoped to resource_filters:[this call] with citations:true - the model can only answer from this call's own transcript." },
         { label: "Citation resolution", detail: "Each citation is a char range into the transcript field. This app maps that range back to a paragraph and its timestamp, so clicking a citation scrubs the player and highlights the source line." },
+        { label: "REMi trust scoring", detail: "Once the answer finishes, the server scores it against the full set of retrieved transcript passages with a real /predict/remi call and appends the result to the stream - the confidence badge below the answer is that genuine score, shown qualitatively." },
       ],
     },
   },

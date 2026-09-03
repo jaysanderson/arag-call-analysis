@@ -103,6 +103,47 @@ export async function askResourceStream(rid: string, question: string): Promise<
   });
 }
 
+// ---------- REMi answer-quality scoring ----------
+
+export type RemiResult = {
+  answerRelevance: number | null; // 0-5
+  groundedness: number | null; // 0-5
+  contextRelevance: number | null; // 0-5
+};
+
+/**
+ * Score a finished answer against the FULL retrieved context (not just the
+ * cited excerpts) - CLAUDE.md's documented fix for REMi groundedness
+ * swinging wildly on a good synthesized answer when scored against too
+ * thin a context set. Authenticated by the same KB service-account token as
+ * every other call (never the account NUA key). Pattern proven across the
+ * estate (reference-repos/corpuskit's AragProvider.remi()).
+ */
+export async function scoreRemi(question: string, answer: string, contexts: string[]): Promise<RemiResult> {
+  const raw = await aragPost<{
+    answer_relevance?: { score?: number } | null;
+    context_relevance?: (number | null)[] | null;
+    groundedness?: (number | null)[] | null;
+  }>("/predict/remi", {
+    user_id: "call-analysis",
+    question,
+    answer,
+    contexts: contexts.slice(0, 20).map((c) => c.slice(0, 2000)),
+  });
+  const clean = (v?: (number | null)[] | null): number[] => (v ?? []).filter((x): x is number => typeof x === "number");
+  // Context expansion means most contexts are neighbouring padding, not the
+  // one that actually grounds the answer - groundedness asks "is the answer
+  // supported by the retrieved material", which the BEST supporting context
+  // answers, not the average across every context.
+  const grounded = clean(raw.groundedness);
+  const relevant = clean(raw.context_relevance).sort((a, b) => b - a).slice(0, 5);
+  return {
+    answerRelevance: raw.answer_relevance?.score ?? null,
+    groundedness: grounded.length ? Math.max(...grounded) : null,
+    contextRelevance: relevant.length ? Math.round((relevant.reduce((a, b) => a + b, 0) / relevant.length) * 10) / 10 : null,
+  };
+}
+
 // ---------- Media file proxy ----------
 
 /**

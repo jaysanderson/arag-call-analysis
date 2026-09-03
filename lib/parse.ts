@@ -78,6 +78,69 @@ function stripCodeFence(s: string): string {
   return m ? m[1] : t;
 }
 
+// Allowed values per generated metrics field - mirrors the enums in
+// scripts/config/taxonomy.ts's METRICS_PROMPT (keep the two in sync). The
+// metrics field is written by a plain-text `ask` agent parsed as JSON
+// server-side (ARAG's native DA JSON-schema output isn't available on this
+// platform - see docs/ARAG_NOTES.md), which means the model can, for a
+// genuinely ambiguous transcript, return a refusal sentence in place of a
+// valid enum value. Found live in the 3 Sep 2026 demo-estate audit: exactly
+// this leaked "Not enough data to answer this." into the Line of Business
+// chart as if it were a real category. Never trust a generated field's
+// value straight into a customer-facing chart - validate it first.
+const VALID_METRIC_VALUES: Partial<Record<keyof CallMetrics, Set<string>>> = {
+  call_reason: new Set([
+    "Claims", "Billing & Payments", "Enrollment & Eligibility", "Benefits & Coverage",
+    "Prior Authorization", "Provider Network", "Pharmacy & Rx", "Complaint",
+    "Cancellation & Retention", "Portal & Tech Support",
+  ]),
+  outcome: new Set(["Resolved", "Follow-up Required", "Escalated", "Transferred", "Unresolved"]),
+  sentiment: new Set(["Positive", "Neutral", "Negative", "Mixed"]),
+  line_of_business: new Set([
+    "Individual & Family", "Medicare Advantage", "Medicaid", "Employer Group",
+    "Dental & Vision", "Supplemental",
+  ]),
+};
+
+function sanitizeMetrics(raw?: CallMetrics): CallMetrics | undefined {
+  if (!raw) return raw;
+  const clean: CallMetrics = { ...raw };
+  (Object.keys(VALID_METRIC_VALUES) as (keyof CallMetrics)[]).forEach((key) => {
+    const allowed = VALID_METRIC_VALUES[key];
+    const v = clean[key];
+    if (allowed && typeof v === "string" && !allowed.has(v)) {
+      (clean as Record<string, unknown>)[key] = undefined; // dropped, not rendered - never a raw generated string on a chart
+    }
+  });
+  return clean;
+}
+
+// ---- Per-call "moment map" (card thumbnail) ----
+// A compact, ordered list of the dominant paragraph-level "moment" label
+// (see scripts/config/taxonomy.ts's PARAGRAPH_LABELSET) across the call,
+// used to render a genuine per-call data visualization on the card instead
+// of a flat gradient+icon tile (standard B10 - flagged live, 3 Sep 2026
+// audit). Reuses metadata already fetched for the summary (no extra ARAG
+// call, no extra cost - see lib/calls.ts's SUMMARY_SHOW).
+const HIGHLIGHT_MOMENTS = new Set([
+  "Complaint", "Escalation", "Cross-sell Pitch", "Resolution", "Empathy Statement", "Objection",
+]);
+
+function extractMomentTrack(res: any): string[] {
+  const content = findContentField(res);
+  if (!content) return [];
+  const field = res?.data?.[content.group]?.[content.id];
+  const paras: any[] = field?.extracted?.metadata?.metadata?.paragraphs ?? [];
+  const track: string[] = [];
+  for (const p of paras) {
+    const kind = p.kind ?? "TEXT";
+    if (!CONTENT_PARAGRAPH_KINDS.has(kind)) continue;
+    const moments: string[] = (p.classifications ?? []).map((c: any) => c.label).filter(Boolean);
+    track.push(moments.find((m) => HIGHLIGHT_MOMENTS.has(m)) ?? "");
+  }
+  return track;
+}
+
 // ---- Content field (transcript) detection ----
 function findContentField(res: any): { group: "files" | "texts"; id: string } | undefined {
   const files = res?.data?.files ?? {};
@@ -125,7 +188,7 @@ export function parseSummary(res: any): CallSummary {
 
 function baseSummary(res: any): CallSummary {
   const extra = res?.extra?.metadata ?? {};
-  const metrics = readJsonField(res, "call_metrics") as CallMetrics | undefined;
+  const metrics = sanitizeMetrics(readJsonField(res, "call_metrics") as CallMetrics | undefined);
   return {
     id: res.id ?? res.uuid,
     slug: res.slug,
@@ -139,6 +202,7 @@ function baseSummary(res: any): CallSummary {
     queue: extra.queue,
     labels: extractLabels(res),
     metrics,
+    momentTrack: extractMomentTrack(res),
   };
 }
 

@@ -98,27 +98,68 @@ export function MediaBadge({ type, className }: { type: string; className?: stri
   );
 }
 
+// Dominant-moment colors for the card "moment map" (standard B10 fix) - hex
+// literals to match the app's existing chart palette convention
+// (DashboardCharts.tsx's BARS/SENTIMENT_COLORS), not CSS custom properties,
+// so there is no risk of an undefined var() resolving transparent inside an
+// inline SVG (the exact bug found on revolution-dms).
+const MOMENT_COLOR: Record<string, string> = {
+  "Complaint": "#e2536b",
+  "Escalation": "#e0ab00",
+  "Cross-sell Pitch": "#9333ea",
+  "Resolution": "#00B563",
+  "Empathy Statement": "#0891b2",
+  "Objection": "#ea580c",
+};
+
+const THUMB_BASE: Record<MediaType, string> = {
+  video: "from-violet-600 to-brand-700",
+  audio: "from-sky-500 to-brand-700",
+  transcript: "from-slate-500 to-ink-900",
+};
+
 /**
- * Consistent branded placeholder used wherever a call has no natural
- * "page-1" thumbnail (a phone call has no cover image) — the ui-polish
- * standard's refinement of gate B10: a CONSISTENT branded placeholder (a
- * type glyph on a tinted field) reads as intentional; the defect is an
- * inconsistent or generic one-off icon. The glyph and gradient are keyed
- * off the media type so a video, audio call and transcript are each
- * visually distinct at a glance, not one repeated stock icon.
+ * Card thumbnail — a real per-call data visualization instead of a flat
+ * gradient+icon tile (the exact "flat gradient+icon" B10 FAIL the GM
+ * flagged, found live on this app in the 3 Sep 2026 demo-estate audit). A
+ * phone call has no natural cover image, so rather than a stand-in stock
+ * icon this renders the call's own real "moment map" - one bar per
+ * transcript paragraph, coloured by the paragraph-level moment ARAG's own
+ * Labeler agent actually assigned (Complaint, Escalation, Cross-sell Pitch,
+ * Resolution, Empathy, Objection), genuinely different call to call. Falls
+ * back to the plain branded tile only when a call genuinely has no moment
+ * data yet (still processing) - never breaks, never blank.
  */
-export function CallThumb({ type, className }: { type: string; className?: string }) {
+export function CallThumb({ type, moments, className }: { type: string; moments?: string[]; className?: string }) {
   const m = MEDIA_BADGE[(type as MediaType)] ?? MEDIA_BADGE.transcript;
-  const grad =
-    type === "video"
-      ? "from-violet-600 to-brand-700"
-      : type === "audio"
-        ? "from-sky-500 to-brand-700"
-        : "from-slate-500 to-ink-900";
+  const grad = THUMB_BASE[(type as MediaType)] ?? THUMB_BASE.transcript;
+  const track = moments?.length ? moments : null;
+
   return (
-    <div className={`relative flex items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br ${grad} text-white ${className ?? ""}`}>
-      <div className="absolute inset-0 opacity-[0.15] [background:repeating-linear-gradient(135deg,transparent,transparent_8px,#fff_8px,#fff_9px)]" />
-      <span className="relative scale-[2.1]">{m.icon}</span>
+    <div className={`relative overflow-hidden rounded-lg bg-gradient-to-br ${grad} ${className ?? ""}`}>
+      {track ? (
+        <svg viewBox="0 0 200 60" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+          {track.map((mo, i) => {
+            const w = 200 / track.length;
+            const hue = MOMENT_COLOR[mo];
+            const h = hue ? 30 + ((i * 37) % 22) : 8 + ((i * 17) % 10); // highlighted moments read taller
+            return (
+              <rect
+                key={i}
+                x={i * w + w * 0.18}
+                y={30 - h / 2}
+                width={Math.max(w * 0.64, 1)}
+                height={h}
+                rx={1.2}
+                fill={hue ?? "rgba(255,255,255,0.3)"}
+              />
+            );
+          })}
+        </svg>
+      ) : (
+        <div className="absolute inset-0 opacity-[0.15] [background:repeating-linear-gradient(135deg,transparent,transparent_8px,#fff_8px,#fff_9px)]" />
+      )}
+      <span className="absolute right-1.5 top-1.5 text-white/80">{m.icon}</span>
     </div>
   );
 }
@@ -172,9 +213,11 @@ const CONFIDENCE_STYLE: Record<ConfidenceResult["level"], string> = {
 };
 
 /**
- * Default-visible qualitative confidence badge (standard B34) — never a raw
- * REMi/coverage numeral in the customer view. Derived from real citation
- * coverage this app's existing scoped /ask call returns; see lib/confidence.ts.
+ * Default-visible qualitative confidence badge (standard B34/B39) — never a
+ * raw REMi numeral in the customer view. A citation-coverage floor shows
+ * instantly, upgraded to a genuine `/predict/remi` read the moment it
+ * resolves (both branches produce the same ConfidenceResult shape); see
+ * lib/confidence.ts.
  */
 export function ConfidenceBadge({ result, className }: { result: ConfidenceResult; className?: string }) {
   return (

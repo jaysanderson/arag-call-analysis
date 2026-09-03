@@ -1,15 +1,17 @@
 /**
- * Derives a coarse, qualitative confidence label from the citation coverage
- * ARAG's own /ask response already returns for an answer — never a raw
- * REMi numeral (standard B34: REMi rewards echoing a single source and
- * penalises genuine synthesis, so a bare score misleads on a well-written
- * synthesized answer; a citation-coverage badge is the honest, non-REMi
- * signal this app can show without adding a new ARAG call).
- *
- * This is intentionally NOT presented as "REMi" anywhere in the UI — it is
- * a coverage measure computed from the real citation ranges this app's
- * existing scoped /ask call returns, disclosed as such in the
- * "How this works" reveal.
+ * Two confidence sources, both feeding the same qualitative badge (standard
+ * B34/B39 - a real REMi-derived read, qualitative only, never a raw
+ * numeral):
+ *  - `deriveConfidence` - an instant citation-coverage floor from the
+ *    citation ranges /ask already returns, shown the moment the answer
+ *    finishes streaming so the badge is never blank.
+ *  - `deriveConfidenceFromRemi` - the genuine `/predict/remi` score
+ *    (lib/arag.ts's scoreRemi, called server-side against the FULL
+ *    retrieved context per CLAUDE.md's documented fix for score
+ *    instability on synthesized answers), which upgrades the badge the
+ *    instant it resolves. Best-effort and time-capped server-side; if it
+ *    never arrives the coverage floor simply stays as the shown value -
+ *    never a visible error state (standard B38).
  */
 export type ConfidenceLevel = "high" | "moderate" | "low" | "none";
 
@@ -47,4 +49,26 @@ export function deriveConfidence(answerLength: number, ranges: [number, number][
     return { level: "moderate", label: "Moderate confidence", citationCount, coveragePct };
   }
   return { level: "low", label: "Low confidence", citationCount, coveragePct };
+}
+
+export type RemiQuality = { answerRelevance: number | null; groundedness: number | null; contextRelevance: number | null };
+
+/**
+ * Qualitative bucket from a real REMi score (0-5 scale on both fields).
+ * Takes the MAX of answer relevance and groundedness rather than the
+ * average - REMi rewards echoing a single source and penalises genuine
+ * synthesis (a mostly-grounded answer with a small fused-in detail scores
+ * ~4/5, not 0/5), so averaging in a lower groundedness score would punish
+ * exactly the kind of good synthesized answer (an executive summary, a
+ * scorecard read-out) this app's chat produces most often. Full-context
+ * scoring (lib/arag.ts's scoreRemi) already removes most of the swing;
+ * this is the remaining safety margin.
+ */
+export function deriveConfidenceFromRemi(q: RemiQuality, citationCount: number): ConfidenceResult | null {
+  if (q.answerRelevance == null && q.groundedness == null) return null;
+  const score = Math.max(q.answerRelevance ?? 0, q.groundedness ?? 0) / 5;
+  if (score >= 0.7) return { level: "high", label: "High confidence", citationCount, coveragePct: Math.round(score * 100) };
+  if (score >= 0.4) return { level: "moderate", label: "Moderate confidence", citationCount, coveragePct: Math.round(score * 100) };
+  if (score > 0) return { level: "low", label: "Low confidence", citationCount, coveragePct: Math.round(score * 100) };
+  return { level: "none", label: "No grounded citations", citationCount: 0, coveragePct: 0 };
 }

@@ -15,6 +15,28 @@ function isActive(pathname: string, href: string) {
 }
 
 /**
+ * Crafted wordmark lockup (standard B41) — a real mark, not a letter glyph
+ * in a rounded/gradient square (the pattern the GM has flagged twice as
+ * vibe-coded slop). A five-bar pulse motif — the same "moment map" idea the
+ * card thumbnails use, thematically the product's own real audio waveform,
+ * not a decorative icon — sits directly beside custom-set type, no box.
+ */
+function Logo() {
+  return (
+    <svg width="150" height="24" viewBox="0 0 150 24" className="shrink-0" aria-hidden="true">
+      <rect x="0" y="8" width="2.6" height="8" rx="1.3" fill="#5777EA" />
+      <rect x="4.6" y="3" width="2.6" height="18" rx="1.3" fill="#2B2BB2" />
+      <rect x="9.2" y="0" width="2.6" height="24" rx="1.3" fill="#00123C" />
+      <rect x="13.8" y="4" width="2.6" height="16" rx="1.3" fill="#2B2BB2" />
+      <rect x="18.4" y="9" width="2.6" height="6" rx="1.3" fill="#5777EA" />
+      <text x="28" y="17" fontFamily="var(--font-display)" fontWeight={600} fontSize="15.5" letterSpacing="-0.2" fill="#00123C">
+        Call Analysis
+      </text>
+    </svg>
+  );
+}
+
+/**
  * Standing chrome for every route (table-stakes gate 2 / standard B2):
  *  - a brand-compliant Progress Agentic RAG header, always on top
  *  - the Call Analysis product's own nav/identity beneath it
@@ -45,19 +67,9 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
         {/* The Call Analysis product's own experience — its own identity, beneath the Progress frame. */}
         <header className="border-b border-brand-200 bg-white/95 backdrop-blur">
           <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2.5 font-display text-lg font-semibold tracking-tight text-ink-950">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-brand-600 text-white">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 14a8 8 0 0 1 16 0" />
-                <rect x="2" y="13" width="4" height="7" rx="1.2" />
-                <rect x="18" y="13" width="4" height="7" rx="1.2" />
-                <path d="M12 21a2 2 0 0 0 2-2" />
-              </svg>
-            </span>
-            <span>
-              Call Analysis
-              <span className="ml-2 hidden text-xs font-normal text-slate-400 sm:inline">Contact centre intelligence</span>
-            </span>
+          <Link href="/" className="flex items-center gap-3 shrink-0">
+            <Logo />
+            <span className="hidden text-xs font-normal text-slate-400 md:inline">Contact centre intelligence</span>
           </Link>
 
           <nav className="ml-2 hidden items-center gap-1 text-sm sm:flex">

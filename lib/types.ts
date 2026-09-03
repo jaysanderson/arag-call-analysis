@@ -55,6 +55,8 @@ export type CallSummary = {
   queue?: string;
   labels: ResourceLabel[];
   metrics?: CallMetrics;
+  /** Ordered dominant-moment-per-paragraph track, for the card thumbnail (standard B10). */
+  momentTrack?: string[];
 };
 
 export type CallDetail = CallSummary & {

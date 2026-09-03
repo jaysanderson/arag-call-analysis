@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Card, ConfidenceBadge } from "./ui";
 import { Markdown } from "./Markdown";
-import { deriveConfidence } from "@/lib/confidence";
+import { deriveConfidence, deriveConfidenceFromRemi, type RemiQuality } from "@/lib/confidence";
 
 export type Citation = { key: string; field?: string; start: number; end: number; n: number; answerRanges: [number, number][] };
 
@@ -16,7 +16,7 @@ function parseCitationKey(key: string, answerRanges: [number, number][], n: numb
   return { key, field, start: isNaN(s) ? 0 : s, end: isNaN(e) ? 0 : e, n, answerRanges };
 }
 
-type Msg = { role: "user" | "assistant"; text: string; citations?: Citation[]; error?: boolean };
+type Msg = { role: "user" | "assistant"; text: string; citations?: Citation[]; error?: boolean; quality?: RemiQuality };
 
 export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: (c: Citation) => void }) {
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -39,9 +39,10 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
       let buf = "";
       let answer = "";
       let citations: Citation[] = [];
+      let quality: RemiQuality | undefined;
       const flush = () => setMessages((m) => {
         const copy = [...m];
-        copy[copy.length - 1] = { role: "assistant", text: answer, citations };
+        copy[copy.length - 1] = { role: "assistant", text: answer, citations, quality };
         return copy;
       });
       // eslint-disable-next-line no-constant-condition
@@ -67,6 +68,12 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
               .map(([key, ranges]) => ({ key, ranges: ranges ?? [], first: Math.min(...(ranges ?? [[Infinity, Infinity]]).map((r) => r[0])) }))
               .sort((a, b) => a.first - b.first);
             citations = withRanges.map((c, i) => parseCitationKey(c.key, c.ranges, i + 1));
+            flush();
+          } else if (item.type === "quality") {
+            // Server-appended after the stream finishes (see the ask route) -
+            // a genuine REMi read replacing the citation-coverage floor the
+            // moment it resolves. Silently absent on a scoring timeout.
+            quality = { answerRelevance: item.answerRelevance ?? null, groundedness: item.groundedness ?? null, contextRelevance: item.contextRelevance ?? null };
             flush();
           }
         }
@@ -126,7 +133,12 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
                 )}
                 {m.text && !m.error && !(busy && i === messages.length - 1) && (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-brand-100 pt-2">
-                    <ConfidenceBadge result={deriveConfidence(m.text.length, (m.citations ?? []).flatMap((c) => c.answerRanges))} />
+                    <ConfidenceBadge
+                      result={
+                        (m.quality && deriveConfidenceFromRemi(m.quality, (m.citations ?? []).length)) ??
+                        deriveConfidence(m.text.length, (m.citations ?? []).flatMap((c) => c.answerRanges))
+                      }
+                    />
                     {(m.citations ?? []).map((c) => (
                       <button
                         key={c.key}

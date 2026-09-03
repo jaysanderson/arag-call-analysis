@@ -12,7 +12,7 @@ export function CallCard({ call, compact }: { call: CallSummary; compact?: boole
   return (
     <Link href={`/calls/${call.id}`} className="block h-full">
       <Card className={`h-full overflow-hidden transition hover:border-brand-400 hover:shadow-md ${compact ? "" : ""}`}>
-        <CallThumb type={call.mediaType} className="h-24 w-full" />
+        <CallThumb type={call.mediaType} moments={call.momentTrack} className="h-24 w-full" />
         <div className="space-y-2 p-3">
           <div className="flex items-center gap-1.5">
             <MediaBadge type={call.mediaType} />
@@ -25,7 +25,8 @@ export function CallCard({ call, compact }: { call: CallSummary; compact?: boole
           </div>
           <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span>{fmtDate(call.createdISO)}</span>
-            {call.agentName && <span className="truncate">{call.agentName}</span>}
+            {/* Role prefix, not a bare name (standard B14) - matches the call-detail convention. */}
+            {call.agentName && <span className="truncate">Agent: {call.agentName}</span>}
           </div>
         </div>
       </Card>
