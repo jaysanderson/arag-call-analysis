@@ -19,7 +19,52 @@ contact-centre / call-analysis conversation.
 
 ---
 
-## 2 September 2026 - front-end re-polish (this revision)
+## 3 September 2026 - defect fix pass (this revision)
+
+Redevelop against the 3 Sep 2026 demo-estate audit, which graded this app **B** and named
+three defects (plus a data-hygiene finding it flagged separately): flat gradient+icon card
+thumbnails (standard B10 FAIL), the cold-refusal string leaking into the Line of Business
+chart as a category, and agent names shown without a role (standard B14). This pass also
+brings the confidence badge up to the newer B34/B39 bar (a genuine REMi-derived read, not a
+citation-coverage proxy) and replaces the icon-in-a-box logo with a crafted wordmark
+(standard B41). **The KB and every ARAG call shape are still unchanged**, with one addition:
+`lib/calls.ts`'s `SUMMARY_SHOW` now includes `"extracted"` (it was missing entirely, which is
+why the card thumbnails below rendered empty until this was found and fixed the same pass),
+and the ask route now taps its own streaming response server-side to fire one additional
+`/predict/remi` call after each answer finishes.
+
+What changed:
+- `lib/parse.ts` - `sanitizeMetrics()` validates every generated metrics field against its
+  known taxonomy enum before it reaches a chart; `extractMomentTrack()` derives a per-call
+  paragraph-moment sequence from data already fetched (no extra ARAG cost).
+- `components/ui.tsx` - `CallThumb` renders that moment sequence as a real per-call "moment
+  map" (coloured bars) instead of a flat gradient+icon tile; falls back to the plain tile only
+  when a call genuinely has no moment data yet.
+- `components/CallCard.tsx` - agent names on cards now read "Agent: <name>".
+- `lib/arag.ts` / `app/api/calls/[id]/ask/route.ts` / `lib/confidence.ts` /
+  `components/ChatPanel.tsx` - the confidence badge is now backed by a real `/predict/remi`
+  call scored against the FULL retrieved context (not just cited excerpts), with the existing
+  citation-coverage heuristic as an instant floor shown while REMi resolves. Model/cost: this
+  is one query-time `/predict/remi` call per chat turn (Nuclia-managed predict model, not a
+  choice this app makes) - not a corpus-wide operation, so hard rule 15's cost-safety gate
+  doesn't bind it, but it is genuinely bounded (one call per question asked, never per
+  paragraph, never per corpus).
+- `components/AppChrome.tsx` - a crafted five-bar "pulse" wordmark replaces the letter-in-a-
+  rounded-square glyph.
+- `components/HowThisWorks.tsx` - the dashboard and call-detail flows now describe the
+  metrics/analysis fields accurately (parsed server-side from the model's plain-text response,
+  since ARAG's native DA JSON-schema output isn't available on this platform yet - hard rule
+  3's corollary), and the call-detail flow gained a sixth step naming the REMi scoring call.
+
+Verified live post-deploy: the Line of Business chart no longer shows the refusal string (23
+of 24 calls now chart cleanly, the one call whose generated value failed validation is simply
+excluded rather than mis-rendered); all 24 calls carry real per-call moment tracks; a live ask
+round-trip returned a genuine REMi `quality` event (`answerRelevance:4, groundedness:4,
+contextRelevance:1.6` on this probe) driving a "High confidence" badge.
+
+---
+
+## 2 September 2026 - front-end re-polish
 
 Redeveloped to the factory's current demo polish bar. **Hard constraint honoured throughout:
 the Knowledge Box and every ARAG call are unchanged** - same `/ask` scoping, same Labeler/Ask
