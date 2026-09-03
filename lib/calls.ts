@@ -3,8 +3,14 @@ import { parseDetail, parseSummary } from "./parse";
 import type { CallSummary, CallDetail, CallMetrics } from "./types";
 
 // Light show set for list/dashboard: basic (incl. computedmetadata labels),
-// values (generated JSON fields), extra (call metadata). No paragraphs.
-const SUMMARY_SHOW = ["basic", "values", "extra"];
+// values (generated JSON fields), extra (call metadata), extracted (paragraph
+// classification metadata only - the `extracted:["metadata"]` param below
+// excludes full transcript text, so this stays cheap). "extracted" MUST be
+// in this list for the `extracted` sub-param to return anything at all - its
+// absence here (found live, this pass) was why the card "moment map" (B10)
+// silently rendered empty: field.extracted was undefined for every summary
+// fetch regardless of what the extracted-content selector requested.
+const SUMMARY_SHOW = ["basic", "values", "extracted", "extra"];
 // Full set for the detail page.
 const DETAIL_SHOW = ["basic", "values", "extracted", "origin", "extra"];
 
