@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { askResourceStream, scoreRemi } from "@/lib/arag";
+import { isDeclinedAnswer } from "@/lib/confidence";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +77,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         // than leave the client's reader hanging.
       }
 
-      if (fullAnswer.trim() && contextTexts.length > 0) {
+      // Never score (or badge) a decline - REMi rates the retrieved context's
+      // topical relevance to the question, not whether the model actually
+      // answered, so it can score a genuine refusal as "High confidence"
+      // (found live by demo-tester, reproduced 2/2). Skipping the call here
+      // also means a decline never pays for a REMi round-trip it can't use.
+      if (fullAnswer.trim() && contextTexts.length > 0 && !isDeclinedAnswer(fullAnswer)) {
         try {
           const quality = await Promise.race([
             scoreRemi(question, fullAnswer, contextTexts),

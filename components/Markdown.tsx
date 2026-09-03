@@ -148,14 +148,72 @@ function inline(text: string, keyBase: string, onCite?: (n: number) => void): Re
   return nodes;
 }
 
+/**
+ * When two or more citations' answerRanges collapse to the SAME end offset
+ * (ARAG's /ask citations map sometimes reports every citation on a
+ * multi-fact synthesized answer as supporting the whole answer -
+ * [0, answer.length] - rather than a precise per-claim sub-range), spread
+ * them across the answer's own real sentence boundaries instead of
+ * stacking every marker at that one shared spot. Found live by
+ * demo-tester (3 Sep 2026): "Summarize this call" put all three markers
+ * bunched after the final sentence, not at the copay/declined-offer claims
+ * each one actually supports. A single-fact answer with one genuine
+ * per-citation range is untouched - this only fires on a genuine tie, and
+ * it never invents a specific claim-to-citation mapping ARAG didn't
+ * report; it distributes honestly across real sentence ends so a
+ * synthesized answer's separate claims each carry a marker.
+ */
+function spreadTiedMarks(text: string, marks: { end: number; n: number }[]): { end: number; n: number }[] {
+  if (marks.length < 2) return marks;
+  const groups = new Map<number, { end: number; n: number }[]>();
+  for (const m of marks) {
+    const g = groups.get(m.end) ?? [];
+    g.push(m);
+    groups.set(m.end, g);
+  }
+  const out: { end: number; n: number }[] = [];
+  for (const group of groups.values()) {
+    if (group.length < 2) {
+      out.push(...group);
+      continue;
+    }
+    // Real sentence-end offsets in the source text, in reading order. Skips
+    // the abbreviation trap (a lone capital / "Dr"/"Mr"/"vs"/"etc" before
+    // the period) the same way the factory's proven [[n]] injector does.
+    const boundaries: number[] = [];
+    const re = /(\S*)[.!?](?:\s|$)/g;
+    let mm: RegExpExecArray | null;
+    while ((mm = re.exec(text)) !== null) {
+      if (/^(Mr|Mrs|Ms|Dr|St|vs|etc|[A-Z])$/i.test(mm[1])) continue;
+      boundaries.push(mm.index + mm[0].length - (mm[0].endsWith(" ") ? 1 : 0));
+    }
+    if (boundaries.length < 2) {
+      out.push(...group); // nothing real to spread across - leave as-is
+      continue;
+    }
+    const ordered = [...group].sort((a, b) => a.n - b.n);
+    ordered.forEach((m, i) => out.push({ end: boundaries[Math.min(i, boundaries.length - 1)], n: m.n }));
+  }
+  return out;
+}
+
 /** Splice citation-marker sentinels into raw text at each mark's end offset. */
-function spliceCitationMarks(text: string, marks: { end: number; n: number }[]): string {
-  if (!marks.length) return text;
-  const sorted = [...marks].sort((a, b) => b.end - a.end); // right-to-left so earlier offsets stay valid
+function spliceCitationMarks(text: string, rawMarks: { end: number; n: number }[]): string {
+  if (!rawMarks.length) return text;
+  const marks = spreadTiedMarks(text, rawMarks);
+  const groups = new Map<number, number[]>();
+  for (const m of marks) {
+    const end = Math.min(Math.max(m.end, 0), text.length);
+    const g = groups.get(end) ?? [];
+    g.push(m.n);
+    groups.set(end, g);
+  }
+  const positions = [...groups.keys()].sort((a, b) => b - a); // right-to-left so earlier offsets stay valid
   let out = text;
-  for (const m of sorted) {
-    const end = Math.min(Math.max(m.end, 0), out.length);
-    out = out.slice(0, end) + `<<<CITE:${m.n}>>>` + out.slice(end);
+  for (const end of positions) {
+    const ns = [...groups.get(end)!].sort((a, b) => a - b); // ascending, so ties render [1][2] not [2][1]
+    const token = ns.map((n) => `<<<CITE:${n}>>>`).join("");
+    out = out.slice(0, end) + token + out.slice(end);
   }
   return out;
 }

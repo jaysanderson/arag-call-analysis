@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Card, ConfidenceBadge } from "./ui";
 import { Markdown } from "./Markdown";
-import { deriveConfidence, deriveConfidenceFromRemi, type RemiQuality } from "@/lib/confidence";
+import { deriveConfidence, deriveConfidenceFromRemi, isDeclinedAnswer, type RemiQuality } from "@/lib/confidence";
 
 export type Citation = { key: string; field?: string; start: number; end: number; n: number; answerRanges: [number, number][] };
 
@@ -122,7 +122,15 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
                 {m.text ? (
                   <Markdown
                     text={m.text}
-                    citations={(m.citations ?? []).flatMap((c) => c.answerRanges.map(([, end]) => ({ end, n: c.n })))}
+                    // A decline carries no real grounding for the question asked
+                    // (ARAG's own honest refusal) - never splice citation markers
+                    // into it, even if the platform still returned a citations
+                    // map alongside it.
+                    citations={
+                      m.error || isDeclinedAnswer(m.text)
+                        ? []
+                        : (m.citations ?? []).flatMap((c) => c.answerRanges.map(([, end]) => ({ end, n: c.n })))
+                    }
                     onCite={(n) => {
                       const c = m.citations?.find((x) => x.n === n);
                       if (c) onCitation(c);
@@ -131,7 +139,10 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
                 ) : (
                   busy && <span className="text-slate-400">Thinking…</span>
                 )}
-                {m.text && !m.error && !(busy && i === messages.length - 1) && (
+                {/* No confidence badge or source chips on a decline (standard B34) -
+                    a "confidence" reading next to "not enough data to answer this"
+                    is self-contradicting; found live by demo-tester, reproduced 2/2. */}
+                {m.text && !m.error && !isDeclinedAnswer(m.text) && !(busy && i === messages.length - 1) && (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-brand-100 pt-2">
                     <ConfidenceBadge
                       result={

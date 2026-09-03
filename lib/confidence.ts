@@ -15,6 +15,25 @@
  */
 export type ConfidenceLevel = "high" | "moderate" | "low" | "none";
 
+/**
+ * ARAG's own honest-decline text ("Not enough data to answer this.") for a
+ * question the transcript genuinely doesn't ground - the platform's real
+ * refusal behaviour (hard rule 3: never invent an answer it can't ground),
+ * not an app-hardcoded string. A confidence badge next to that refusal is
+ * self-contradicting (found live by demo-tester, 3 Sep 2026 - a "High
+ * confidence" badge rendered under a declined answer, reproduced 2/2,
+ * because REMi scored the refusal text's topical relevance to the retrieved
+ * context rather than whether an answer was actually given). Shared by the
+ * server (skip the REMi call entirely - standard B34/B38 and cost hygiene)
+ * and the client (suppress the badge even if a quality event somehow still
+ * arrives).
+ */
+const DECLINE_RE = /not enough data to answer this/i;
+
+export function isDeclinedAnswer(text: string): boolean {
+  return DECLINE_RE.test(text);
+}
+
 export type ConfidenceResult = {
   level: ConfidenceLevel;
   label: string;
