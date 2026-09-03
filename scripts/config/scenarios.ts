@@ -31,7 +31,7 @@ export const SCENARIOS: Scenario[] = [
   // 1
   {
     slug: "call-billing-complaint-0001",
-    title: "Billing complaint — double-charged premium",
+    title: "Billing complaint - double-charged premium",
     format: "mp3",
     createdISO: "2026-06-02T15:12:00Z",
     agentName: "Maria Gonzales",
@@ -53,7 +53,7 @@ export const SCENARIOS: Scenario[] = [
   // 2
   {
     slug: "call-benefits-dental-crosssell-0002",
-    title: "Benefits inquiry — Medicare Advantage, dental add-on accepted",
+    title: "Benefits inquiry - Medicare Advantage, dental add-on accepted",
     format: "mp4",
     createdISO: "2026-06-05T17:40:00Z",
     agentName: "Darnell Price",
@@ -75,7 +75,7 @@ export const SCENARIOS: Scenario[] = [
   // 3
   {
     slug: "call-priorauth-denial-escalation-0003",
-    title: "Prior authorization denial — MRI, escalated to supervisor",
+    title: "Prior authorization denial - MRI, escalated to supervisor",
     format: "transcript",
     createdISO: "2026-06-09T14:05:00Z",
     agentName: "Priya Nair",
@@ -96,7 +96,7 @@ export const SCENARIOS: Scenario[] = [
   // 4
   {
     slug: "call-claims-status-0004",
-    title: "Claim status check — resolved same call",
+    title: "Claim status check - resolved same call",
     format: "mp3",
     createdISO: "2026-06-10T16:20:00Z",
     agentName: "Tom Whitfield",
@@ -117,7 +117,7 @@ export const SCENARIOS: Scenario[] = [
   // 5
   {
     slug: "call-enrollment-newborn-0005",
-    title: "Enrollment — add newborn dependent, first-call resolution",
+    title: "Enrollment - add newborn dependent, first-call resolution",
     format: "mp4",
     createdISO: "2026-06-11T13:02:00Z",
     agentName: "Sofia Marchetti",
@@ -139,7 +139,7 @@ export const SCENARIOS: Scenario[] = [
   // 6
   {
     slug: "call-pharmacy-formulary-0006",
-    title: "Pharmacy — drug not on formulary, follow-up required",
+    title: "Pharmacy - drug not on formulary, follow-up required",
     format: "transcript",
     createdISO: "2026-06-12T11:48:00Z",
     agentName: "Priya Nair",
@@ -161,7 +161,7 @@ export const SCENARIOS: Scenario[] = [
   // 7
   {
     slug: "call-retention-save-0007",
-    title: "Cancellation request — retention save, downgrade accepted",
+    title: "Cancellation request - retention save, downgrade accepted",
     format: "mp3",
     createdISO: "2026-06-15T18:25:00Z",
     agentName: "Darnell Price",
@@ -183,7 +183,7 @@ export const SCENARIOS: Scenario[] = [
   // 8
   {
     slug: "call-provider-network-0008",
-    title: "Provider network — find in-network specialist",
+    title: "Provider network - find in-network specialist",
     format: "mp4",
     createdISO: "2026-06-16T10:10:00Z",
     agentName: "Sofia Marchetti",
@@ -205,7 +205,7 @@ export const SCENARIOS: Scenario[] = [
   // 9
   {
     slug: "call-claim-denial-complaint-0009",
-    title: "Claim denial dispute — complaint, escalated",
+    title: "Claim denial dispute - complaint, escalated",
     format: "transcript",
     createdISO: "2026-06-17T15:35:00Z",
     agentName: "Maria Gonzales",
@@ -227,7 +227,7 @@ export const SCENARIOS: Scenario[] = [
   // 10
   {
     slug: "call-portal-techsupport-0010",
-    title: "Portal login issue — resolved",
+    title: "Portal login issue - resolved",
     format: "mp3",
     createdISO: "2026-06-18T09:22:00Z",
     agentName: "Tom Whitfield",
@@ -249,7 +249,7 @@ export const SCENARIOS: Scenario[] = [
   // 11
   {
     slug: "call-benefits-supplemental-crosssell-0011",
-    title: "Coverage question — supplemental accident plan cross-sell accepted",
+    title: "Coverage question - supplemental accident plan cross-sell accepted",
     format: "mp4",
     createdISO: "2026-06-19T14:50:00Z",
     agentName: "Darnell Price",
@@ -271,7 +271,7 @@ export const SCENARIOS: Scenario[] = [
   // 12
   {
     slug: "call-billing-autopay-0012",
-    title: "Billing — set up autopay, resolved",
+    title: "Billing - set up autopay, resolved",
     format: "transcript",
     createdISO: "2026-06-22T12:15:00Z",
     agentName: "Sofia Marchetti",
@@ -293,7 +293,7 @@ export const SCENARIOS: Scenario[] = [
   // 13
   {
     slug: "call-priorauth-status-0013",
-    title: "Prior authorization status — follow-up required",
+    title: "Prior authorization status - follow-up required",
     format: "mp3",
     createdISO: "2026-06-23T16:40:00Z",
     agentName: "Priya Nair",
@@ -315,7 +315,7 @@ export const SCENARIOS: Scenario[] = [
   // 14
   {
     slug: "call-service-complaint-0014",
-    title: "Service complaint — long wait, escalated, vulnerable member",
+    title: "Service complaint - long wait, escalated, vulnerable member",
     format: "mp4",
     createdISO: "2026-06-24T13:30:00Z",
     agentName: "Maria Gonzales",
@@ -337,7 +337,7 @@ export const SCENARIOS: Scenario[] = [
   // 15
   {
     slug: "call-enrollment-sep-0015",
-    title: "Special enrollment eligibility — resolved",
+    title: "Special enrollment eligibility - resolved",
     format: "transcript",
     createdISO: "2026-06-25T10:55:00Z",
     agentName: "Tom Whitfield",
@@ -359,7 +359,7 @@ export const SCENARIOS: Scenario[] = [
   // 16
   {
     slug: "call-pharmacy-mailorder-crosssell-0016",
-    title: "Pharmacy mail-order setup — mail-order cross-sell accepted",
+    title: "Pharmacy mail-order setup - mail-order cross-sell accepted",
     format: "mp3",
     createdISO: "2026-06-26T11:05:00Z",
     agentName: "Darnell Price",
@@ -381,7 +381,7 @@ export const SCENARIOS: Scenario[] = [
   // 17
   {
     slug: "call-dentalvision-transfer-0017",
-    title: "Dental & vision benefits — transferred to specialty team",
+    title: "Dental & vision benefits - transferred to specialty team",
     format: "mp4",
     createdISO: "2026-06-26T15:18:00Z",
     agentName: "Sofia Marchetti",
@@ -402,7 +402,7 @@ export const SCENARIOS: Scenario[] = [
   // 18
   {
     slug: "call-claims-oon-reimbursement-0018",
-    title: "Out-of-network reimbursement — follow-up required, mixed",
+    title: "Out-of-network reimbursement - follow-up required, mixed",
     format: "transcript",
     createdISO: "2026-06-29T09:40:00Z",
     agentName: "Priya Nair",
@@ -424,7 +424,7 @@ export const SCENARIOS: Scenario[] = [
   // 19
   {
     slug: "call-cancellation-moving-0019",
-    title: "Cancellation — moving out of state, transferred",
+    title: "Cancellation - moving out of state, transferred",
     format: "mp3",
     createdISO: "2026-06-29T14:12:00Z",
     agentName: "Tom Whitfield",
@@ -445,7 +445,7 @@ export const SCENARIOS: Scenario[] = [
   // 20
   {
     slug: "call-ma-wellness-crosssell-0020",
-    title: "Medicare Advantage wellness — hearing benefit cross-sell accepted",
+    title: "Medicare Advantage wellness - hearing benefit cross-sell accepted",
     format: "mp4",
     createdISO: "2026-06-30T10:30:00Z",
     agentName: "Darnell Price",
@@ -467,7 +467,7 @@ export const SCENARIOS: Scenario[] = [
   // 21
   {
     slug: "call-grievance-compliance-0021",
-    title: "Formal grievance — billing error, compliance-sensitive, escalated",
+    title: "Formal grievance - billing error, compliance-sensitive, escalated",
     format: "transcript",
     createdISO: "2026-06-30T12:08:00Z",
     agentName: "Maria Gonzales",
@@ -489,7 +489,7 @@ export const SCENARIOS: Scenario[] = [
   // 22
   {
     slug: "call-supplemental-claim-0022",
-    title: "Supplemental critical illness claim — resolved, positive",
+    title: "Supplemental critical illness claim - resolved, positive",
     format: "mp3",
     createdISO: "2026-06-30T13:50:00Z",
     agentName: "Sofia Marchetti",
@@ -511,7 +511,7 @@ export const SCENARIOS: Scenario[] = [
   // 23
   {
     slug: "call-telehealth-benefit-0023",
-    title: "Telehealth coverage — mental health add-on declined, neutral",
+    title: "Telehealth coverage - mental health add-on declined, neutral",
     format: "mp4",
     createdISO: "2026-06-30T14:25:00Z",
     agentName: "Tom Whitfield",
@@ -533,7 +533,7 @@ export const SCENARIOS: Scenario[] = [
   // 24
   {
     slug: "call-senior-bill-confusion-0024",
-    title: "Confused senior — bill explanation, empathy, resolved",
+    title: "Confused senior - bill explanation, empathy, resolved",
     format: "transcript",
     createdISO: "2026-06-30T15:05:00Z",
     agentName: "Priya Nair",
