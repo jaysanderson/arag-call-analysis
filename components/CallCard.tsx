@@ -25,8 +25,13 @@ export function CallCard({ call, compact }: { call: CallSummary; compact?: boole
           </div>
           <div className="flex items-center justify-between text-[11px] text-slate-400">
             <span>{fmtDate(call.createdISO)}</span>
-            {/* Role prefix, not a bare name (standard B14) - matches the call-detail convention. */}
-            {call.agentName && <span className="truncate">Agent: {call.agentName}</span>}
+            {/* Name AND role, never a bare name (standard B14). */}
+            {call.agentName && (
+              <span className="truncate">
+                Agent: {call.agentName}
+                {call.queue ? ` (${call.queue})` : ""}
+              </span>
+            )}
           </div>
         </div>
       </Card>

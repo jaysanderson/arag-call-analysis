@@ -63,8 +63,15 @@ export function CallDetailView({ call }: { call: CallDetail }) {
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
             <span>{fmtDateTime(call.createdISO)}</span>
             {!!call.durationSec && <span>· {fmtTime(call.durationSec)}</span>}
-            {call.agentName && <span>· Agent: {call.agentName}</span>}
-            {call.queue && <span>· {call.queue}</span>}
+            {/* Name AND role together, not two separate fragments a reader has to connect (standard B14). */}
+            {call.agentName ? (
+              <span>
+                · Agent: {call.agentName}
+                {call.queue ? ` (${call.queue})` : ""}
+              </span>
+            ) : (
+              call.queue && <span>· {call.queue}</span>
+            )}
             <MediaBadge type={call.mediaType} />
           </div>
         </div>
