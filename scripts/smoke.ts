@@ -8,8 +8,8 @@
  * anything — the demo Knowledge Box holds the seeded calls the showcase depends on.
  */
 
+import { aggregate } from "../lib/aggregate.ts";
 import { parseSummary } from "../lib/parse.ts";
-import { aggregate } from "../services/dashboard.ts";
 import { AragClient, assertAragEnv, loadDotEnv, readEnv } from "../vendor/arag-platform/src/index.ts";
 
 function fail(msg: string): never {
