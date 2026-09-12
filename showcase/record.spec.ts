@@ -57,7 +57,7 @@ test("showcase walkthrough", async ({ page }) => {
   await facet.click();
   await expect(page).toHaveURL(/label=call_reason/);
   await expect.poll(async () => cards.count(), { timeout: 20_000 }).toBeLessThan(beforeFacet);
-  await pause(1500);
+  await pause(8_000);
   await shot("04-calls-facet");
 
   // --- 0:48 semantic search across full transcripts --------------------------------------
@@ -66,7 +66,7 @@ test("showcase walkthrough", async ({ page }) => {
   await page.getByPlaceholder("Search transcripts…").fill("premium");
   await expect(page).toHaveURL(/q=premium/, { timeout: 20_000 });
   await expect(cards.first()).toBeVisible({ timeout: 20_000 });
-  await pause(1500);
+  await pause(8_000);
   await shot("05-calls-search");
 
   // --- 0:55 call detail: media player, transcript moment chips, AI analysis panel --------
@@ -78,12 +78,14 @@ test("showcase walkthrough", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "AI Analysis" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Ask this call" })).toBeVisible();
   await expect(page.locator("span.font-mono").first()).toHaveText(/^\d+:\d{2}$/);
-  await pause(2500);
+  await pause(20_000);
   await shot("06-call-detail");
 
   // --- 1:15 the wow moment: ask, stream, cite, click, scrub -------------------------------
   await page.getByRole("button", { name: "Summarize this call" }).click();
-  await pause(900);
+  // The mock streams the answer in ~0.5s (four words per chunk at
+  // CALLS_MOCK_STREAM_DELAY_MS); grab the transient "Thinking…" frame fast.
+  await pause(150);
   await shot("07-asking");
 
   await expect(page.getByText("Thinking…")).toBeHidden({ timeout: 45_000 });
@@ -91,18 +93,18 @@ test("showcase walkthrough", async ({ page }) => {
   await expect(badge).toBeVisible({ timeout: 45_000 });
   const citation = page.getByRole("button", { name: /source/ }).first();
   await expect(citation).toBeVisible({ timeout: 45_000 });
-  await pause(1200);
+  await pause(10_000);
   await shot("08-answer");
 
   await citation.click();
   await expect(page.locator(".flash").first()).toBeVisible({ timeout: 10_000 });
-  await pause(1800);
+  await pause(15_000);
   await shot("09-citation-scrub");
 
   // --- 2:00 "How this works" — the real request path, not a marketing diagram -----------
   await page.getByRole("button", { name: "How this works" }).click();
   await expect(page.getByRole("heading", { name: "Call detail - how this works" })).toBeVisible();
-  await pause(2200);
+  await pause(10_000);
   await shot("10-how-it-works");
   await page.keyboard.press("Escape");
 
@@ -112,7 +114,7 @@ test("showcase walkthrough", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Operations" })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("Knowledge Box reachable")).toBeVisible({ timeout: 20_000 });
-  await pause(1200);
+  await pause(8_000);
   await shot("11-admin-overview");
 
   const adminNav = page.getByTestId("admin-nav");
@@ -120,19 +122,19 @@ test("showcase walkthrough", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Health" })).toBeVisible();
   await expect(page.getByText("Generative model")).toBeVisible();
   await expect(page.getByText(/^OK · \d+ ms$/)).toBeVisible({ timeout: 20_000 });
-  await pause(1200);
+  await pause(6_000);
   await shot("12-admin-health");
 
   await adminNav.getByRole("link", { name: "Agents", exact: true }).click();
   await expect(page.getByText("resource-labeler")).toBeVisible();
   await expect(page.getByText("paragraph-labeler")).toBeVisible();
   await expect(page.getByText("call-insights")).toBeVisible();
-  await pause(1200);
+  await pause(6_000);
   await shot("13-admin-agents");
 
   // --- 2:20 close: it is all /api/v1, Redoc, no credentials required --------------------
   await page.goto("/api/v1/docs");
   await expect(page).toHaveTitle(/API reference/);
-  await pause(2500);
+  await pause(5_000);
   await shot("14-api-docs");
 });

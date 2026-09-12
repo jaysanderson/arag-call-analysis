@@ -80,9 +80,15 @@ list of every currently cached key follows. Two buttons let an operator interven
 call outside the normal upload flow) and **"Invalidate all"** (a full cache clear, the same thing
 an upload/delete/provision already does automatically).
 
-## What's not covered by an admin e2e test today
+## How this walkthrough is verified
 
-The demo's Playwright suite (`make e2e`) currently exercises the dashboard, calls list, call
-detail, ask-and-cite flow and the browsable API docs; there is no automated Playwright coverage
-of the admin console specifically as of this writing, so the walkthrough above is currently the
-best verification path for the admin surface end to end.
+`make e2e` runs nine Playwright specs against the admin console (`test/e2e/admin.spec.ts`) in
+addition to the demo suite: the API refuses `/api/v1/admin/health` without a token, an unsigned-in
+page shows an error rather than data, a wrong token is rejected, a correct one signs in and runs a
+live Knowledge Box connection test, the configuration view is asserted to contain neither the admin
+token nor the service-account key, the usage counters and log inspector return real records, all
+three agents are listed, the cache page reports statistics and invalidates, and the job history is
+inspectable.
+
+Not yet automated: a full provisioning run driven through the UI (the job itself is covered by the
+integration suite, which runs it end to end against the mock Knowledge Box).

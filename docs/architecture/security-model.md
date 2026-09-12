@@ -122,6 +122,26 @@ so a service-account key or admin token cannot end up in the log ring buffer eve
 `GET /api/v1/admin/health` exposes only the first 8 characters of the KB id, never the full id or
 the token.
 
+## Browser-facing headers
+
+Every `/api/v1` response carries `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin` and a
+`Permissions-Policy` that denies camera, geolocation and microphone — set in `lib/api.ts`'s
+`applyHeaders`, so no handler can forget them.
+
+HTML pages get the same four headers plus a Content-Security-Policy from `next.config.mjs`. The
+policy is `default-src 'self'` with three deliberate widenings:
+
+| Directive | Widening | Why |
+|---|---|---|
+| `script-src` | `'unsafe-inline'` | Next.js emits an inline hydration bootstrap. Removing this needs nonce middleware; tracked below as a known limitation. |
+| `script-src`, `style-src` | `https://cdn.jsdelivr.net` | Redoc and Swagger UI are loaded from jsDelivr by the platform's `redocHtml`/`swaggerHtml` helpers. |
+| `media-src`, `img-src` | `blob:` / `data:` | The audio and video players and the inline SVG charts. |
+
+`connect-src` stays `'self'`: the browser talks only to this origin, never directly to a Knowledge
+Box. `frame-ancestors 'self'`, `base-uri 'self'` and `form-action 'self'` are set. Fly terminates
+TLS with `force_https = true`.
+
 ## Known MVP limitations
 
 Carried forward honestly from [`SECURITY.md`](../../SECURITY.md):
@@ -139,3 +159,5 @@ Carried forward honestly from [`SECURITY.md`](../../SECURITY.md):
   README) rather than a narrowly scoped reader/DA-task key — a live deployment should provision a
   key scoped to only the capabilities this product actually uses (resource read/write, task
   start/stop, labelset write, ask, predict).
+- The Content-Security-Policy allows `'unsafe-inline'` scripts because of Next.js' inline
+  hydration bootstrap. Closing that requires nonce-based CSP via middleware.
