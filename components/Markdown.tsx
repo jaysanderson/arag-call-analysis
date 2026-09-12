@@ -32,6 +32,27 @@ const H_RE = /^(#{1,3})\s+(.*)$/;
 const CITE_TOKEN = /<<<CITE:(\d+)>>>/;
 const CITE_TOKEN_G = /<<<CITE:(\d+)>>>/g;
 
+/**
+ * Markdown rendered here is written by a language model over transcript text an end user uploaded,
+ * so a link target is untrusted input. React does not sanitise `href`: a `javascript:` or `data:`
+ * URI would execute on click exactly as it would in raw HTML. Only http(s), mailto and same-origin
+ * relative links are allowed through; anything else renders as plain text.
+ */
+export function safeHref(raw: string): string | null {
+  const href = raw.trim();
+  if (!href) return null;
+  // Strip control characters and whitespace an attacker can use to hide a scheme ("java\tscript:").
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point.
+  const normalised = href.replace(/[\u0000-\u001F\u007F\s]/g, "").toLowerCase();
+  if (normalised.startsWith("//")) return null; // protocol-relative: scheme is the page's, host is not
+  if (href.startsWith("/") || href.startsWith("#") || href.startsWith("./") || href.startsWith("../"))
+    return href;
+  const colon = normalised.indexOf(":");
+  if (colon === -1) return href; // no scheme at all: a relative path
+  const scheme = normalised.slice(0, colon);
+  return ["http", "https", "mailto"].includes(scheme) ? href : null;
+}
+
 function parseBlocks(src: string): Block[] {
   const lines = src.replace(/\r\n/g, "\n").split("\n");
   const blocks: Block[] = [];
@@ -139,17 +160,22 @@ function inline(text: string, keyBase: string, onCite?: (n: number) => void): Re
     } else if (tok.startsWith("[")) {
       const close = tok.indexOf("](");
       const label = tok.slice(1, close);
-      const href = tok.slice(close + 2, -1);
+      const href = safeHref(tok.slice(close + 2, -1));
+      // An unsafe scheme renders as plain text, never as a link.
       nodes.push(
-        <a
-          key={`${keyBase}-${idx++}`}
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          className="underline underline-offset-2"
-        >
-          {label}
-        </a>,
+        href ? (
+          <a
+            key={`${keyBase}-${idx++}`}
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="underline underline-offset-2"
+          >
+            {label}
+          </a>
+        ) : (
+          <span key={`${keyBase}-${idx++}`}>{label}</span>
+        ),
       );
     } else {
       nodes.push(<em key={`${keyBase}-${idx++}`}>{tok.slice(1, -1)}</em>);

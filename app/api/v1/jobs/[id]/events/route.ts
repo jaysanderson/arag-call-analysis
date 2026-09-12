@@ -1,4 +1,4 @@
-import { route } from "@/lib/api";
+import { preflight, route } from "@/lib/api";
 import { jobView } from "@/services/jobs";
 import { notFound } from "@/vendor/arag-platform/src/index.ts";
 
@@ -40,14 +40,14 @@ export const GET = route({ path: "/api/v1/jobs/{id}/events", method: "get", noRa
 
       const unsub = ctx.rt.jobs.subscribe(id, (e) => {
         if ("job" in e) {
-          send("job", jobView(e.job));
+          send("job", jobView(e.job, { admin: ctx.auth.admin }));
           if (TERMINAL.has(e.job.status)) finish();
         } else {
           send("event", e);
         }
       });
 
-      send("job", jobView(job));
+      send("job", jobView(job, { admin: ctx.auth.admin }));
       for (const e of job.events) send("event", e);
       if (TERMINAL.has(job.status)) finish();
       ctx.req.signal.addEventListener("abort", finish);
@@ -64,3 +64,5 @@ export const GET = route({ path: "/api/v1/jobs/{id}/events", method: "get", noRa
     },
   });
 });
+
+export const OPTIONS = preflight;

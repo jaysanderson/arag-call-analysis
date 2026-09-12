@@ -133,8 +133,19 @@ export function registerJobs(rt: Runtime): void {
   });
 }
 
-/** Public shape of a job (also the OpenAPI `Job` schema). */
-export function jobView(job: Job): Record<string, unknown> {
+/**
+ * Public shape of a job (also the OpenAPI `Job` schema).
+ *
+ * A failed job's error message can name the upstream operation that failed ("ARAG POST /catalog
+ * failed with HTTP 500"). That is useful to an operator and needless architecture disclosure to an
+ * anonymous caller, so it is replaced with a generic message unless the caller is an admin.
+ */
+export function jobView(job: Job, opts: { admin?: boolean } = {}): Record<string, unknown> {
+  const error = job.error
+    ? opts.admin
+      ? job.error
+      : { message: "The job failed. Ask an administrator to check the logs.", kind: job.error.kind }
+    : undefined;
   return {
     id: job.id,
     kind: job.kind,
@@ -144,7 +155,7 @@ export function jobView(job: Job): Record<string, unknown> {
     message: job.message,
     ref: job.ref,
     result: job.result,
-    error: job.error,
+    error,
     events: job.events,
     durationsMs: job.durationsMs,
     createdAt: job.createdAt,

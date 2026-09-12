@@ -1,4 +1,4 @@
-import { route } from "@/lib/api";
+import { preflight, route } from "@/lib/api";
 import { constantTimeEqual, forbidden, unauthorized } from "@/vendor/arag-platform/src/index.ts";
 
 export const runtime = "nodejs";
@@ -22,3 +22,5 @@ export const POST = route({ path: "/api/v1/admin/login", method: "post" }, (ctx)
   ctx.log.info("admin.login.ok", { ip: ctx.ip });
   return { ok: true };
 });
+
+export const OPTIONS = preflight;

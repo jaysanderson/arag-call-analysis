@@ -1,4 +1,4 @@
-import { route } from "@/lib/api";
+import { preflight, route } from "@/lib/api";
 import { logs } from "@/services/admin";
 
 export const runtime = "nodejs";
@@ -11,3 +11,5 @@ export const GET = route({ path: "/api/v1/admin/logs", method: "get", auth: "adm
     limit: ctx.query.limit as number | undefined,
   }),
 );
+
+export const OPTIONS = preflight;

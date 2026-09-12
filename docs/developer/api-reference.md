@@ -69,7 +69,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: ApiKey or Bearer or 
+Auth: ApiKey or AdminToken
 
 
 ### `GET /api/v1/calls/{id}`
@@ -115,7 +115,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: ApiKey or Bearer or 
+Auth: ApiKey or AdminToken
 
 
 ### `GET /api/v1/calls/{id}/media`

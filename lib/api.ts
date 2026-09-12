@@ -70,8 +70,13 @@ export interface RouteSpec {
   auth?: RouteAuth;
   /** Body handling. `auto` parses JSON when the content type says so. */
   body?: "auto" | "json" | "multipart" | "none";
-  /** Skip the rate limiter (streaming sub-resources of an already-limited request). */
+  /** Skip the rate limiter entirely (long-lived, near-free streams such as job SSE). */
   noRateLimit?: boolean;
+  /**
+   * Multiply this route's share of the token bucket. A media player issues many `Range` requests
+   * while scrubbing, so the media route gets a generous bucket rather than no bucket at all.
+   */
+  rateLimitMultiplier?: number;
   /** Byte cap for this route's body (defaults to MAX_BODY_BYTES). */
   bodyLimit?: number;
 }
@@ -130,6 +135,20 @@ function enforceAuth(rt: Runtime, auth: AuthInfo, mode: RouteAuth): void {
       throw forbidden("Admin access is disabled: set ADMIN_TOKEN to enable the admin panel.");
     if (!auth.admin) throw unauthorized("Admin token required");
     return;
+  }
+  if (mode === "write") {
+    // Creating and deleting calls changes the Knowledge Box, so it never rides on the freely
+    // issued demo session cookie: it needs the admin token or a real API key. The single
+    // exception is a deployment with NO credentials configured at all, which can only be a local
+    // mock/demo run — and even that is refused in production.
+    if (auth.admin || auth.apiKey) return;
+    const unconfigured = rt.env.apiKeys.length === 0 && !rt.env.adminToken;
+    if (unconfigured && rt.env.nodeEnv !== "production") return;
+    if (unconfigured)
+      throw forbidden(
+        "Write access is disabled: set ADMIN_TOKEN or API_KEYS to allow uploads and deletions.",
+      );
+    throw unauthorized("An API key (X-API-Key) or the admin token is required for this operation");
   }
   if (rt.env.apiKeys.length === 0) return; // open API
   if (auth.admin || auth.apiKey || auth.session) return;
@@ -199,11 +218,53 @@ export function clientIp(req: Request, trustProxy: Runtime["env"]["trustProxy"] 
 
 // ───────────────────────────── responses ─────────────────────────────
 
-function applyHeaders(res: Response, requestId: string, cookies: string[]): Response {
+/**
+ * Resolve the CORS origin for a request against `ALLOWED_ORIGINS`.
+ * Empty (the default) means same-origin only: no `Access-Control-Allow-Origin` is emitted at all.
+ */
+export function corsOrigin(origin: string | null, allowed: string[]): string | null {
+  if (allowed.length === 0) return null;
+  if (allowed.includes("*")) return "*";
+  return origin && allowed.includes(origin) ? origin : null;
+}
+
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key, X-Request-Id, Range",
+  "Access-Control-Expose-Headers": "X-Request-Id, Content-Range, Location, Retry-After",
+  "Access-Control-Max-Age": "600",
+};
+
+function applyHeaders(
+  res: Response,
+  requestId: string,
+  cookies: string[],
+  rt: Runtime | null,
+  req?: Request,
+): Response {
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+  if (rt?.env.nodeEnv === "production")
+    res.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  const allow = rt && req ? corsOrigin(req.headers.get("origin"), rt.env.allowedOrigins) : null;
+  if (allow) {
+    res.headers.set("Access-Control-Allow-Origin", allow);
+    res.headers.set("Vary", "Origin");
+    if (allow !== "*") res.headers.set("Access-Control-Allow-Credentials", "true");
+    for (const [k, v] of Object.entries(CORS_HEADERS)) res.headers.set(k, v);
+  }
   res.headers.set("X-Request-Id", requestId);
   for (const c of cookies) res.headers.append("Set-Cookie", c);
   return res;
+}
+
+/**
+ * CORS preflight handler. Every `/api/v1` route module exports this as `OPTIONS` so a browser on an
+ * allowlisted origin can send a non-simple request; with `ALLOWED_ORIGINS` empty it answers 204
+ * with no CORS headers, which is the same as not supporting cross-origin at all.
+ */
+export async function preflight(req: Request): Promise<Response> {
+  const rt = await getRuntime().catch(() => null);
+  return applyHeaders(new Response(null, { status: 204 }), "", [], rt, req);
 }
 
 export function problemResponse(err: HttpError, instance: string, requestId: string): Response {
@@ -263,6 +324,40 @@ function groupQuery(url: URL, querySchema: Record<string, unknown> | undefined):
   return out;
 }
 
+/**
+ * Validate the scalar fields of a multipart body against the `multipart/form-data` schema declared
+ * in the OpenAPI document. `format: binary` properties (the uploaded file) are skipped — their
+ * size and media type are checked by the handler. Without this, the multipart contract would live
+ * only in the handler and silently drift from the spec.
+ */
+export function validateFormFields(
+  form: FormData,
+  path: string,
+  method: string,
+): Array<{ path: string; message: string }> {
+  const op = ((openapi.paths as Record<string, Record<string, unknown>>)?.[path]?.[method] ?? {}) as {
+    requestBody?: { content?: Record<string, { schema?: Record<string, unknown> }> };
+  };
+  const schema = op.requestBody?.content?.["multipart/form-data"]?.schema;
+  if (!schema) return [];
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const scalar: Record<string, unknown> = {};
+  const scalarProps: Record<string, unknown> = {};
+  for (const [name, prop] of Object.entries(props)) {
+    if (prop.format === "binary") continue;
+    scalarProps[name] = prop;
+    const v = form.get(name);
+    if (typeof v === "string" && v !== "") scalar[name] = v;
+  }
+  const required = ((schema.required as string[] | undefined) ?? []).filter((r) => r in scalarProps);
+  const { errors } = validate(
+    scalar,
+    { type: "object", properties: scalarProps, required, additionalProperties: true },
+    { root: openapi, coerce: true },
+  );
+  return errors;
+}
+
 // ───────────────────────────── the adapter ─────────────────────────────
 
 type NextRouteArgs = { params: Promise<Record<string, string | string[]>> };
@@ -290,8 +385,13 @@ export function route(spec: RouteSpec, handler: Handler) {
       enforceAuth(rt, auth, spec.auth ?? "none");
 
       if (!spec.noRateLimit && !auth.admin) {
+        const mult = Math.max(1, spec.rateLimitMultiplier ?? 1);
         const key = auth.apiKey ? `k:${auth.apiKey}` : `ip:${clientIp(req, rt.env.trustProxy)}`;
-        const retry = rateLimit(key, rt.env.rateLimitRps, rt.env.rateLimitBurst);
+        const retry = rateLimit(
+          mult > 1 ? `${key}|${spec.path}` : key,
+          rt.env.rateLimitRps * mult,
+          rt.env.rateLimitBurst * mult,
+        );
         if (retry !== null) throw tooManyRequests(retry);
       }
 
@@ -331,7 +431,14 @@ export function route(spec: RouteSpec, handler: Handler) {
       if (mode === "multipart") {
         if (!contentType.startsWith("multipart/form-data"))
           throw new HttpError(415, "Unsupported media type", "Expected multipart/form-data");
-        form = await req.formData();
+        try {
+          form = await req.formData();
+        } catch {
+          // A malformed body of a declared type is the client's error, not a server fault.
+          throw validationError([{ path: "", message: "body is not valid multipart/form-data" }], "body");
+        }
+        const errors = validateFormFields(form, spec.path, spec.method);
+        if (errors.length) throw validationError(errors, "body");
       } else if (mode === "json" || (mode === "auto" && req.method !== "GET")) {
         const text = await req.text();
         if (text.length > limit) throw new HttpError(413, "Payload too large", `Body exceeds ${limit} bytes`);
@@ -380,7 +487,7 @@ export function route(spec: RouteSpec, handler: Handler) {
       const out = await handler(ctx);
       const res = out instanceof Response ? out : jsonResponse(out ?? {});
       status = res.status;
-      return applyHeaders(res, requestId, cookies);
+      return applyHeaders(res, requestId, cookies, rt, req);
     } catch (err) {
       const httpErr = toHttpError(err, rt?.env.nodeEnv === "production");
       status = httpErr.status;
@@ -393,7 +500,7 @@ export function route(spec: RouteSpec, handler: Handler) {
             message: (err as Error)?.message,
           });
       }
-      return applyHeaders(problemResponse(httpErr, url.pathname, requestId), requestId, cookies);
+      return applyHeaders(problemResponse(httpErr, url.pathname, requestId), requestId, cookies, rt, req);
     } finally {
       if (rt) {
         const level = status >= 500 ? "error" : status >= 400 ? "warn" : "info";

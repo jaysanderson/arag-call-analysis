@@ -277,7 +277,7 @@ describe("upload and delete", () => {
     form.set("created", "2026-07-01T09:00:00Z");
     form.set("duration_sec", "42");
     form.set("transcript", "Agent: Thanks for calling. Member: My claim was denied and I want a review.");
-    const res = await mod.calls.POST(req("/api/v1/calls", { method: "POST", body: form }));
+    const res = await mod.calls.POST(req("/api/v1/calls", { method: "POST", body: form, headers: ADMIN }));
     expect(res.status).toBe(202);
     const created = await body<{ job: { id: string }; call: { id: string } }>(res);
 
@@ -296,7 +296,7 @@ describe("upload and delete", () => {
     expect(detail.durationSec).toBe(42);
 
     const del = await mod.call.DELETE(
-      req(`/api/v1/calls/${created.call.id}`, { method: "DELETE" }),
+      req(`/api/v1/calls/${created.call.id}`, { method: "DELETE", headers: ADMIN }),
       params({ id: created.call.id }),
     );
     expect(del.status).toBe(204);
@@ -308,14 +308,14 @@ describe("upload and delete", () => {
     const form = new FormData();
     form.set("title", "Recorded call");
     form.set("recording", new File([new Uint8Array(2048)], "call.mp3", { type: "audio/mpeg" }));
-    const res = await mod.calls.POST(req("/api/v1/calls", { method: "POST", body: form }));
+    const res = await mod.calls.POST(req("/api/v1/calls", { method: "POST", body: form, headers: ADMIN }));
     expect(res.status).toBe(202);
     const created = await body<{ call: { id: string } }>(res);
     const detail = await body<{ mediaType: string }>(
       await mod.call.GET(req(`/api/v1/calls/${created.call.id}`), params({ id: created.call.id })),
     );
     expect(detail.mediaType).toBe("audio");
-    await mod.call.DELETE(req("/x", { method: "DELETE" }), params({ id: created.call.id }));
+    await mod.call.DELETE(req("/x", { method: "DELETE", headers: ADMIN }), params({ id: created.call.id }));
   });
 
   it("validates the upload form", async () => {
@@ -346,7 +346,7 @@ describe("upload and delete", () => {
     cases.push([badType, 415]);
 
     for (const [form, status] of cases) {
-      const res = await mod.calls.POST(req("/api/v1/calls", { method: "POST", body: form }));
+      const res = await mod.calls.POST(req("/api/v1/calls", { method: "POST", body: form, headers: ADMIN }));
       expect(res.status).toBe(status);
     }
   });
@@ -355,15 +355,28 @@ describe("upload and delete", () => {
     const res = await mod.calls.POST(
       req("/api/v1/calls", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...ADMIN },
         body: JSON.stringify({ title: "nope" }),
       }),
     );
     expect(res.status).toBe(415);
   });
 
+  it("refuses an anonymous upload or delete (write auth, D-CA-13)", async () => {
+    const form = new FormData();
+    form.set("title", "Anonymous");
+    form.set("transcript", "Agent: Hello.");
+    expect((await mod.calls.POST(req("/api/v1/calls", { method: "POST", body: form }))).status).toBe(401);
+    expect((await mod.call.DELETE(req("/x", { method: "DELETE" }), params({ id: "anything" }))).status).toBe(
+      401,
+    );
+  });
+
   it("404s when deleting an unknown call", async () => {
-    const res = await mod.call.DELETE(req("/x", { method: "DELETE" }), params({ id: "nope" }));
+    const res = await mod.call.DELETE(
+      req("/x", { method: "DELETE", headers: ADMIN }),
+      params({ id: "nope" }),
+    );
     expect(res.status).toBe(404);
   });
 });

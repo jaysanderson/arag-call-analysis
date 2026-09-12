@@ -19,8 +19,16 @@ import { APP_VERSION } from "./version.ts";
 const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
 const err = standardResponses;
 
-/** Auth mode per route, consumed by `lib/api.ts` and asserted by the contract tests. */
-export type RouteAuth = "none" | "api" | "admin";
+/**
+ * Auth mode per route, consumed by `lib/api.ts` and asserted by the contract tests.
+ * - `none`   public read
+ * - `api`    open unless `API_KEYS` is set, then key or demo session
+ * - `write`  always needs the admin token or an API key (never the demo session); allowed without
+ *            either only when the deployment has no credentials configured at all and is not
+ *            production
+ * - `admin`  always needs `ADMIN_TOKEN`
+ */
+export type RouteAuth = "none" | "api" | "write" | "admin";
 
 export interface RouteDef {
   method: "get" | "post" | "delete";
@@ -420,7 +428,7 @@ const paths: Record<string, Record<string, unknown>> = {
           name: "label",
           in: "query",
           description: "Facet filter as `labelset/label`; repeat for AND across facets.",
-          schema: { type: "array", items: { type: "string", maxLength: 120 } },
+          schema: { type: "array", items: { type: "string", maxLength: 120 }, maxItems: 20 },
         },
         PageQuery.page,
         PageQuery.pageSize,
@@ -431,9 +439,9 @@ const paths: Record<string, Record<string, unknown>> = {
       operationId: "createCall",
       tags: ["Calls"],
       summary: "Upload a call",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
       description:
         "Accepts `multipart/form-data` with either a `recording` file (audio/video — ARAG transcribes it) or a `transcript` text field, plus call metadata. Returns a job that completes when the call is retrievable.",
-      security: [{ ApiKey: [] }, { Bearer: [] }, {}],
       requestBody: {
         required: true,
         content: {
@@ -481,7 +489,7 @@ const paths: Record<string, Record<string, unknown>> = {
       operationId: "deleteCall",
       tags: ["Calls"],
       summary: "Delete a call and its Knowledge Box resource",
-      security: [{ ApiKey: [] }, { Bearer: [] }, {}],
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
       responses: { 204: { description: "Deleted" }, ...problemResponses },
     },
@@ -731,9 +739,9 @@ export const openapi: Record<string, unknown> = buildOpenApi({
  */
 export const API_ROUTES: RouteDef[] = [
   { method: "get", path: "/api/v1/calls", auth: "none", file: "app/api/v1/calls/route.ts" },
-  { method: "post", path: "/api/v1/calls", auth: "api", file: "app/api/v1/calls/route.ts" },
+  { method: "post", path: "/api/v1/calls", auth: "write", file: "app/api/v1/calls/route.ts" },
   { method: "get", path: "/api/v1/calls/{id}", auth: "none", file: "app/api/v1/calls/[id]/route.ts" },
-  { method: "delete", path: "/api/v1/calls/{id}", auth: "api", file: "app/api/v1/calls/[id]/route.ts" },
+  { method: "delete", path: "/api/v1/calls/{id}", auth: "write", file: "app/api/v1/calls/[id]/route.ts" },
   {
     method: "get",
     path: "/api/v1/calls/{id}/media",

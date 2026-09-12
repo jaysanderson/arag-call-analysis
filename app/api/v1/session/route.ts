@@ -1,4 +1,4 @@
-import { route } from "@/lib/api";
+import { preflight, route } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,3 +14,5 @@ export const POST = route({ path: "/api/v1/session", method: "post", body: "none
   ctx.setCookie("arag_session", token, { maxAge: TTL_SEC, sameSite: "Lax" });
   return { ok: true, expiresIn: TTL_SEC };
 });
+
+export const OPTIONS = preflight;

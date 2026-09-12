@@ -50,8 +50,8 @@ make provision           # create the labelsets and start the augmentation agent
 | `GET /api/v1/calls/{id}` | transcript, paragraph moments, labels, metrics and the generated analysis |
 | `GET /api/v1/calls/{id}/media` | streams the recording through the server (Range → 206, so the player can scrub) |
 | `POST /api/v1/calls/{id}/ask` | NDJSON answer stream scoped to one call: retrieval, answer, citations, and a REMi answer-quality item |
-| `POST /api/v1/calls` | multipart upload of a recording or a transcript → `202` with a job |
-| `DELETE /api/v1/calls/{id}` | remove the call and its Knowledge Box resource |
+| `POST /api/v1/calls` | multipart upload of a recording or a transcript → `202` with a job (admin token or API key) |
+| `DELETE /api/v1/calls/{id}` | remove the call and its Knowledge Box resource (admin token or API key) |
 | `GET /api/v1/dashboard` | aggregated metrics across every analysed call |
 | `GET /api/v1/labelsets` | the filter facets, straight from the Knowledge Box |
 | `GET /api/v1/jobs`, `/jobs/{id}`, `/jobs/{id}/events` | background work, with SSE progress |
@@ -104,7 +104,7 @@ showcase/       recorded walkthrough
 ## Commands
 
 ```bash
-make check        # biome + tsc + tests with the coverage gate
+make check        # biome + tsc + dependency audit + tests with the coverage gate
 make test         # unit + integration + contract against the mock
 make e2e          # Playwright: dashboard → calls → detail → ask → citation, and admin
 make showcase     # record the walkthrough into showcase/out

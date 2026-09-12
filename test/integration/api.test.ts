@@ -212,7 +212,7 @@ describe("POST /api/v1/calls and DELETE", () => {
     const created = await api.request<{ job: { id: string }; call: { id: string } }>(
       "POST",
       "/api/v1/calls",
-      { body: form },
+      { body: form, admin: true },
     );
     expect(created.status).toBe(202);
     expect(created.headers.get("location")).toBe(`/api/v1/calls/${created.json.call.id}`);
@@ -232,7 +232,7 @@ describe("POST /api/v1/calls and DELETE", () => {
     expect(fetched.status).toBe(200);
     expect(fetched.json.title).toBe("Integration test call");
 
-    const deleted = await api.del(`/api/v1/calls/${created.json.call.id}`);
+    const deleted = await api.del(`/api/v1/calls/${created.json.call.id}`, { admin: true });
     expect(deleted.status).toBe(204);
     expect((await api.get(`/api/v1/calls/${created.json.call.id}`)).status).toBe(404);
   });
@@ -240,7 +240,25 @@ describe("POST /api/v1/calls and DELETE", () => {
   it("rejects an upload with neither a transcript nor a recording", async () => {
     const form = new FormData();
     form.set("title", "Empty");
-    const res = await api.request<Problem>("POST", "/api/v1/calls", { body: form });
+    const res = await api.request<Problem>("POST", "/api/v1/calls", { body: form, admin: true });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a malformed multipart body with 400, not 500", async () => {
+    const res = await api.request<Problem>("POST", "/api/v1/calls", {
+      body: "this is not a multipart body",
+      headers: { "Content-Type": "multipart/form-data; boundary=XYZ" },
+      admin: true,
+    });
+    expect(res.status).toBe(400);
+    expect(res.json.type).toContain("validation");
+  });
+
+  it("enforces the multipart field schema from the OpenAPI document", async () => {
+    const form = new FormData();
+    form.set("title", "x".repeat(500)); // spec caps title at 200
+    form.set("transcript", "Agent: Hello.");
+    const res = await api.request<Problem>("POST", "/api/v1/calls", { body: form, admin: true });
     expect(res.status).toBe(400);
   });
 
@@ -251,7 +269,7 @@ describe("POST /api/v1/calls and DELETE", () => {
       "recording",
       new File([new Uint8Array([1, 2, 3])], "x.exe", { type: "application/x-msdownload" }),
     );
-    const res = await api.request<Problem>("POST", "/api/v1/calls", { body: form });
+    const res = await api.request<Problem>("POST", "/api/v1/calls", { body: form, admin: true });
     expect(res.status).toBe(415);
   });
 });
@@ -294,6 +312,13 @@ describe("POST /api/v1/session", () => {
 });
 
 describe("admin", () => {
+  it("scrubs upstream detail from a failed job for an anonymous caller", async () => {
+    const jobs = await api.get<{ items: Array<{ error?: { message: string } }> }>("/api/v1/jobs?limit=50");
+    for (const j of jobs.json.items) {
+      if (j.error) expect(j.error.message).not.toContain("ARAG");
+    }
+  });
+
   it("refuses every admin route without the token", async () => {
     for (const path of [
       "/api/v1/admin/health",
@@ -338,13 +363,15 @@ describe("admin", () => {
   });
 
   it("redacts secrets in the config view", async () => {
-    const res = await api.get<{ env: { adminToken: string; arag: { apiKey: string } } }>(
+    const res = await api.get<{ env: { adminToken: string; arag: { apiKey: string; kbId: string } } }>(
       "/api/v1/admin/config",
       { admin: true },
     );
     expect(res.status).toBe(200);
     expect(res.text).not.toContain("test-admin-token");
     expect(res.json.env.arag.apiKey).not.toBe("mock-api-key");
+    // The full Knowledge Box id never reaches a browser from any surface (QA finding 10).
+    expect(res.json.env.arag.kbId).toMatch(/…$/);
   });
 
   it("reports usage counters and recent logs", async () => {
@@ -488,6 +515,104 @@ describe("rate limiting", () => {
   }, 180_000);
 });
 
+describe("write authorisation (DECISIONS D-CA-13)", () => {
+  it("allows writes when no credentials are configured at all and the app is not production", async () => {
+    const open = await startAppServer({ ADMIN_TOKEN: "", API_KEYS: "", NODE_ENV: "test" });
+    try {
+      const client = makeClient(open.baseUrl);
+      const form = new FormData();
+      form.set("title", "Open-mode upload");
+      form.set("transcript", "Agent: Hello. Member: Hello.");
+      const res = await client.request<{ call: { id: string } }>("POST", "/api/v1/calls", { body: form });
+      expect(res.status).toBe(202);
+    } finally {
+      await open.stop();
+    }
+  }, 180_000);
+
+  it("refuses an anonymous delete once an admin token is configured", async () => {
+    const list = await api.get<Page<CallSummary>>("/api/v1/calls?page_size=1");
+    const id = list.json.items[0]!.id;
+    const anon = await api.del<Problem>(`/api/v1/calls/${id}`);
+    expect(anon.status).toBe(401);
+    // The call must still be there.
+    expect((await api.get(`/api/v1/calls/${id}`)).status).toBe(200);
+  });
+
+  it("refuses an anonymous upload once an admin token is configured", async () => {
+    const form = new FormData();
+    form.set("title", "Should be refused");
+    form.set("transcript", "Agent: Hello. Member: Hello.");
+    const res = await api.request<Problem>("POST", "/api/v1/calls", { body: form });
+    expect(res.status).toBe(401);
+  });
+
+  it("does not accept the freely issued demo session for a write", async () => {
+    const session = await api.post("/api/v1/session");
+    const cookie = (session.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const form = new FormData();
+    form.set("title", "Session upload");
+    form.set("transcript", "Agent: Hello. Member: Hello.");
+    const res = await api.request<Problem>("POST", "/api/v1/calls", {
+      body: form,
+      headers: { Cookie: cookie },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("refuses writes in production when nothing is configured, with an explanatory 403", async () => {
+    const prod = await startAppServer({ ADMIN_TOKEN: "", API_KEYS: "", NODE_ENV: "production" });
+    try {
+      const client = makeClient(prod.baseUrl);
+      const form = new FormData();
+      form.set("title", "Production upload");
+      form.set("transcript", "Agent: Hello. Member: Hello.");
+      const res = await client.request<Problem>("POST", "/api/v1/calls", { body: form });
+      expect(res.status).toBe(403);
+      expect(res.json.detail).toContain("ADMIN_TOKEN");
+    } finally {
+      await prod.stop();
+    }
+  }, 180_000);
+});
+
+describe("CORS (DECISIONS D-CA-14)", () => {
+  it("emits no CORS headers when ALLOWED_ORIGINS is empty (same-origin only)", async () => {
+    const res = await api.get("/api/v1/calls?page_size=1", {
+      headers: { Origin: "https://evil.example.com" },
+    });
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("answers preflight and echoes an allowlisted origin", async () => {
+    const cors = await startAppServer({ ALLOWED_ORIGINS: "https://partner.example.com" });
+    try {
+      const preflight = await fetch(`${cors.baseUrl}/api/v1/calls`, {
+        method: "OPTIONS",
+        headers: { Origin: "https://partner.example.com", "Access-Control-Request-Method": "GET" },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe("https://partner.example.com");
+      expect(preflight.headers.get("access-control-allow-methods")).toContain("GET");
+
+      const get = await fetch(`${cors.baseUrl}/api/v1/calls?page_size=1`, {
+        headers: { Origin: "https://partner.example.com" },
+      });
+      expect(get.headers.get("access-control-allow-origin")).toBe("https://partner.example.com");
+      expect(get.headers.get("vary")).toContain("Origin");
+      await get.arrayBuffer();
+
+      const other = await fetch(`${cors.baseUrl}/api/v1/calls?page_size=1`, {
+        headers: { Origin: "https://evil.example.com" },
+      });
+      expect(other.headers.get("access-control-allow-origin")).toBeNull();
+      await other.arrayBuffer();
+    } finally {
+      await cors.stop();
+    }
+  }, 180_000);
+});
+
 describe("API key mode", () => {
   it("requires a key for writes and accepts a same-origin session instead", async () => {
     const keyed = await startAppServer({ API_KEYS: "secret-key-1" });
@@ -508,13 +633,14 @@ describe("API key mode", () => {
       });
       expect(withKey.status).toBe(202);
 
+      // A demo session is deliberately NOT enough to write (D-CA-13).
       const session = await client.post("/api/v1/session");
       const cookie = (session.headers.get("set-cookie") ?? "").split(";")[0]!;
       const viaSession = await client.request("POST", "/api/v1/calls", {
         body: form(),
         headers: { Cookie: cookie },
       });
-      expect(viaSession.status).toBe(202);
+      expect(viaSession.status).toBe(401);
 
       // Reads stay open so the demo works without a key.
       expect((await client.get("/api/v1/calls")).status).toBe(200);

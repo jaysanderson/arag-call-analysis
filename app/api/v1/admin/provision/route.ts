@@ -1,4 +1,4 @@
-import { jsonResponse, route } from "@/lib/api";
+import { jsonResponse, preflight, route } from "@/lib/api";
 import { JOB_PROVISION, jobView, type ProvisionJobInput } from "@/services/jobs";
 
 export const runtime = "nodejs";
@@ -14,3 +14,5 @@ export const POST = route({ path: "/api/v1/admin/provision", method: "post", aut
   ctx.log.info("admin.provision.started", { jobId: job.id });
   return jsonResponse(jobView(job), 202, { Location: `/api/v1/jobs/${job.id}` });
 });
+
+export const OPTIONS = preflight;

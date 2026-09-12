@@ -1,0 +1,40 @@
+{
+  "$comment": "Advisories accepted for this MVP. Each entry must carry a reason and a review date; scripts/audit.ts fails CI on anything at or above the chosen severity that is NOT listed here. See DECISIONS.md D-CA-12.",
+  "allow": [
+    {
+      "package": "nanoid",
+      "reason": "Pinned to 3.3.11 by an `overrides` entry because the corporate registry blocks releases newer than ~14 days (TEAM-BRIEF hard rule 1). Transitive, build-time only: Next uses it for build ids, it is not reachable from any request path.",
+      "reviewBy": "2026-12-01"
+    },
+    {
+      "package": "baseline-browser-mapping",
+      "reason": "Pinned to 2.8.0 by the same registry policy. Browserslist data used at build time only; the advisory is a denial of service on malformed input that never reaches production.",
+      "reviewBy": "2026-12-01"
+    },
+    {
+      "package": "postcss",
+      "reason": "Transitive build-time dependency of Tailwind 4. The advisories are source-map path traversal and CSS stringify escaping, both reachable only when compiling attacker-controlled CSS, which this repo never does.",
+      "reviewBy": "2026-12-01"
+    },
+    {
+      "package": "sharp",
+      "reason": "Optional image-optimisation dependency of Next. This product serves no user-supplied images through next/image, and the runtime container is the standalone output.",
+      "reviewBy": "2026-12-01"
+    },
+    {
+      "package": "playwright",
+      "reason": "devDependency pinned to 1.52.0 by TEAM-BRIEF. The advisory is in the browser installer script, which runs only on a developer machine or a CI runner, never in a deployment.",
+      "reviewBy": "2026-12-01"
+    },
+    {
+      "package": "vitest",
+      "reason": "devDependency pinned to 3.2.4 by TEAM-BRIEF. The advisory affects the Vitest UI/API server, which this repo never starts (tests run with `vitest run`).",
+      "reviewBy": "2026-12-01"
+    },
+    {
+      "package": "esbuild",
+      "reason": "Transitive devDependency of Vitest. The advisory affects the esbuild dev server, which is never started here.",
+      "reviewBy": "2026-12-01"
+    }
+  ]
+}

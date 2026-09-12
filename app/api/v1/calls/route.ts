@@ -1,4 +1,4 @@
-import { jsonResponse, route } from "@/lib/api";
+import { jsonResponse, preflight, route } from "@/lib/api";
 import { createCall, listCalls } from "@/services/calls";
 import { JOB_INGEST, jobView } from "@/services/jobs";
 import { badRequest, HttpError } from "@/vendor/arag-platform/src/index.ts";
@@ -46,7 +46,13 @@ function field(form: FormData, name: string, max = 200): string | undefined {
  * immediately) and the slow part — transcription and retrievability — is tracked by a job.
  */
 export const POST = route(
-  { path: "/api/v1/calls", method: "post", auth: "api", body: "multipart", bodyLimit: MAX_RECORDING_BYTES },
+  {
+    path: "/api/v1/calls",
+    method: "post",
+    auth: "write",
+    body: "multipart",
+    bodyLimit: MAX_RECORDING_BYTES,
+  },
   async (ctx) => {
     const form = ctx.form!;
     const title = field(form, "title");
@@ -62,6 +68,10 @@ export const POST = route(
     let recordingInput: { bytes: Uint8Array; filename: string; contentType: string } | undefined;
     if (hasRecording) {
       const file = recording as File;
+      // The declared part content type is trusted here; `X-Content-Type-Options: nosniff` on the
+      // media route stops a browser sniffing a mislabelled file into something executable, and
+      // ARAG rejects what it cannot transcribe. Magic-byte sniffing would be the next step for a
+      // stronger threat model.
       const contentType = (file.type || "application/octet-stream").toLowerCase();
       if (!ALLOWED_RECORDING_TYPES.includes(contentType))
         throw new HttpError(
@@ -114,3 +124,5 @@ export const POST = route(
     });
   },
 );
+
+export const OPTIONS = preflight;

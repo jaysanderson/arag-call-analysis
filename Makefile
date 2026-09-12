@@ -4,7 +4,7 @@ NODE ?= node
 PORT ?= 3000
 IMAGE ?= call-analysis:local
 
-.PHONY: help install dev build start test coverage e2e lint format typecheck check docs showcase smoke docker fly-validate provision ingest gen-media reset clean
+.PHONY: help install dev build start test coverage e2e lint format typecheck audit check docs showcase smoke docker fly-validate provision ingest gen-media reset clean
 
 help:
 	@echo "make install      bun install (exact pins, committed bun.lock)"
@@ -17,7 +17,8 @@ help:
 	@echo "make lint         biome check"
 	@echo "make format       biome format --write"
 	@echo "make typecheck    tsc --noEmit"
-	@echo "make check        lint + typecheck + coverage"
+	@echo "make audit        dependency audit; fails on un-waived high/critical advisories"
+	@echo "make check        lint + typecheck + audit + coverage"
 	@echo "make docs         regenerate docs/developer/api-reference.md from the OpenAPI document"
 	@echo "make showcase     record the showcase walkthrough into showcase/out"
 	@echo "make smoke        OPT-IN read-only live check against the real Knowledge Box"
@@ -63,7 +64,10 @@ format:
 typecheck:
 	$(BUN)x tsc --noEmit -p tsconfig.json
 
-check: lint typecheck coverage
+audit:
+	$(NODE) scripts/audit.ts --level high
+
+check: lint typecheck audit coverage
 
 docs:
 	$(NODE) scripts/gen-api-reference.ts

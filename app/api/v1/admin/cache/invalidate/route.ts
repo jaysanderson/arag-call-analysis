@@ -1,4 +1,4 @@
-import { route } from "@/lib/api";
+import { preflight, route } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,3 +12,5 @@ export const POST = route(
     return { invalidated };
   },
 );
+
+export const OPTIONS = preflight;

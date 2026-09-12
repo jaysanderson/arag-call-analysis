@@ -196,11 +196,13 @@ while (true) {
 ## Upload a call and poll its job
 
 `POST /api/v1/calls` is `multipart/form-data`. Provide either a `recording` file (audio/video —
-ARAG transcribes it) or a `transcript` text field, plus metadata. It requires `X-API-Key` only
-when `API_KEYS` is configured.
+ARAG transcribes it) or a `transcript` text field, plus metadata. Uploading always needs the admin
+token or an API key (`Authorization: Bearer $ADMIN_TOKEN` or `X-API-Key: $KEY`) unless the
+deployment has neither configured — see [the security model](../architecture/security-model.md).
 
 ```bash
 curl -s -X POST "$BASE/api/v1/calls" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
   -F title="Prior-auth follow-up" \
   -F agent_name="Dana Kim" \
   -F queue="Prior Authorization" \

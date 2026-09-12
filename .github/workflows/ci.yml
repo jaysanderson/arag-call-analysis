@@ -20,7 +20,8 @@ jobs:
         run: ARAG_MOCK=1 bunx next build
       - name: Unit + integration + contract tests with coverage gate
         run: bunx vitest run --coverage
-      - run: bun audit || true
+      - name: Dependency audit (fails on un-waived high/critical advisories)
+        run: node scripts/audit.ts --level high
 
   e2e:
     runs-on: ubuntu-latest

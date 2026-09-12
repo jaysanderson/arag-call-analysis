@@ -47,14 +47,19 @@ Three independent mechanisms, layered (`lib/api.ts`'s `authenticate`):
    constant-time equality check (`constantTimeEqual`) to avoid timing side-channels. With no
    `ADMIN_TOKEN` configured, every admin route returns `403` outright rather than silently
    allowing access — admin is opt-in, not fail-open.
-2. **`API_KEYS`** (comma-separated) — when set, routes marked `auth: "api"`
-   (`POST /api/v1/calls`, `DELETE /api/v1/calls/{id}`) require `X-API-Key` or
-   `Authorization: Bearer` matching one of the configured keys. When unset, the API is open by
+2. **`API_KEYS`** (comma-separated) — when set, routes marked `auth: "api"` require `X-API-Key` or
+   `Authorization: Bearer` matching one of the configured keys. When unset, reads are open by
    design — this is a demo product with a synthetic dataset, not a multi-tenant SaaS.
 3. **Session cookie (`arag_session`)** — `POST /api/v1/session` issues an HMAC-signed,
    short-lived (12 h) cookie so the demo UI can call `auth: "api"` routes without ever holding a
    real key in browser JavaScript. Signed by the platform `App`'s `issueSession`, verified with
    `timingSafeEqual`.
+4. **`auth: "write"`** — `POST /api/v1/calls` and `DELETE /api/v1/calls/{id}` change the Knowledge
+   Box, so they accept only the admin token or an API key. The session cookie is issued to anyone
+   who asks, so it is deliberately *not* accepted here. The single exception is a deployment with
+   neither `ADMIN_TOKEN` nor `API_KEYS` set, which can only be a local mock run — and even that is
+   refused when `NODE_ENV=production`, with a 403 naming the variables to set
+   (DECISIONS D-CA-13).
 
 There is **no per-user identity or per-call authorization** anywhere in this model — see "Known
 MVP limitations" below.

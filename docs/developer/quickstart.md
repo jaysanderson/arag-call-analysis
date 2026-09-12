@@ -83,8 +83,17 @@ curl -s http://localhost:3000/api/v1/calls?page_size=5 | jq '.items[] | {id, tit
 ```
 
 Public GET routes need no credentials. Writes (`POST /api/v1/calls`, `DELETE /api/v1/calls/{id}`)
-only require `X-API-Key` when `API_KEYS` is configured; the demo UI itself never needs a key
-because it exchanges a session cookie via `POST /api/v1/session`. See
+always need the admin token or an API key — the demo session cookie is deliberately not enough —
+unless the deployment has neither `ADMIN_TOKEN` nor `API_KEYS` configured, which can only be a
+local mock run:
+
+```bash
+curl -s -X POST "$BASE/api/v1/calls" -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -F title="Uploaded from curl" -F transcript="Agent: Hello. Member: Hello."
+```
+
+The demo UI itself never needs a key: it exchanges a session cookie via `POST /api/v1/session`,
+which is enough for reads. See
 [Examples](examples.md) for a full walkthrough of every endpoint.
 
 ## Interactive API docs

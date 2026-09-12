@@ -1,4 +1,4 @@
-import { route } from "@/lib/api";
+import { preflight, route } from "@/lib/api";
 import { MEDIA_FIELD_ALLOWLIST, mediaStream } from "@/services/calls";
 import { badRequest } from "@/vendor/arag-platform/src/index.ts";
 
@@ -16,7 +16,9 @@ const PASS_THROUGH = [
 ];
 
 export const GET = route(
-  { path: "/api/v1/calls/{id}/media", method: "get", noRateLimit: true },
+  // A scrubbing player issues a burst of Range requests, so the media route gets its own bucket at
+  // 20x the configured rate rather than being exempt from the limiter altogether.
+  { path: "/api/v1/calls/{id}/media", method: "get", rateLimitMultiplier: 20 },
   async (ctx) => {
     const field = (ctx.query.field as string | undefined) ?? "media";
     // Defence in depth: the OpenAPI enum already rejects anything else, but the service layer
@@ -41,3 +43,5 @@ export const GET = route(
     return new Response(upstream.body, { status: upstream.status, headers });
   },
 );
+
+export const OPTIONS = preflight;

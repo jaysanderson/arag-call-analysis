@@ -42,6 +42,7 @@ function discoverRoutes(): Array<{ path: string; method: string; file: string }>
       }
       if (entry !== "route.ts") continue;
       const src = readFileSync(full, "utf8");
+      // OPTIONS is the shared CORS preflight handler, not an API operation, so it is not in the spec.
       for (const method of ["GET", "POST", "DELETE", "PUT", "PATCH"]) {
         if (new RegExp(`export (const|async function|function) ${method}\\b`).test(src)) {
           out.push({
@@ -127,6 +128,14 @@ describe("spec ↔ implementation", () => {
     }
   });
 
+  it("marks writes as write-authenticated and admin routes as admin-authenticated", () => {
+    const writes = API_ROUTES.filter((r) => r.path === "/api/v1/calls" && r.method === "post").concat(
+      API_ROUTES.filter((r) => r.method === "delete"),
+    );
+    expect(writes.length).toBeGreaterThan(0);
+    for (const r of writes) expect(r.auth, `${r.method} ${r.path}`).toBe("write");
+  });
+
   it("marks the admin routes as admin-authenticated", () => {
     for (const r of API_ROUTES) {
       if (r.path.startsWith("/api/v1/admin/") && r.path !== "/api/v1/admin/login") {
@@ -182,10 +191,13 @@ describe("response validation (checkResponse)", () => {
     const form = new FormData();
     form.set("title", "Contract test call");
     form.set("transcript", "Agent: Hello there. Member: I have a question about my deductible.");
-    const res = await api.request<{ call: { id: string } }>("POST", "/api/v1/calls", { body: form });
+    const res = await api.request<{ call: { id: string } }>("POST", "/api/v1/calls", {
+      body: form,
+      admin: true,
+    });
     expect(res.status).toBe(202);
     expect(checkResponse(openapi, "/api/v1/calls", "post", 202, res.json)).toEqual([]);
-    await api.del(`/api/v1/calls/${res.json.call.id}`);
+    await api.del(`/api/v1/calls/${res.json.call.id}`, { admin: true });
   });
 
   it("admin routes", async () => {

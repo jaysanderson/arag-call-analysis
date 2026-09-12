@@ -1,4 +1,4 @@
-import { route } from "@/lib/api";
+import { preflight, route } from "@/lib/api";
 import { jobView } from "@/services/jobs";
 import type { JobStatus } from "@/vendor/arag-platform/src/index.ts";
 
@@ -12,5 +12,7 @@ export const GET = route({ path: "/api/v1/jobs", method: "get" }, (ctx) => ({
       status: ctx.query.status as JobStatus | undefined,
       limit: (ctx.query.limit as number | undefined) ?? 50,
     })
-    .map(jobView),
+    .map((j) => jobView(j, { admin: ctx.auth.admin })),
 }));
+
+export const OPTIONS = preflight;

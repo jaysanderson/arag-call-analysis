@@ -47,3 +47,13 @@ caching service layer and a full test suite, all on the shared ARAG platform.
 - Admin authentication, optional API keys, per-IP rate limiting, OpenAPI request validation, an
   allowlist on the media `field` parameter, bounded question length and upload size, RFC 9457
   errors that never leak upstream URLs or tokens, and security headers on every API response.
+- Uploads and deletions require the admin token or an API key in every configured deployment and
+  are refused outright in production when neither is set (`auth: "write"`, DECISIONS D-CA-13).
+- The markdown renderer allowlists link schemes, so model-generated text cannot produce a
+  `javascript:` or `data:` link.
+- CORS is implemented against `ALLOWED_ORIGINS` (previously read but never used) with preflight on
+  every `/api/v1` route; HSTS in production; a Content-Security-Policy on HTML pages.
+- Multipart uploads are validated against the OpenAPI schema rather than only by hand, and a
+  malformed multipart body returns 400 instead of 500.
+- The media route has its own generous rate-limit bucket rather than being exempt from the limiter.
+- `make audit` / CI fail on un-waived high or critical advisories (`.audit-allowlist.json`).

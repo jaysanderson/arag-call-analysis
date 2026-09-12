@@ -56,12 +56,19 @@ export interface ConfigView {
   limits: { maxQuestionChars: number; maxBodyBytes: number; rateLimitRps: number; rateLimitBurst: number };
 }
 
-/** Redacted configuration for the admin panel (secrets are masked by `describeEnv`). */
+/**
+ * Redacted configuration for the admin panel. `describeEnv` masks secrets; the Knowledge Box id is
+ * additionally truncated here so the same invariant holds as in `health()` — the full id never
+ * reaches a browser from any surface.
+ */
 export function config(rt: Runtime): ConfigView {
+  const env = describeEnv(rt.env) as Record<string, unknown> & { arag?: Record<string, unknown> };
+  if (env.arag && typeof env.arag.kbId === "string" && env.arag.kbId)
+    env.arag = { ...env.arag, kbId: `${env.arag.kbId.slice(0, 8)}…` };
   return {
     version: APP_VERSION,
     platformVersion: PLATFORM_VERSION,
-    env: describeEnv(rt.env),
+    env,
     taxonomy: {
       labelsets: ALL_LABELSETS.length,
       resourceLabelsets: ALL_LABELSETS.filter((l) => l.kind === "RESOURCES").map((l) => l.id),
