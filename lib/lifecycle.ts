@@ -11,7 +11,7 @@
  * pure function so the table, the detail header and the ingest history all agree.
  */
 
-import type { CallSummary } from "@/lib/types";
+import type { CallSummary } from "./types.ts";
 
 export const CALL_LIFECYCLES = [
   "queued",

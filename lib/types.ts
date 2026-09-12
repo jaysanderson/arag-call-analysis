@@ -1,4 +1,4 @@
-import type { CallLifecycle } from "@/lib/lifecycle";
+import type { CallLifecycle } from "./lifecycle.ts";
 
 export type ResourceLabel = { labelset: string; label: string };
 

@@ -5,8 +5,11 @@
  * can be missing, wrapped in a code fence, or contain a refusal sentence where an enum value was
  * asked for — none of which may ever reach a chart or a badge.
  */
-import { deriveLifecycle } from "@/lib/lifecycle";
 import type { ParagraphMeta, Resource } from "@/vendor/arag-platform/src/arag/types.ts";
+// Relative, with the extension: `scripts/*.ts` import this module and run under plain `node`,
+// which has no bundler and no tsconfig path mapping. A `@/` VALUE import here breaks `make smoke`
+// while every bundled check stays green — see test/unit/script-imports.test.ts.
+import { deriveLifecycle } from "./lifecycle.ts";
 import type {
   CallAnalysis,
   CallDetail,
