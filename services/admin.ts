@@ -60,11 +60,14 @@ export interface ConfigView {
  * Redacted configuration for the admin panel. `describeEnv` masks secrets; the Knowledge Box id is
  * additionally truncated here so the same invariant holds as in `health()` — the full id never
  * reaches a browser from any surface.
+ *
+ * The id shown is the one the client is actually using, not the raw environment variable: in mock
+ * mode the variable is empty while the effective Knowledge Box is the in-process mock, and an
+ * operator needs to see which one is really in play.
  */
 export function config(rt: Runtime): ConfigView {
   const env = describeEnv(rt.env) as Record<string, unknown> & { arag?: Record<string, unknown> };
-  if (env.arag && typeof env.arag.kbId === "string" && env.arag.kbId)
-    env.arag = { ...env.arag, kbId: `${env.arag.kbId.slice(0, 8)}…` };
+  if (env.arag) env.arag = { ...env.arag, kbId: rt.arag.kbId ? `${rt.arag.kbId.slice(0, 8)}…` : "" };
   return {
     version: APP_VERSION,
     platformVersion: PLATFORM_VERSION,

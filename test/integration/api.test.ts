@@ -363,15 +363,18 @@ describe("admin", () => {
   });
 
   it("redacts secrets in the config view", async () => {
-    const res = await api.get<{ env: { adminToken: string; arag: { apiKey: string; kbId: string } } }>(
-      "/api/v1/admin/config",
-      { admin: true },
-    );
+    const res = await api.get<{
+      env: { adminToken: string; arag: { apiKey: string; kbId: string; mock: boolean } };
+    }>("/api/v1/admin/config", { admin: true });
     expect(res.status).toBe(200);
     expect(res.text).not.toContain("test-admin-token");
     expect(res.json.env.arag.apiKey).not.toBe("mock-api-key");
     // The full Knowledge Box id never reaches a browser from any surface (QA finding 10).
     expect(res.json.env.arag.kbId).toMatch(/…$/);
+    // Hermetic test environment: this must be the in-process mock KB, never a developer's live one
+    // leaked in through Next's own .env loading (DECISIONS D-CA-16).
+    expect(res.json.env.arag.kbId.startsWith("00000000")).toBe(true);
+    expect(res.json.env.arag.mock).toBe(true);
   });
 
   it("reports usage counters and recent logs", async () => {

@@ -24,8 +24,12 @@ export default defineConfig({
     command:
       // Rate limits are raised for the test run only: Next route handlers cannot see the socket
       // address, so with no proxy header every local request shares one bucket.
-      // ENV_FILE=/dev/null: a developer .env (which holds live credentials) must never leak in.
-      `ENV_FILE=/dev/null ARAG_MOCK=1 ADMIN_TOKEN=e2e-admin-token DATA_DIR=./data/e2e NODE_ENV=production ` +
+      // Hermetic environment. `ENV_FILE=/dev/null` stops the platform's own .env loader, but
+      // Next.js loads .env/.env.local itself before any product code runs and only skips keys that
+      // are already defined — so the ARAG variables are explicitly blanked here. Without this a
+      // developer's live Knowledge Box credentials would sit in the test server's environment.
+      `ENV_FILE=/dev/null ARAG_KB_ID= ARAG_API_KEY= ARAG_BASE_URL= ARAG_BASE= ` +
+      `ARAG_MOCK=1 ADMIN_TOKEN=e2e-admin-token DATA_DIR=./data/e2e NODE_ENV=production ` +
       `RATE_LIMIT_RPS=200 RATE_LIMIT_BURST=1000 CALLS_MOCK_STREAM_DELAY_MS=${showcase ? 45 : 0} ` +
       `PORT=${port} node node_modules/next/dist/bin/next start -p ${port}`,
     url: `http://127.0.0.1:${port}/healthz`,

@@ -6,9 +6,9 @@
  * exists and builds on demand otherwise, so `bunx vitest` works from a clean checkout too.
  */
 import { spawn } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..", "..");
 export const ADMIN_TOKEN = "test-admin-token";
@@ -47,10 +47,40 @@ function run(cmd: string, args: string[], env: Record<string, string>): Promise<
 
 const NEXT_BIN = resolve(ROOT, "node_modules/next/dist/bin/next");
 
-/** Build once per test process (cheap when `.next` is warm). */
+/** Newest mtime under a directory tree, ignoring build and dependency output. */
+function newestMtime(dir: string): number {
+  let newest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+    const full = join(dir, entry.name);
+    newest = Math.max(newest, entry.isDirectory() ? newestMtime(full) : statSync(full).mtimeMs);
+  }
+  return newest;
+}
+
+/**
+ * Build once per test process, and rebuild when a source file is newer than the last build.
+ * Without the staleness check, a change to a service or route would be tested against a stale
+ * `.next`, and the suite would pass while the source was broken (or fail while it was fixed).
+ */
 export async function ensureBuild(): Promise<void> {
-  if (existsSync(resolve(ROOT, ".next/BUILD_ID"))) return;
-  await run(process.execPath, [NEXT_BIN, "build"], { ARAG_MOCK: "1", ENV_FILE: "/dev/null" });
+  const buildId = resolve(ROOT, ".next/BUILD_ID");
+  if (existsSync(buildId)) {
+    const built = statSync(buildId).mtimeMs;
+    const newest = Math.max(
+      ...["app", "lib", "services", "components", "public"].map((d) =>
+        existsSync(resolve(ROOT, d)) ? newestMtime(resolve(ROOT, d)) : 0,
+      ),
+      statSync(resolve(ROOT, "next.config.mjs")).mtimeMs,
+    );
+    if (newest <= built) return;
+  }
+  await run(process.execPath, [NEXT_BIN, "build"], {
+    ARAG_MOCK: "1",
+    ENV_FILE: "/dev/null",
+    ARAG_KB_ID: "",
+    ARAG_API_KEY: "",
+  });
 }
 
 export async function startAppServer(extraEnv: Record<string, string> = {}): Promise<TestServer> {
@@ -62,8 +92,15 @@ export async function startAppServer(extraEnv: Record<string, string> = {}): Pro
     cwd: ROOT,
     env: {
       ...process.env,
-      // A developer .env holds live credentials; a test server must never pick it up.
+      // Hermetic environment. `ENV_FILE=/dev/null` stops the platform's .env loader; Next.js
+      // loads .env/.env.local itself and only skips keys that are already defined, so the ARAG
+      // variables are explicitly blanked. A developer's live credentials must never reach a
+      // mock-backed test server.
       ENV_FILE: "/dev/null",
+      ARAG_KB_ID: "",
+      ARAG_API_KEY: "",
+      ARAG_BASE_URL: "",
+      ARAG_BASE: "",
       NODE_ENV: "production",
       ARAG_MOCK: "1",
       ADMIN_TOKEN,

@@ -41,15 +41,18 @@ dev:
 	fi
 
 build:
-	$(BUN)x next build
+	ENV_FILE=/dev/null ARAG_MOCK=1 $(BUN)x next build
 
 start:
 	NODE_ENV=production $(BUN)x next start -p $(PORT)
 
-test:
+# The integration and contract suites drive a real `next start`, so the build must be current
+# before they run. The harness also rebuilds on demand, but doing it here keeps the run
+# deterministic when vitest executes files in parallel.
+test: build
 	$(BUN)x vitest run
 
-coverage:
+coverage: build
 	$(BUN)x vitest run --coverage
 
 e2e: build

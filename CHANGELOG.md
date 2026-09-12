@@ -14,8 +14,13 @@ All notable changes to this project are documented here. The format follows
 - Per-route rate limits: the media route gets 20x the configured bucket, the ask route 0.25x, each
   in its own bucket (DECISIONS D-CA-15).
 - Deliberate 5xx responses log at `warn` without a stack; only unexpected throws log at `error`.
-- Tests and Playwright run with `ENV_FILE=/dev/null` on a product-specific port, so a developer
-  `.env` can never leak into a mock-backed run (DECISIONS D-CA-16).
+- Tests, Playwright and the build run with `ENV_FILE=/dev/null` and blanked ARAG variables on a
+  product-specific port, so a developer `.env` can never leak into a mock-backed run — Next.js
+  loads `.env` itself, so the platform's `ENV_FILE` alone is not sufficient (DECISIONS D-CA-16).
+- `make test`/`make coverage` build first, and the integration harness rebuilds when sources are
+  newer than the last build (DECISIONS D-CA-17).
+- The admin config view reports the Knowledge Box the client is actually using rather than the raw
+  environment variable, which is empty in mock mode.
 
 ## [0.1.0] — 2026-09-12
 
