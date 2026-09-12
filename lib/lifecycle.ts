@@ -48,18 +48,25 @@ export const LIFECYCLE_COPY: Record<CallLifecycle, { label: string; hint: string
   },
 };
 
+/** The shape `deriveLifecycle` reads. A `CallDetail` satisfies it; so does a `CallSummary`. */
+export type LifecycleInput = Pick<CallSummary, "status" | "labels" | "metrics"> & {
+  analysis?: { executive_summary?: string } | null;
+};
+
 /**
  * Derive the lifecycle state of a call.
  *
- * `jobStatus` is the status of the call's own ingest job when one is known (the upload screen and
- * the ingest history have it; a plain list read does not). It only ever moves a call *earlier* in
- * the pipeline or to `failed`, never later, so a stale job record cannot make an analysed call
- * look unfinished.
+ * `jobStatus` is the status of the call's own ingest job when the caller knows it — the list
+ * service looks it up, and the upload and ingest-history screens have it in hand. It only ever
+ * moves a call *earlier* in the pipeline or to `failed`, never later, so a stale job record can
+ * never make an analysed call look unfinished.
+ *
+ * The order of the checks is the order of the pipeline, and `analysed` is deliberately the
+ * narrowest state: it requires labels, the flat metrics AND the written narrative, because that
+ * is exactly what the word promises a reviewer. A call whose metrics agent has finished while the
+ * ask agent has not is `partial` — usable, and visibly incomplete, with Re-run analysis offered.
  */
-export function deriveLifecycle(
-  call: Pick<CallSummary, "status" | "labels" | "metrics"> & { analysis?: unknown },
-  jobStatus?: string,
-): CallLifecycle {
+export function deriveLifecycle(call: LifecycleInput, jobStatus?: string): CallLifecycle {
   if (jobStatus === "failed") return "failed";
   const status = (call.status ?? "").toUpperCase();
   if (status === "ERROR") return "failed";
@@ -68,9 +75,14 @@ export function deriveLifecycle(
 
   const hasLabels = call.labels.length > 0;
   const hasMetrics = Boolean(call.metrics?.call_reason);
+  const hasNarrative = Boolean(call.analysis?.executive_summary);
   if (!hasLabels && !hasMetrics) return "labelling";
-  // Labelled but the ask agent has not written the narrative yet: usable, visibly incomplete.
-  if (!hasMetrics) return "partial";
+
+  // A summary read (`parseSummary`) never carries the narrative, so requiring it there would
+  // report every call as partial. The narrative is only a *demotion* signal when the caller
+  // actually looked for it — which `parseDetail` does, and only it does.
+  const narrativeKnown = call.analysis !== undefined;
+  if (!hasMetrics || (narrativeKnown && !hasNarrative)) return "partial";
   return "analysed";
 }
 

@@ -241,7 +241,10 @@ export function parseDetail(res: Resource): CallDetail {
   const analysis = readJsonField<CallAnalysis>(res, "call_analysis");
   return {
     ...summary,
-    lifecycle: deriveLifecycle({ ...summary, analysis }),
+    // `analysis ?? null` matters: `undefined` means "this read did not look for a narrative"
+    // (a summary read), `null` means "looked, and there is none" — which is what demotes a call
+    // from `analysed` to `partial`.
+    lifecycle: deriveLifecycle({ ...summary, analysis: analysis ?? null }),
     fieldId: content?.id ?? "media",
     fieldType: content?.group ?? "files",
     transcriptText,

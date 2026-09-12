@@ -19,7 +19,16 @@ import { MOMENT_COLOR, MomentsTrack } from "./MomentsTrack";
  * the same recording. A citation on an answer, a segment on the moments track and a transcript
  * block are three views of one position in time, and clicking any of them moves the other two.
  */
-export function CallWorkspace({ call, readOnly }: { call: CallDetail; readOnly?: boolean }) {
+export function CallWorkspace({
+  call,
+  readOnly,
+  canWrite = true,
+}: {
+  call: CallDetail;
+  readOnly?: boolean;
+  /** False when this deployment refuses writes: the destructive actions are not offered at all. */
+  canWrite?: boolean;
+}) {
   const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [focusIdx, setFocusIdx] = useState<number | null>(null);
@@ -127,7 +136,7 @@ export function CallWorkspace({ call, readOnly }: { call: CallDetail; readOnly?:
             >
               Ask
             </button>
-            <CallActions callId={call.id} title={call.title} />
+            <CallActions callId={call.id} title={call.title} canWrite={canWrite} />
           </div>
         )}
       </header>

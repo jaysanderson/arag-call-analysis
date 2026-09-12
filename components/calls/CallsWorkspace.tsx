@@ -64,7 +64,7 @@ const PRIMARY_FACETS = ["call_reason", "call_outcome", "sentiment", "line_of_bus
 
 const DEBOUNCE_MS = 250;
 
-export function CallsWorkspace() {
+export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const { toast, show } = useToast();
@@ -158,22 +158,43 @@ export function CallsWorkspace() {
     return s.toString();
   }, [q, labels, agent, queue, mediaType, lifecycle, sortKey, order, page, pageSize]);
 
+  /**
+   * One in-flight list request at a time.
+   *
+   * Facet cost varies with selectivity and several controls write the URL immediately, so an
+   * earlier request can easily resolve after a later one. Without the abort, that older response
+   * would overwrite the fresher table with no error anywhere — the worst kind of wrong, because it
+   * looks like a working screen.
+   */
+  const inFlight = useRef<AbortController | null>(null);
+
   const load = useCallback(() => {
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
     setLoading(true);
     setError(null);
-    fetch(`/api/v1/calls?${query}`)
+    fetch(`/api/v1/calls?${query}`, { signal: controller.signal })
       .then(async (r) => {
         const body = await r.json();
         if (!r.ok) throw new Error(body?.detail ?? body?.title ?? `Request failed (${r.status})`);
         return body as CallPage;
       })
-      .then(setData)
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false));
+      .then((page) => {
+        if (!controller.signal.aborted) setData(page);
+      })
+      .catch((e: Error) => {
+        // An abort is this component superseding itself, not a failure to report.
+        if (e.name !== "AbortError") setError(e.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
   }, [query]);
 
   useEffect(() => {
     load();
+    return () => inFlight.current?.abort();
   }, [load]);
 
   // A row that is no longer in the result set must not stay silently selected.
@@ -259,6 +280,9 @@ export function CallsWorkspace() {
       : []),
     ...(q ? [{ label: `Search: ${q}`, clear: () => setSearch("") }] : []),
   ];
+
+  // A fruitless search deserves different advice from a fruitless filter stack.
+  const searchOnly = Boolean(q) && activeFilters.length === 1;
 
   const facetSets = labelsets
     .filter((ls) => ls.labels.length > 0 && PRIMARY_FACETS.includes(ls.id))
@@ -359,16 +383,24 @@ export function CallsWorkspace() {
           <TableSkeleton rows={8} cols={8} />
         ) : data && data.items.length === 0 ? (
           <EmptyState
-            title={activeFilters.length > 0 ? "No calls match these filters" : "No calls yet"}
+            title={
+              searchOnly
+                ? `No call mentions \u201c${q}\u201d`
+                : activeFilters.length > 0
+                  ? "No calls match these filters"
+                  : "No calls yet"
+            }
             body={
-              activeFilters.length > 0
-                ? "Remove a filter to widen the search, or clear them all to see the whole queue."
-                : "Upload a recording or a transcript, or load the sample dataset to see the product working."
+              searchOnly
+                ? "Search covers every transcript, not just titles. Try fewer words, or a phrase someone would actually have said."
+                : activeFilters.length > 0
+                  ? "Remove a filter to widen the search, or clear them all to see the whole queue."
+                  : "Upload a recording or a transcript, or load the sample dataset to see the product working."
             }
             actions={
               activeFilters.length > 0 ? (
                 <button type="button" className="arag-btn secondary sm" onClick={clearAll}>
-                  Clear all filters
+                  {searchOnly ? "Clear search" : "Clear all filters"}
                 </button>
               ) : (
                 <>
@@ -413,6 +445,9 @@ export function CallsWorkspace() {
 
             <div className="scroll">
               <table>
+                <caption className="arag sr-only">
+                  {data.total} call{data.total === 1 ? "" : "s"}, sorted by {sortKey}, {order}ending
+                </caption>
                 <thead>
                   <tr>
                     <th scope="col" style={{ width: 40 }}>
@@ -473,6 +508,7 @@ export function CallsWorkspace() {
                     <CallRow
                       key={c.id}
                       call={c}
+                      canWrite={canWrite}
                       onChanged={load}
                       onCopied={show}
                       selected={selected.has(c.id)}
@@ -528,12 +564,14 @@ function CallRow({
   onSelect,
   onChanged,
   onCopied,
+  canWrite,
 }: {
   call: CallSummary;
   selected: boolean;
   onSelect: (on: boolean) => void;
   onChanged: () => void;
   onCopied: (message: string, tone?: "error") => void;
+  canWrite: boolean;
 }) {
   const date = call.createdISO ? new Date(call.createdISO) : null;
   const flags = call.labels.filter((l) => l.labelset === "disposition_flags").slice(0, 2);
@@ -617,22 +655,24 @@ function CallRow({
               <a href={`/api/v1/calls/${call.id}/export?format=json`} download onClick={close}>
                 <IconExport size={15} /> Export this call
               </a>
-              <button
-                type="button"
-                onClick={async () => {
-                  close();
-                  try {
-                    const res = await fetch(`/api/v1/calls/${call.id}/reanalyze`, { method: "POST" });
-                    if (!res.ok) throw new Error((await res.json())?.detail ?? "Request failed");
-                    onCopied("Re-analysis queued");
-                    onChanged();
-                  } catch (e) {
-                    onCopied((e as Error).message, "error");
-                  }
-                }}
-              >
-                <IconRefresh size={15} /> Re-run analysis
-              </button>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    close();
+                    try {
+                      const res = await fetch(`/api/v1/calls/${call.id}/reanalyze`, { method: "POST" });
+                      if (!res.ok) throw new Error((await res.json())?.detail ?? "Request failed");
+                      onCopied("Re-analysis queued");
+                      onChanged();
+                    } catch (e) {
+                      onCopied((e as Error).message, "error");
+                    }
+                  }}
+                >
+                  <IconRefresh size={15} /> Re-run analysis
+                </button>
+              )}
               <div className="sep" />
               <button
                 type="button"

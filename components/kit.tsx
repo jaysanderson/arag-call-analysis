@@ -380,6 +380,12 @@ export function Pagination({
  * overlay dismisses the same way.
  */
 function useModalFocus(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
+  // Every call site passes a fresh inline arrow, so listing `onClose` as a dependency would
+  // re-run this effect on any unrelated parent re-render — yanking focus back to the first
+  // control and discarding wherever the keyboard user had tabbed to.
+  const close = useRef(onClose);
+  close.current = onClose;
+
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const node = ref.current;
@@ -396,7 +402,7 @@ function useModalFocus(ref: React.RefObject<HTMLElement | null>, onClose: () => 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        close.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -418,7 +424,7 @@ function useModalFocus(ref: React.RefObject<HTMLElement | null>, onClose: () => 
       // The trigger may have been unmounted by the action the overlay performed; guard for it.
       if (previous?.isConnected) previous.focus();
     };
-  }, [ref, onClose]);
+  }, [ref]);
 }
 
 export function Drawer({

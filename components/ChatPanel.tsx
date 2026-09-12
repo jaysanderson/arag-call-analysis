@@ -154,7 +154,7 @@ export function ChatPanel({
     }
   }
 
-  const suggestions = ["Summarize this call", "Was the member satisfied?", "What did the agent offer?"];
+  const suggestions = ["Summarise this call", "Was the member satisfied?", "What did the agent offer?"];
 
   const Frame = bare
     ? ({ children, className }: { children: React.ReactNode; className?: string }) => (

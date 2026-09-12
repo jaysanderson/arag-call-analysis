@@ -26,6 +26,41 @@ test.describe("the workspace", () => {
     );
   });
 
+  /**
+   * The guided path is the product's demo (design §8), so it is tested like any other journey
+   * rather than only being recorded. The showcase environment's Knowledge Box is already seeded,
+   * so the honest state of step 3 is "done" and the call to action is "See the analysis".
+   */
+  test("first-run onboarding reports real state and leads into the product", async ({ page }) => {
+    await page.goto("/welcome");
+    await expect(page.getByRole("heading", { name: "Get started" })).toBeVisible();
+
+    for (const step of ["connect", "taxonomy", "calls", "analysis"]) {
+      await expect(page.getByTestId(`onboarding-step-${step}`)).toBeVisible();
+    }
+    // The steps are computed from the live system, not a stored checklist: with the mock seeded
+    // and provisioned, every one of them is genuinely done.
+    await expect(page.getByTestId("onboarding-step-calls")).toContainText(/\d+ calls? in the Knowledge Box/);
+    await expect(page.getByTestId("onboarding-step-analysis")).toContainText(/fully analysed/);
+
+    await expect(page.getByTestId("try-sample-calls")).toHaveCount(0);
+    await page.getByTestId("see-the-analysis").click();
+    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  });
+
+  test("the onboarding endpoint drives the screen, not the other way round", async ({ request }) => {
+    const res = await request.get("/api/v1/onboarding");
+    expect(res.status()).toBe(200);
+    const state = (await res.json()) as {
+      steps: Array<{ key: string; state: string }>;
+      mode: string;
+      sample: { available: boolean; count: number };
+    };
+    expect(state.steps.map((s) => s.key)).toEqual(["connect", "taxonomy", "calls", "analysis"]);
+    expect(state.mode).toBe("mock");
+    expect(state.sample.available).toBe(true);
+  });
+
   test("the dashboard aggregates live metrics and drills through to the calls table", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
@@ -151,7 +186,7 @@ test.describe("the workspace", () => {
     await inspector.getByRole("tab", { name: "Ask" }).click();
     await expect(page.getByRole("heading", { name: "Ask this call" })).toBeVisible();
 
-    await page.getByRole("button", { name: "Summarize this call" }).click();
+    await page.getByRole("button", { name: "Summarise this call" }).click();
     await expect(page.getByText("Thinking…")).toBeHidden({ timeout: 45_000 });
 
     // A grounded answer carries a qualitative confidence badge and source chips.
@@ -258,8 +293,20 @@ test.describe("the workspace", () => {
     await expect(page.getByRole("heading", { name: "Call not found" })).toBeVisible();
   });
 
-  test("a filter that matches nothing teaches the way out", async ({ page }) => {
+  test("a search that matches nothing explains what search covers", async ({ page }) => {
     await page.goto("/calls?q=zzzzznotarealtranscriptphrase");
+    const empty = page.getByTestId("empty-state");
+    await expect(empty).toBeVisible({ timeout: 20_000 });
+    // A fruitless search gets search advice, not generic filter advice.
+    await expect(empty).toContainText("No call mentions");
+    await expect(empty).toContainText("Search covers every transcript");
+    await expect(empty.getByRole("button", { name: "Clear search" })).toBeVisible();
+  });
+
+  test("a filter stack that matches nothing teaches the way out", async ({ page }) => {
+    await page.goto(
+      "/calls?label=sentiment%2FNegative&label=sentiment%2FPositive&label=call_outcome%2FResolved",
+    );
     const empty = page.getByTestId("empty-state");
     await expect(empty).toBeVisible({ timeout: 20_000 });
     await expect(empty).toContainText("No calls match these filters");

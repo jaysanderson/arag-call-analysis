@@ -5,6 +5,7 @@ import { ErrorState } from "@/components/kit";
 import { PageHeader } from "@/components/shell/AppShell";
 import { getRuntime } from "@/lib/runtime";
 import { tryGetCall } from "@/services/calls";
+import { settings } from "@/services/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,10 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function CallPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const call = await tryGetCall(await getRuntime(), id);
+  const rt = await getRuntime();
+  const call = await tryGetCall(rt, id);
   if (!call) notFound();
+  const { features } = settings(rt);
 
   // A call that has arrived but has not been transcribed yet has no transcript to show. Say so,
   // rather than rendering an empty workspace that looks broken.
@@ -47,5 +50,5 @@ export default async function CallPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  return <CallWorkspace call={call} />;
+  return <CallWorkspace call={call} canWrite={features.deletes} />;
 }

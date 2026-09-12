@@ -84,12 +84,19 @@ export function Welcome() {
     }
   };
 
-  // Follow the seeding job to completion, then refresh the checklist from the live system.
+  /**
+   * Follow the seeding job to completion, then refresh the checklist from the live system.
+   * Keyed on the job id, not the job object: keying it on the object restarts the interval on
+   * every tick.
+   */
+  const jobId = job?.id;
+  const finished = job?.status === "succeeded" || job?.status === "failed";
+
   useEffect(() => {
-    if (!job || job.status === "succeeded" || job.status === "failed") return;
+    if (!jobId || finished) return;
     const t = setInterval(async () => {
       try {
-        const r = await fetch(`/api/v1/jobs/${job.id}`);
+        const r = await fetch(`/api/v1/jobs/${jobId}`);
         if (!r.ok) return;
         const j = (await r.json()) as JobView;
         setJob(j);
@@ -99,7 +106,7 @@ export function Welcome() {
       }
     }, 1500);
     return () => clearInterval(t);
-  }, [job, load]);
+  }, [jobId, finished, load]);
 
   if (error)
     return (

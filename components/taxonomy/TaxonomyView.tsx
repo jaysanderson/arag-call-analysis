@@ -159,11 +159,18 @@ export function TaxonomyScreen({ canProvision }: { canProvision: boolean }) {
               </>
             )}
           </div>
-          {canProvision && provisioning.state !== "running" && (
-            <button type="button" className="arag-btn sm" onClick={() => setConfirm(true)}>
-              Re-provision
-            </button>
-          )}
+          {provisioning.state !== "running" &&
+            (canProvision ? (
+              <button type="button" className="arag-btn sm" onClick={() => setConfirm(true)}>
+                Re-provision
+              </button>
+            ) : (
+              // Provisioning needs the operator token. Sending someone to the screen that can do
+              // it beats offering a button that answers 401.
+              <a href="/admin/taxonomy" className="arag-btn secondary sm">
+                Re-provision (operator)
+              </a>
+            ))}
         </div>
       )}
 

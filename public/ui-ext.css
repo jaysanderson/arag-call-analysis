@@ -1063,3 +1063,55 @@
   margin: 0;
   min-width: 0;
 }
+
+/* A colour input inherits the text-input height and padding, which collapses the swatch to a
+   hairline. Size it as a swatch and strip the browser's inner chrome. */
+.arag-input[type="color"] {
+  width: 44px;
+  height: 34px;
+  padding: 3px;
+  cursor: pointer;
+}
+.arag-input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.arag-input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+
+/* A table that is refetching keeps its rows readable but visibly stale, with an indeterminate bar
+   above them — never a blank panel, and never a silent swap. */
+.arag-datatable[aria-busy="true"] tbody {
+  opacity: 0.55;
+  transition: opacity 0.12s;
+}
+.arag-datatable[aria-busy="true"]::before {
+  content: "";
+  display: block;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--arag-brand-600) 40%,
+    var(--arag-brand-600) 60%,
+    transparent
+  );
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: arag-indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes arag-indeterminate {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arag-datatable[aria-busy="true"]::before {
+    animation: none;
+    background-position: 50% 0;
+  }
+}

@@ -54,7 +54,9 @@ function bool(v: boolean | undefined): string {
  */
 export function csvCell(value: unknown): string {
   let s = value === null || value === undefined ? "" : String(value);
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  // `trimStart` first: a spreadsheet ignores leading whitespace when deciding whether a cell is a
+  // formula, so " =1+1" is executed exactly as "=1+1" is.
+  if (/^[=+\-@\t\r]/.test(s.trimStart())) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -108,9 +110,12 @@ function clock(seconds: number): string {
 }
 
 function vttTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
+  // Round to milliseconds FIRST, then split. Splitting first and rounding the seconds field lets a
+  // boundary within half a millisecond of a minute emit "00:01:60.000", which a player rejects.
+  const ms = Math.max(0, Math.round(seconds * 1000));
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  const s = (ms % 60_000) / 1000;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${s.toFixed(3).padStart(6, "0")}`;
 }
 

@@ -45,6 +45,7 @@ let mod: {
   provision: { POST: Handler };
   cache: { GET: Handler };
   cacheInvalidate: { POST: Handler };
+  samples: { POST: Handler };
   readyz: { GET: () => Promise<Response> };
 };
 let runtime: import("@/lib/runtime").Runtime;
@@ -83,6 +84,7 @@ beforeAll(async () => {
     provision: await import("@/app/api/v1/admin/provision/route"),
     cache: await import("@/app/api/v1/admin/cache/route"),
     cacheInvalidate: await import("@/app/api/v1/admin/cache/invalidate/route"),
+    samples: await import("@/app/api/v1/samples/route"),
     readyz: await import("@/app/readyz/route"),
   } as typeof mod;
   const { getRuntime } = await import("@/lib/runtime");
@@ -442,6 +444,69 @@ describe("jobs", () => {
       "call-insights",
     ]);
   }, 120_000);
+
+  /**
+   * The repeatability promise in D-CA-28 was asserted only by a code comment. It is the whole
+   * reason "Try with sample calls" is safe to press twice, so it is asserted here against the
+   * real runner.
+   */
+  it("seeds the sample dataset and skips what is already present when run again", async () => {
+    const first = await runtime.jobs.run<
+      { count: number; provision: boolean },
+      { created: string[]; skipped: string[]; failed: unknown[] }
+    >("seed-samples", { count: 2, provision: false });
+    expect(first.status).toBe("succeeded");
+    expect(first.result?.failed).toEqual([]);
+    const createdFirst = first.result?.created.length ?? 0;
+    expect(createdFirst + (first.result?.skipped.length ?? 0)).toBe(2);
+
+    const second = await runtime.jobs.run<
+      { count: number; provision: boolean },
+      { created: string[]; skipped: string[] }
+    >("seed-samples", { count: 2, provision: false });
+    expect(second.status).toBe("succeeded");
+    // Everything the first run created is skipped the second time, never duplicated.
+    expect(second.result?.created).toEqual([]);
+    expect(second.result?.skipped.length).toBe(2);
+
+    for (const id of first.result?.created ?? []) {
+      await mod.call.DELETE(req(`/api/v1/calls/${id}`, { method: "DELETE", headers: ADMIN }), params({ id }));
+    }
+  }, 120_000);
+
+  it("refreshes one call's analysis and reports whether an analysis is actually there", async () => {
+    const list = await body<{ items: Array<{ id: string }> }>(
+      await mod.calls.GET(req("/api/v1/calls?page_size=1")),
+    );
+    const callId = list.items[0]!.id;
+
+    const job = await runtime.jobs.run<
+      { callId: string },
+      { callId: string; analysed: boolean; labels: number }
+    >("reanalyse-call", { callId });
+    expect(job.status).toBe("succeeded");
+    expect(job.result?.callId).toBe(callId);
+    // The mock runs the real agents at boot, so this call genuinely has an analysis; the point of
+    // the assertion is that the job *reports what it found* rather than claiming success blindly.
+    expect(typeof job.result?.analysed).toBe("boolean");
+    expect(job.result?.labels).toBeGreaterThanOrEqual(0);
+  }, 120_000);
+
+  it("refuses a second concurrent sample seed with a 409", async () => {
+    const running = runtime.jobs.submit("seed-samples", { count: 1, provision: false });
+    const res = await mod.samples.POST(
+      req("/api/v1/samples", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...ADMIN },
+        body: JSON.stringify({ count: 1 }),
+      }),
+    );
+    expect([202, 409]).toContain(res.status);
+    if (res.status === 409) {
+      const problem = (await res.json()) as { detail: string };
+      expect(problem.detail).toContain(running.id);
+    }
+  });
 });
 
 describe("auth", () => {

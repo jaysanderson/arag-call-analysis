@@ -227,6 +227,40 @@ export function BrandingPreview({ branding }: { branding: Branding }) {
   );
 }
 
+/**
+ * A colour control: the native picker as a swatch, with the hex beside it so the value can be
+ * read and pasted — a swatch alone tells a partner nothing they can put in an environment file.
+ */
+function Swatch({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="arag-field">
+      <label htmlFor={id}>{label}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          id={id}
+          className="arag-input"
+          type="color"
+          value={hexOf(value)}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <code className="mono" style={{ fontSize: 12.5 }}>
+          {value}
+        </code>
+      </div>
+    </div>
+  );
+}
+
 /** `<input type="color">` only accepts `#rrggbb`; anything else falls back to the kit's blue. */
 function hexOf(value: string): string {
   return /^#[0-9a-f]{6}$/i.test(value) ? value : "#2b2bb2";

@@ -146,7 +146,7 @@ test("showcase walkthrough", async ({ page }) => {
   await inspector.getByRole("tab", { name: "Ask" }).click();
   await expect(page.getByRole("heading", { name: "Ask this call" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Summarize this call" }).click();
+  await page.getByRole("button", { name: "Summarise this call" }).click();
   // The mock streams the answer in a few hundred ms; grab the transient "Thinking…" frame fast.
   await pause(150);
   await shot("10-asking");

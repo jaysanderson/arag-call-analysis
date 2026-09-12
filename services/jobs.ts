@@ -187,8 +187,16 @@ export function registerJobs(rt: Runtime): void {
       );
     }
 
-    // Slugs already present are skipped rather than duplicated, so the action is safely repeatable.
-    const existing = new Set((await allSummaries(rt).catch(() => [])).map((c) => c.slug));
+    // Slugs already present are skipped rather than duplicated, so the action is safely
+    // repeatable. If this read fails the job fails with it: swallowing the error into an empty
+    // set would turn a transient hiccup into a duplicate of the entire sample dataset.
+    const existing = new Set(
+      (
+        await ctx.stage("inventory", "Checking what is already here", () => allSummaries(rt), {
+          progress: 0.2,
+        })
+      )?.map((c) => c.slug) ?? [],
+    );
 
     let done = 0;
     for (const sc of wanted) {

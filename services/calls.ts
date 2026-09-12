@@ -119,9 +119,29 @@ export async function summaryOf(rt: Runtime, id: string): Promise<CallSummary | 
   }
 }
 
+/**
+ * The status of a call's own ingest job, when this process still has one.
+ *
+ * Jobs are in-memory and keyed by `ref` (the call id), so this is a map lookup rather than a
+ * round trip. Without it, `queued` and job-level `failed` are states the product can define but
+ * never show: ARAG reports a freshly created resource as PENDING, which is "transcribing", and
+ * says nothing at all about a call whose upload was accepted but not yet picked up.
+ */
+function jobStatusFor(rt: Runtime, callId: string): string | undefined {
+  const jobs = rt.jobs.list({ ref: callId, limit: 1 });
+  return jobs[0]?.status;
+}
+
 async function summariesFor(rt: Runtime, ids: string[]): Promise<CallSummary[]> {
   const rows = await Promise.all(ids.map((id) => summaryOf(rt, id)));
-  return rows.filter((c): c is CallSummary => c !== null);
+  return rows
+    .filter((c): c is CallSummary => c !== null)
+    .map((c) => {
+      // The job status is deliberately applied *after* the cache: a cached summary must not
+      // freeze a job state that has since moved on.
+      const jobStatus = jobStatusFor(rt, c.id);
+      return jobStatus ? { ...c, lifecycle: deriveLifecycle(c, jobStatus) } : c;
+    });
 }
 
 function parseLabelFilter(label: string): { labelset: string; label: string } | null {

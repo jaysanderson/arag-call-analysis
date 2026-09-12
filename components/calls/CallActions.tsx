@@ -24,7 +24,15 @@ interface ShareLink {
   note?: string;
 }
 
-export function CallActions({ callId, title }: { callId: string; title: string }) {
+export function CallActions({
+  callId,
+  title,
+  canWrite,
+}: {
+  callId: string;
+  title: string;
+  canWrite: boolean;
+}) {
   const router = useRouter();
   const { toast, show } = useToast();
   const [shareOpen, setShareOpen] = useState(false);
@@ -88,16 +96,18 @@ export function CallActions({ callId, title }: { callId: string; title: string }
       <KebabMenu label="More actions for this call">
         {(close) => (
           <>
-            <button
-              type="button"
-              onClick={() => {
-                close();
-                reanalyse();
-              }}
-              disabled={busy}
-            >
-              <IconRefresh size={15} /> Re-run analysis
-            </button>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  reanalyse();
+                }}
+                disabled={busy}
+              >
+                <IconRefresh size={15} /> Re-run analysis
+              </button>
+            )}
             <a href={`/api/v1/calls/${callId}/export?format=txt`} download onClick={close}>
               <IconExport size={15} /> Export transcript (.txt)
             </a>
@@ -123,17 +133,21 @@ export function CallActions({ callId, title }: { callId: string; title: string }
             >
               <IconCopy size={15} /> Copy API URL
             </button>
-            <div className="sep" />
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                close();
-                setConfirmDelete(true);
-              }}
-            >
-              <IconTrash size={15} /> Delete call
-            </button>
+            {canWrite && (
+              <>
+                <div className="sep" />
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    close();
+                    setConfirmDelete(true);
+                  }}
+                >
+                  <IconTrash size={15} /> Delete call
+                </button>
+              </>
+            )}
           </>
         )}
       </KebabMenu>

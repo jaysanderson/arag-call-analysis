@@ -126,17 +126,27 @@ export function UploadFlow({ maxBytes }: { maxBytes: number }) {
     setError(null);
   };
 
-  // Follow the job's own event stream; poll as a fallback so a proxy that buffers SSE cannot
-  // leave the screen stuck at "running".
+  /**
+   * Follow the job's own event stream, polling as a fallback so a proxy that buffers SSE cannot
+   * leave the screen stuck on "running".
+   *
+   * The effect is keyed on the job *id*, not on the job object. Keying it on the object would
+   * make every message it receives tear the EventSource down and open a new one — a reconnect
+   * loop for the life of the upload, which is the opposite of a stream.
+   */
+  const jobId = job?.id;
+  const finished = job?.status === "succeeded" || job?.status === "failed";
+  const notify = useRef(show);
+  notify.current = show;
+
   useEffect(() => {
-    if (!job || job.status === "succeeded" || job.status === "failed") return;
-    const id = job.id;
+    if (!jobId || finished) return;
     let stopped = false;
-    const source = new EventSource(`/api/v1/jobs/${id}/events`);
+    const source = new EventSource(`/api/v1/jobs/${jobId}/events`);
     source.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data) as JobEvent;
-        setJob((j) => (j ? { ...j, ...data, id } : j));
+        setJob((j) => (j ? { ...j, ...data, id: jobId } : j));
       } catch {
         /* a malformed frame is not worth tearing the stream down for */
       }
@@ -145,14 +155,14 @@ export function UploadFlow({ maxBytes }: { maxBytes: number }) {
     const poll = setInterval(async () => {
       if (stopped) return;
       try {
-        const r = await fetch(`/api/v1/jobs/${id}`);
+        const r = await fetch(`/api/v1/jobs/${jobId}`);
         if (!r.ok) return;
         const j = (await r.json()) as JobView;
         setJob(j);
         if (j.status === "succeeded" || j.status === "failed") {
           clearInterval(poll);
           source.close();
-          if (j.status === "succeeded") show("Call ready");
+          if (j.status === "succeeded") notify.current("Call ready");
         }
       } catch {
         /* keep polling */
@@ -163,7 +173,7 @@ export function UploadFlow({ maxBytes }: { maxBytes: number }) {
       clearInterval(poll);
       source.close();
     };
-  }, [job, show]);
+  }, [jobId, finished]);
 
   if (job) {
     return (

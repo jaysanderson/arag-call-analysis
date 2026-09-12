@@ -49,9 +49,10 @@ export function safeColor(value: string | undefined, fallback: string): string {
 }
 
 /**
- * A logo URL is rendered as an `<img src>`. Only http(s) and a same-origin path are allowed — the
- * same reasoning as `safeHref` in the markdown renderer: `javascript:` and `data:` are not safe
- * places to take a value from configuration.
+ * A URL taken from configuration and rendered into an `<img src>` or an `<a href>`. Only http(s)
+ * and a same-origin path are allowed — the same reasoning as `safeHref` in the markdown renderer:
+ * `javascript:` and `data:` are not safe places to take a value from configuration. Used for the
+ * logo, the support link and the docs link.
  */
 export function safeLogoUrl(value: string | undefined): string {
   const v = (value ?? "").trim();
@@ -81,7 +82,10 @@ export function readBranding(src: Record<string, string | undefined> = process.e
     accentColor: safeColor(parsed.accentColor, BRANDING_DEFAULTS.accentColor),
     poweredBy: parsed.poweredBy,
     footerText: src.BRAND_FOOTER_TEXT === "" ? "" : bounded(parsed.footerText),
-    docsUrl: bounded(parsed.docsUrl) || BRANDING_DEFAULTS.docsUrl,
+    // `docsUrl` is rendered as an `<a href>` in the global navigation on every page, so it gets
+    // exactly the same allowlist as the logo and support URLs — http(s) or a same-origin path.
+    // Bounding it alone would leave `BRAND_DOCS_URL="javascript:…"` as a live link.
+    docsUrl: safeLogoUrl(bounded(parsed.docsUrl)) || BRANDING_DEFAULTS.docsUrl,
     supportUrl: safeLogoUrl(parsed.supportUrl),
   };
 }

@@ -1,13 +1,9 @@
 import { ApiMeta, PageHeader } from "@/components/shell/AppShell";
 import { TaxonomyScreen } from "@/components/taxonomy/TaxonomyView";
-import { getRuntime } from "@/lib/runtime";
-import { settings } from "@/services/settings";
-
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Agents & Taxonomy" };
 
-export default async function TaxonomyPage() {
-  const s = settings(await getRuntime());
+export default function TaxonomyPage() {
   return (
     <>
       <PageHeader
@@ -16,7 +12,8 @@ export default async function TaxonomyPage() {
         breadcrumb={[{ label: "Home", href: "/" }, { label: "Agents & Taxonomy" }]}
       />
       <div className="arag-pagebody">
-        <TaxonomyScreen canProvision={s.features.adminPanel} />
+        {/* Provisioning is an operator action: this screen reads, /admin/taxonomy writes. */}
+        <TaxonomyScreen canProvision={false} />
         <ApiMeta>
           <code>GET /api/v1/taxonomy</code> and <code>POST /api/v1/admin/provision</code>
         </ApiMeta>
