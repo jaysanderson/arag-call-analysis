@@ -98,7 +98,13 @@ export const POST = route(
 
     const job = ctx.rt.jobs.submit(
       JOB_INGEST,
-      { callId, title, transcribed: Boolean(recordingInput) },
+      {
+        callId,
+        title,
+        transcribed: Boolean(recordingInput),
+        // Seed the retrievability probe with the call's own words, not an instruction.
+        probeQuery: (hasTranscript ? (transcript as string) : title).slice(0, 200),
+      },
       { ref: callId },
     );
     ctx.log.info("calls.created", { callId, jobId: job.id, transcribed: Boolean(recordingInput) });

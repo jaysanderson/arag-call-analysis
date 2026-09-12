@@ -18,6 +18,12 @@ export interface IngestJobInput {
   /** Resource id created by the request handler; the job only waits for ARAG to finish with it. */
   callId: string;
   title: string;
+  /**
+   * Words taken from the call itself, used as the retrievability probe. A probe query with no
+   * vocabulary overlap can report "not searchable" for a full minute while retrieval already
+   * works (observed live against a real Knowledge Box, platform 0.1.3).
+   */
+  probeQuery?: string;
   /** True when a recording was uploaded (transcription takes longer than text indexing). */
   transcribed: boolean;
   /** Skip waiting for transcription (used by tests). */
@@ -46,7 +52,7 @@ export interface ProvisionJobResult {
 /** Register every job runner on the shared JobManager. Called once from the runtime builder. */
 export function registerJobs(rt: Runtime): void {
   rt.jobs.register<IngestJobInput, IngestJobResult>(JOB_INGEST, async (ctx) => {
-    const { callId, transcribed, waitForProcessing } = ctx.job.input;
+    const { callId, transcribed, waitForProcessing, probeQuery } = ctx.job.input;
     let status = "PENDING";
     let searchable = false;
     if (waitForProcessing !== false) {
@@ -61,9 +67,16 @@ export function registerJobs(rt: Runtime): void {
         ((await ctx.stage(
           "searchable",
           "Waiting for the call to become retrievable",
-          () => rt.arag.waitSearchable(callId, { timeoutMs: 60_000, signal: ctx.signal }),
+          () =>
+            rt.arag.waitSearchable(callId, {
+              query: probeQuery,
+              timeoutMs: 60_000,
+              signal: ctx.signal,
+            }),
           { soft: true, progress: 0.9 },
         )) as boolean | undefined) ?? false;
+      // `false` is not fatal: retrieval often works before the probe agrees. The call is usable.
+      if (!searchable) ctx.emit("searchable", "skip", { message: "probe timed out; proceeding" });
     }
     invalidateCall(rt, callId);
     ctx.emit("ready", "ok", { message: "Call is available", progress: 1, data: { callId } });
