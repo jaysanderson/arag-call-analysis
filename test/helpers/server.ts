@@ -50,7 +50,7 @@ const NEXT_BIN = resolve(ROOT, "node_modules/next/dist/bin/next");
 /** Build once per test process (cheap when `.next` is warm). */
 export async function ensureBuild(): Promise<void> {
   if (existsSync(resolve(ROOT, ".next/BUILD_ID"))) return;
-  await run(process.execPath, [NEXT_BIN, "build"], { ARAG_MOCK: "1" });
+  await run(process.execPath, [NEXT_BIN, "build"], { ARAG_MOCK: "1", ENV_FILE: "/dev/null" });
 }
 
 export async function startAppServer(extraEnv: Record<string, string> = {}): Promise<TestServer> {
@@ -62,6 +62,8 @@ export async function startAppServer(extraEnv: Record<string, string> = {}): Pro
     cwd: ROOT,
     env: {
       ...process.env,
+      // A developer .env holds live credentials; a test server must never pick it up.
+      ENV_FILE: "/dev/null",
       NODE_ENV: "production",
       ARAG_MOCK: "1",
       ADMIN_TOKEN,

@@ -73,8 +73,15 @@ export interface RouteSpec {
   /** Skip the rate limiter entirely (long-lived, near-free streams such as job SSE). */
   noRateLimit?: boolean;
   /**
-   * Multiply this route's share of the token bucket. A media player issues many `Range` requests
-   * while scrubbing, so the media route gets a generous bucket rather than no bucket at all.
+   * Give this route its own bucket, sized as a multiple of the deployment's configured limits:
+   * `20` for media (a scrubbing player issues a burst of Range requests, so it needs a generous
+   * bucket rather than no bucket at all), `0.25` for ask (retrieval + generation + a REMi call is
+   * the most expensive thing this API does).
+   *
+   * The platform's `App` takes absolute `rateLimit: { rps, burst }` per route. A relative
+   * multiplier is used here instead so a route's limit stays proportional to whatever the
+   * deployment configured — an operator who raises `RATE_LIMIT_RPS` does not silently leave the
+   * media route pinned to a hard-coded value, and tests and the showcase need no special cases.
    */
   rateLimitMultiplier?: number;
   /** Byte cap for this route's body (defaults to MAX_BODY_BYTES). */
@@ -385,12 +392,14 @@ export function route(spec: RouteSpec, handler: Handler) {
       enforceAuth(rt, auth, spec.auth ?? "none");
 
       if (!spec.noRateLimit && !auth.admin) {
-        const mult = Math.max(1, spec.rateLimitMultiplier ?? 1);
-        const key = auth.apiKey ? `k:${auth.apiKey}` : `ip:${clientIp(req, rt.env.trustProxy)}`;
+        const mult = spec.rateLimitMultiplier ?? 1;
+        const who = auth.apiKey ? `k:${auth.apiKey}` : `ip:${clientIp(req, rt.env.trustProxy)}`;
+        // A route with its own multiplier gets its own bucket, so it neither drains nor is drained
+        // by the shared one.
         const retry = rateLimit(
-          mult > 1 ? `${key}|${spec.path}` : key,
+          mult === 1 ? who : `${spec.method} ${spec.path}|${who}`,
           rt.env.rateLimitRps * mult,
-          rt.env.rateLimitBurst * mult,
+          Math.max(1, rt.env.rateLimitBurst * mult),
         );
         if (retry !== null) throw tooManyRequests(retry);
       }
@@ -493,12 +502,18 @@ export function route(spec: RouteSpec, handler: Handler) {
       status = httpErr.status;
       if (rt) {
         rt.usage.errors++;
-        if (httpErr.status >= 500)
-          rt.log.error("http.error", {
+        // A deliberate 5xx (an upstream failure the code mapped on purpose) is a warning with no
+        // stack; only an unexpected throw gets error level and a stack, so real bugs stay visible.
+        if (httpErr.status >= 500) {
+          const deliberate = err instanceof HttpError || err instanceof AragError;
+          rt.log[deliberate ? "warn" : "error"]("http.error", {
             requestId,
             path: url.pathname,
+            status: httpErr.status,
             message: (err as Error)?.message,
+            ...(deliberate ? {} : { stack: (err as Error)?.stack?.split("\n").slice(0, 4).join(" | ") }),
           });
+        }
       }
       return applyHeaders(problemResponse(httpErr, url.pathname, requestId), requestId, cookies, rt, req);
     } finally {

@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Vendored `arag-platform` 0.1.4: mock fixtures are re-exported from the platform index (the local
+  deep import is gone), secret lengths in the admin config view are bucketed rather than exact, the
+  mock labeler assigns fewer labels per paragraph (so demo transcripts read plausibly), and the UI
+  kit ships a `[hidden]` rule.
+- Per-route rate limits: the media route gets 20x the configured bucket, the ask route 0.25x, each
+  in its own bucket (DECISIONS D-CA-15).
+- Deliberate 5xx responses log at `warn` without a stack; only unexpected throws log at `error`.
+- Tests and Playwright run with `ENV_FILE=/dev/null` on a product-specific port, so a developer
+  `.env` can never leak into a mock-backed run (DECISIONS D-CA-16).
+
 ## [0.1.0] — 2026-09-12
 
 First API-first MVP. The prototype became a product: a versioned public API, an admin panel, a

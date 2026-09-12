@@ -100,15 +100,15 @@ test.describe("demo app", () => {
   test("a moment chip filters the transcript", async ({ page }) => {
     await page.goto("/calls");
     await page.locator('a[href^="/calls/"]').first().click();
-    await expect(page.getByText("Filter by moment:")).toBeVisible();
+    const filterBar = page.locator("div", { has: page.getByText("Filter by moment:") }).last();
+    await expect(filterBar).toBeVisible();
 
+    // Whichever moments the labeler assigned to this call, clicking the first one must narrow the
+    // transcript. Naming a specific label would couple the test to the labeller's output.
     const segments = page.locator("text=/\\d+ of \\d+|\\d+ segments/").first();
     const before = await segments.innerText();
-    await page
-      .locator("button", { hasText: /^Complaint$/ })
-      .first()
-      .click();
-    await expect.poll(async () => segments.innerText(), { timeout: 10_000 }).not.toBe(before);
+    await filterBar.getByRole("button").first().click();
+    await expect.poll(async () => segments.innerText(), { timeout: 15_000 }).not.toBe(before);
   });
 
   test("the API contract is browsable from the app", async ({ page }) => {
