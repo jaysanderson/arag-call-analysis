@@ -7,21 +7,29 @@ import { Card, SectionTitle } from "./ui";
 type Datum = { name: string; value: number };
 type HrefFor = (name: string) => string | null;
 
+/**
+ * Chart colours reference the UI-kit tokens rather than hex literals, so a white-label deployment
+ * re-colours the charts with `BRAND_PRIMARY_COLOR` / `BRAND_ACCENT_COLOR` (see
+ * docs/developer/white-label.md). Each has a literal fallback: an undefined custom property would
+ * otherwise resolve to transparent inside an SVG fill.
+ */
 const BARS = [
-  "#2B2BB2",
-  "#00B563",
-  "#5777EA",
-  "#FFD000",
-  "#4B4BF7",
-  "#00216B",
-  "#90EF8E",
-  "#8892b0",
-  "#00D364",
-  "#1c3f95",
+  "var(--arag-brand-600, #2b2bb2)",
+  "var(--arag-accent-500, #00b563)",
+  "var(--arag-brand-400, #5777ea)",
+  // Categorical filler slots keep literal, readable hues; only the first three follow the brand.
+  "#ffd000",
+  "var(--arag-brand-500, #4b4bf7)",
+  "var(--arag-ink-900, #00216b)",
+  "var(--arag-accent-300, #90ef8e)",
+  "var(--arag-text-subtle, #8892b0)",
+  "var(--arag-accent-400, #00d364)",
+  "var(--arag-ink-700, #1c3f95)",
 ];
+/** Sentiment keeps its semantic colours; "Positive" follows the brand accent. */
 const SENTIMENT_COLORS: Record<string, string> = {
-  Positive: "#00B563",
-  Neutral: "#8892b0",
+  Positive: "var(--arag-accent-500, #00b563)",
+  Neutral: "var(--arag-text-subtle, #8892b0)",
   Negative: "#e2536b",
   Mixed: "#e0ab00",
 };
@@ -207,14 +215,14 @@ export function DashboardCharts({
             label="Offered"
             value={crossSell.offered}
             max={Math.max(crossSell.offered, 1)}
-            color="#2B2BB2"
+            color="var(--arag-brand-600, #2b2bb2)"
             href={link("disposition_flags", "Cross-sell Offered")}
           />
           <Funnel
             label="Accepted"
             value={crossSell.accepted}
             max={Math.max(crossSell.offered, 1)}
-            color="#00B563"
+            color="var(--arag-accent-500, #00b563)"
             href={link("disposition_flags", "Cross-sell Accepted")}
           />
           <div className="ml-auto text-right">
