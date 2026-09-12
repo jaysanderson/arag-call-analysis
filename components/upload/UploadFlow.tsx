@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { IconUpload } from "@/components/icons";
 import { ErrorState, useToast } from "@/components/kit";
 
@@ -347,14 +347,16 @@ function Stepper({ step }: { step: number }) {
   const steps = ["Choose a file", "Add details", "Processing"];
   return (
     <div className="arag-stepper" data-testid="upload-stepper">
+      {/* The steps and separators are direct children of the stepper: the kit styles them with a
+          child combinator, and wrapping each pair in a span silently loses every rule. */}
       {steps.map((label, i) => (
-        <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Fragment key={label}>
           {i > 0 && <span className="sep" />}
           <span className={`step${step === i + 1 ? " current" : step > i + 1 ? " done" : ""}`}>
             <span className="n">{i + 1}</span>
             {label}
           </span>
-        </span>
+        </Fragment>
       ))}
     </div>
   );

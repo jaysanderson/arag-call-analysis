@@ -370,6 +370,57 @@ export function Pagination({
 
 // ───────────────────────────── overlays ─────────────────────────────
 
+/**
+ * Modal focus management: move focus into the overlay, keep Tab inside it, and put focus back
+ * where it was on close.
+ *
+ * Without this, a keyboard user opening a drawer stays on the page behind it — they tab through a
+ * list they cannot see while a dialog covers it — and on close they land back at the top of the
+ * document rather than on the control they pressed. The Escape handler lives here too so every
+ * overlay dismisses the same way.
+ */
+function useModalFocus(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const node = ref.current;
+    const focusable = () =>
+      Array.from(
+        node?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+
+    // Focus the first control, or the container itself when there is none to focus.
+    (focusable()[0] ?? node)?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      // The trigger may have been unmounted by the action the overlay performed; guard for it.
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [ref, onClose]);
+}
+
 export function Drawer({
   title,
   onClose,
@@ -381,15 +432,19 @@ export function Drawer({
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const panel = useRef<HTMLElement>(null);
+  useModalFocus(panel, onClose);
   return (
     <>
       <div className="arag-drawer-backdrop" onClick={onClose} role="presentation" />
-      <aside className="arag-drawer" role="dialog" aria-modal="true" aria-label={title}>
+      <aside
+        ref={panel}
+        className="arag-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+      >
         <div className="head">
           <h2>{title}</h2>
           <button type="button" className="arag-btn ghost sm close" onClick={onClose} aria-label="Close">
@@ -425,18 +480,17 @@ export function ConfirmDialog({
   onCancel: () => void;
   busy?: boolean;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  const panel = useRef<HTMLDivElement>(null);
+  useModalFocus(panel, onCancel);
   return (
     <div className="arag-modal-backdrop" onClick={onCancel} role="presentation">
       <div
+        ref={panel}
         className="arag-modal"
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="head">

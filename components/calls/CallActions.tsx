@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { IconCopy, IconExport, IconRefresh, IconShare, IconTrash } from "@/components/icons";
 import { ConfirmDialog, KebabMenu, useToast } from "@/components/kit";
 import { fmtDateTime } from "@/lib/format";
@@ -182,6 +182,7 @@ function ShareDialog({
   const [links, setLinks] = useState<ShareLink[] | null>(null);
   const [days, setDays] = useState(7);
   const [busy, setBusy] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     fetch(`/api/v1/calls/${callId}/shares`)
@@ -220,13 +221,23 @@ function ShareDialog({
 
   const live = (links ?? []).filter((l) => !l.revoked && !l.expired);
 
+  // Escape closes, and focus starts on the first control rather than behind the overlay.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    panel.current?.querySelector<HTMLElement>("select, button, input")?.focus();
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div className="arag-modal-backdrop" onClick={onClose} role="presentation">
       <div
+        ref={panel}
         className="arag-modal"
         role="dialog"
         aria-modal="true"
         aria-label="Share this call"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="head">

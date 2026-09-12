@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { CallSummary } from "@/lib/types";
 import { CallCard } from "./CallCard";
+import { IconChevronRight } from "./icons";
 
 type Datum = { name: string; value: number };
 
@@ -36,13 +37,26 @@ export function CategoryRails({ byReason, bySentiment }: { byReason: Datum[]; by
 
 function Rail({ labelset, name, count }: { labelset: string; name: string; count: number }) {
   const [calls, setCalls] = useState<CallSummary[] | null>(null);
+  /**
+   * The badge shows the count the *rail's own query* returns, not the dashboard tally.
+   *
+   * The two can legitimately differ: the dashboard counts `call_metrics.call_reason`, written by
+   * the ask agent, while a rail filters on the `call_reason/...` label, applied by the labeler
+   * agent. A badge reading 6 above a rail of 3 cards is the product calling itself a liar, so the
+   * dashboard number is only a placeholder until the real one arrives.
+   */
+  const [total, setTotal] = useState<number>(count);
   const href = `/calls?label=${encodeURIComponent(`${labelset}/${name}`)}`;
 
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/v1/calls?page_size=10&label=${encodeURIComponent(`${labelset}/${name}`)}`)
       .then((r) => r.json())
-      .then((d) => !cancelled && setCalls((d.items ?? []).slice(0, 10)))
+      .then((d) => {
+        if (cancelled) return;
+        setCalls((d.items ?? []).slice(0, 10));
+        if (typeof d.total === "number") setTotal(d.total);
+      })
       .catch(() => !cancelled && setCalls([]));
     return () => {
       cancelled = true;
@@ -55,11 +69,15 @@ function Rail({ labelset, name, count }: { labelset: string; name: string; count
         <h2 className="flex items-center gap-2 font-display text-base font-semibold text-ink-950">
           {name}
           <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">
-            {count}
+            {total}
           </span>
         </h2>
-        <Link href={href} className="text-xs font-medium text-brand-600 hover:underline">
-          See all →
+        <Link
+          href={href}
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
+        >
+          See all
+          <IconChevronRight size={13} />
         </Link>
       </div>
       <div className="scroll-thin-x flex gap-3 overflow-x-auto pb-2">
