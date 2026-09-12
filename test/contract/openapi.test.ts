@@ -168,6 +168,12 @@ describe("response validation (checkResponse)", () => {
     expect(checkResponse(openapi, "/api/v1/dashboard", "get", 200, res.json)).toEqual([]);
   });
 
+  it("GET /api/v1/branding", async () => {
+    const res = await api.get("/api/v1/branding");
+    expect(res.status).toBe(200);
+    expect(checkResponse(openapi, "/api/v1/branding", "get", 200, res.json)).toEqual([]);
+  });
+
   it("GET /api/v1/labelsets", async () => {
     const res = await api.get("/api/v1/labelsets");
     expect(checkResponse(openapi, "/api/v1/labelsets", "get", 200, res.json)).toEqual([]);

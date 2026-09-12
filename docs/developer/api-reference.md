@@ -203,6 +203,24 @@ Responses:
 
 Auth: public
 
+## Branding
+
+### `GET /api/v1/branding`
+
+**White-label identity for this deployment** — Product name, wordmark or logo, colours, the powered-by toggle and the footer/docs/support links. Read by the demo UI, the admin console and any partner front-end.
+
+Responses:
+
+- `200` Branding — `application/json` [Branding](#branding)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
 ## Jobs
 
 ### `GET /api/v1/jobs`
@@ -527,6 +545,22 @@ RFC 9457 problem details
 | `level` | string | yes |  |
 | `msg` | string | yes |  |
 
+### Branding
+
+White-label identity for this deployment, configured with the BRAND_* environment variables. Public and free of secrets, so a partner front-end can theme itself from the same source the bundled UI uses.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `productName` | string | yes |  |
+| `tagline` | string |  |  |
+| `logoUrl` | string |  | Absolute URL, or a path served from DATA_DIR/branding/ (e.g. /branding/logo.svg). |
+| `primaryColor` | string |  |  |
+| `accentColor` | string |  |  |
+| `poweredBy` | boolean | yes | False hides the Progress Agentic RAG band and the footer credit. |
+| `footerText` | string |  |  |
+| `docsUrl` | string |  |  |
+| `supportUrl` | string |  |  |
+
 ### ResourceLabel
 
 | Field | Type | Required | Description |
@@ -734,6 +768,7 @@ _object_
 | `taxonomy` | object |  |  |
 | `cache` | object |  |  |
 | `limits` | object |  |  |
+| `branding` | [Branding](#branding) |  |  |
 
 ### UsageView
 

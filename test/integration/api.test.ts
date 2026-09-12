@@ -301,6 +301,68 @@ describe("GET /api/v1/labelsets", () => {
   });
 });
 
+describe("GET /api/v1/branding", () => {
+  it("returns the product defaults when no BRAND_* variables are set", async () => {
+    const res = await api.get<{ productName: string; poweredBy: boolean; docsUrl: string }>(
+      "/api/v1/branding",
+    );
+    expect(res.status).toBe(200);
+    expect(res.json.productName).toBe("Call Analysis");
+    expect(res.json.poweredBy).toBe(true);
+    expect(res.json.docsUrl).toBe("/api/v1/docs");
+  });
+
+  it("is public: no credentials, no secrets in the body", async () => {
+    const res = await api.get("/api/v1/branding");
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain("test-admin-token");
+    expect(res.text).not.toContain("mock-api-key");
+  });
+
+  it("reflects a white-label configuration, and the admin config view agrees", async () => {
+    const partner = await startAppServer({
+      BRAND_PRODUCT_NAME: "Northwind Call IQ",
+      BRAND_TAGLINE: "Conversation intelligence for insurers",
+      BRAND_PRIMARY_COLOR: "#7c3aed",
+      BRAND_POWERED_BY: "0",
+      BRAND_FOOTER_TEXT: "© Northwind Analytics",
+      BRAND_SUPPORT_URL: "https://support.northwind.example",
+    });
+    try {
+      const client = makeClient(partner.baseUrl);
+      const b = await client.get<{
+        productName: string;
+        tagline: string;
+        primaryColor: string;
+        poweredBy: boolean;
+        footerText: string;
+        supportUrl: string;
+      }>("/api/v1/branding");
+      expect(b.json).toMatchObject({
+        productName: "Northwind Call IQ",
+        tagline: "Conversation intelligence for insurers",
+        primaryColor: "#7c3aed",
+        poweredBy: false,
+        footerText: "© Northwind Analytics",
+        supportUrl: "https://support.northwind.example",
+      });
+
+      const cfg = await client.get<{ branding: { productName: string } }>("/api/v1/admin/config", {
+        admin: true,
+      });
+      expect(cfg.json.branding.productName).toBe("Northwind Call IQ");
+
+      // The rendered page must carry the partner identity, not the default one.
+      const html = await (await fetch(`${partner.baseUrl}/`)).text();
+      expect(html).toContain("Northwind Call IQ");
+      expect(html).toContain("--arag-brand-600:#7c3aed");
+      expect(html).not.toContain("Built on Progress Agentic RAG");
+    } finally {
+      await partner.stop();
+    }
+  }, 180_000);
+});
+
 describe("POST /api/v1/session", () => {
   it("issues an HttpOnly session cookie", async () => {
     const res = await api.post<{ ok: boolean; expiresIn: number }>("/api/v1/session");

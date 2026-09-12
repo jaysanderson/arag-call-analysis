@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **White-labelling.** `BRAND_PRODUCT_NAME`, `BRAND_TAGLINE`, `BRAND_LOGO_URL`,
+  `BRAND_PRIMARY_COLOR`, `BRAND_ACCENT_COLOR`, `BRAND_POWERED_BY`, `BRAND_FOOTER_TEXT`,
+  `BRAND_DOCS_URL` and `BRAND_SUPPORT_URL` rebrand a deployment without a fork: wordmark or logo,
+  page titles, favicon, colours, the Progress credit, the footer line and the docs/support links.
+- `GET /api/v1/branding` (public, in the OpenAPI document) and a branding panel in the admin
+  Config page.
+- `/branding/*` serves partner logos from `DATA_DIR/branding/` — image types only, path-traversal
+  safe, `nosniff` and a restrictive CSP on the response.
+- `docs/developer/white-label.md` and `docs/developer/build-your-own.md`.
+
 ### Changed
 
 - Vendored `arag-platform` 0.1.4: mock fixtures are re-exported from the platform index (the local

@@ -1,5 +1,6 @@
 /** Admin read models: KB health, redacted config, usage counters and the log ring buffer. */
 
+import type { Branding } from "@/lib/branding";
 import { AGENTS, ALL_LABELSETS } from "@/lib/domain/taxonomy";
 import type { Runtime } from "@/lib/runtime";
 import { APP_VERSION } from "@/lib/version";
@@ -54,6 +55,8 @@ export interface ConfigView {
   taxonomy: { labelsets: number; resourceLabelsets: string[]; agents: string[] };
   cache: { ttlMs: number };
   limits: { maxQuestionChars: number; maxBodyBytes: number; rateLimitRps: number; rateLimitBurst: number };
+  /** The effective white-label identity, so an operator can confirm what partners will see. */
+  branding: Branding;
 }
 
 /**
@@ -77,6 +80,7 @@ export function config(rt: Runtime): ConfigView {
       resourceLabelsets: ALL_LABELSETS.filter((l) => l.kind === "RESOURCES").map((l) => l.id),
       agents: AGENTS.map((a) => a.key),
     },
+    branding: rt.branding,
     cache: { ttlMs: rt.env.cacheTtlMs },
     limits: {
       maxQuestionChars: rt.env.maxQuestionChars,

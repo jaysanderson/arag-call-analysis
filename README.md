@@ -54,6 +54,7 @@ make provision           # create the labelsets and start the augmentation agent
 | `DELETE /api/v1/calls/{id}` | remove the call and its Knowledge Box resource (admin token or API key) |
 | `GET /api/v1/dashboard` | aggregated metrics across every analysed call |
 | `GET /api/v1/labelsets` | the filter facets, straight from the Knowledge Box |
+| `GET /api/v1/branding` | the deployment's white-label identity (name, logo, colours, credits) |
 | `GET /api/v1/jobs`, `/jobs/{id}`, `/jobs/{id}/events` | background work, with SSE progress |
 | `POST /api/v1/session` | same-origin session cookie for the demo UI when `API_KEYS` is set |
 | `/api/v1/admin/*` | health, config, usage, logs, agents, provision, cache (admin token required) |
@@ -84,6 +85,24 @@ tests.
 
 Every claim above is visible in the app: the **How this works** button in the Progress band opens
 the real request path for the page you are on.
+
+## White-labelling
+
+A partner ships this under their own identity by configuration alone — no fork, no rebuild:
+
+```bash
+BRAND_PRODUCT_NAME="Northwind Call IQ" \
+BRAND_TAGLINE="Conversation intelligence for insurers" \
+BRAND_PRIMARY_COLOR="#7c3aed" \
+BRAND_POWERED_BY=0 \
+make dev
+```
+
+Name, tagline, logo, primary and accent colour, the Progress credit, the footer line and the
+docs/support links all come from `BRAND_*` variables, are served from `GET /api/v1/branding`, and
+are shown in the admin console under **Config**. See
+[`docs/developer/white-label.md`](docs/developer/white-label.md); to change what the product *does*
+rather than how it looks, see [`docs/developer/build-your-own.md`](docs/developer/build-your-own.md).
 
 ## Project layout
 

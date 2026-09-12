@@ -9,6 +9,7 @@
  * path that talks to ARAG.
  */
 
+import { type Branding, readBranding } from "@/lib/branding";
 import { TtlCache } from "@/services/cache";
 import {
   App,
@@ -32,6 +33,8 @@ export type CallsEnv = PlatformEnv & {
 
 export interface Runtime {
   env: CallsEnv;
+  /** White-label identity, read from the environment at boot (see lib/branding.ts). */
+  branding: Branding;
   log: Logger;
   arag: AragClient;
   store: Store;
@@ -161,6 +164,7 @@ async function buildRuntime(): Promise<Runtime> {
 
   const runtime: Runtime = {
     env,
+    branding: readBranding(process.env),
     log,
     arag,
     store,

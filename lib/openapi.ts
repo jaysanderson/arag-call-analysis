@@ -7,6 +7,7 @@
  * the route-coverage check built from `API_ROUTES` below).
  */
 import {
+  BrandingSchema,
   buildOpenApi,
   jsonBody,
   jsonResponse,
@@ -252,7 +253,29 @@ const CacheStats = {
   },
 };
 
+/**
+ * The platform's shared branding schema, with product-specific documentation added. Using the
+ * platform schema keeps `GET /api/v1/branding` identical in shape across every ARAG product.
+ */
+const Branding = {
+  ...BrandingSchema,
+  description:
+    "White-label identity for this deployment, configured with the BRAND_* environment variables. Public and free of secrets, so a partner front-end can theme itself from the same source the bundled UI uses.",
+  properties: {
+    ...BrandingSchema.properties,
+    logoUrl: {
+      type: "string",
+      description: "Absolute URL, or a path served from DATA_DIR/branding/ (e.g. /branding/logo.svg).",
+    },
+    poweredBy: {
+      type: "boolean",
+      description: "False hides the Progress Agentic RAG band and the footer credit.",
+    },
+  },
+};
+
 const schemas: Record<string, unknown> = {
+  Branding,
   ResourceLabel,
   CallMetrics,
   CallAnalysis,
@@ -343,6 +366,7 @@ const schemas: Record<string, unknown> = {
       taxonomy: { type: "object", additionalProperties: true },
       cache: { type: "object", additionalProperties: true },
       limits: { type: "object", additionalProperties: true },
+      branding: ref("Branding"),
     },
   },
   UsageView: {
@@ -549,6 +573,16 @@ const paths: Record<string, Record<string, unknown>> = {
       responses: { 200: jsonResponse(ref("Dashboard"), "Dashboard aggregation"), ...problemResponses },
     },
   },
+  "/api/v1/branding": {
+    get: {
+      operationId: "getBranding",
+      tags: ["Branding"],
+      summary: "White-label identity for this deployment",
+      description:
+        "Product name, wordmark or logo, colours, the powered-by toggle and the footer/docs/support links. Read by the demo UI, the admin console and any partner front-end.",
+      responses: { 200: jsonResponse(ref("Branding"), "Branding"), ...problemResponses },
+    },
+  },
   "/api/v1/labelsets": {
     get: {
       operationId: "listLabelsets",
@@ -724,6 +758,7 @@ export const openapi: Record<string, unknown> = buildOpenApi({
   tags: [
     { name: "Calls", description: "Upload, browse, stream and question analysed calls." },
     { name: "Analytics", description: "Aggregated metrics and the label taxonomy." },
+    { name: "Branding", description: "White-label identity for this deployment." },
     { name: "Jobs", description: "Background ingestion and provisioning work." },
     { name: "Auth", description: "Demo session issuance." },
     { name: "Admin", description: "Operations: health, config, usage, logs, agents, provisioning, cache." },
@@ -755,6 +790,7 @@ export const API_ROUTES: RouteDef[] = [
     file: "app/api/v1/calls/[id]/ask/route.ts",
   },
   { method: "get", path: "/api/v1/dashboard", auth: "none", file: "app/api/v1/dashboard/route.ts" },
+  { method: "get", path: "/api/v1/branding", auth: "none", file: "app/api/v1/branding/route.ts" },
   { method: "get", path: "/api/v1/labelsets", auth: "none", file: "app/api/v1/labelsets/route.ts" },
   { method: "get", path: "/api/v1/jobs", auth: "none", file: "app/api/v1/jobs/route.ts" },
   { method: "get", path: "/api/v1/jobs/{id}", auth: "none", file: "app/api/v1/jobs/[id]/route.ts" },

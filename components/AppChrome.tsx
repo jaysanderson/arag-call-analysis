@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import type { Branding } from "@/lib/branding";
 import { HowThisWorks } from "./HowThisWorks";
 
 const NAV = [
@@ -22,14 +23,30 @@ function isActive(pathname: string, href: string) {
  * card thumbnails use, thematically the product's own real audio waveform,
  * not a decorative icon — sits directly beside custom-set type, no box.
  */
-function Logo() {
+function Logo({ branding }: { branding: Branding }) {
+  // A partner logo replaces the wordmark entirely; otherwise the wordmark is set with the
+  // configured product name so a white-label install needs no image at all.
+  if (branding.logoUrl) {
+    return (
+      // biome-ignore lint/performance/noImgElement: an arbitrary partner URL, not a build asset
+      <img src={branding.logoUrl} alt={branding.productName} className="h-6 w-auto shrink-0" />
+    );
+  }
+  const width = Math.max(150, 28 + branding.productName.length * 9);
   return (
-    <svg width="150" height="24" viewBox="0 0 150 24" className="shrink-0" aria-hidden="true">
-      <rect x="0" y="8" width="2.6" height="8" rx="1.3" fill="#5777EA" />
-      <rect x="4.6" y="3" width="2.6" height="18" rx="1.3" fill="#2B2BB2" />
-      <rect x="9.2" y="0" width="2.6" height="24" rx="1.3" fill="#00123C" />
-      <rect x="13.8" y="4" width="2.6" height="16" rx="1.3" fill="#2B2BB2" />
-      <rect x="18.4" y="9" width="2.6" height="6" rx="1.3" fill="#5777EA" />
+    <svg
+      width={width}
+      height="24"
+      viewBox={`0 0 ${width} 24`}
+      className="shrink-0"
+      role="img"
+      aria-label={branding.productName}
+    >
+      <rect x="0" y="8" width="2.6" height="8" rx="1.3" fill="var(--arag-brand-400)" />
+      <rect x="4.6" y="3" width="2.6" height="18" rx="1.3" fill="var(--arag-brand-600)" />
+      <rect x="9.2" y="0" width="2.6" height="24" rx="1.3" fill="var(--arag-ink-950)" />
+      <rect x="13.8" y="4" width="2.6" height="16" rx="1.3" fill="var(--arag-brand-600)" />
+      <rect x="18.4" y="9" width="2.6" height="6" rx="1.3" fill="var(--arag-brand-400)" />
       <text
         x="28"
         y="17"
@@ -37,9 +54,9 @@ function Logo() {
         fontWeight={600}
         fontSize="15.5"
         letterSpacing="-0.2"
-        fill="#00123C"
+        fill="var(--arag-ink-950)"
       >
-        Call Analysis
+        {branding.productName}
       </text>
     </svg>
   );
@@ -53,7 +70,7 @@ function Logo() {
  * The solution-architecture reveal (gate 11 / B12) lives in the Progress
  * band, top-right, on every route.
  */
-export function AppChrome({ children }: { children: React.ReactNode }) {
+export function AppChrome({ branding, children }: { branding: Branding; children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -62,29 +79,37 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
       {/* Standing chrome, both bands stay pinned together on scroll so the Progress
           frame is genuinely always-present, not just present on first paint. */}
       <div className="sticky top-0 z-30">
-        {/* Progress Agentic RAG brand band — always present, frames every demo. */}
-        <div className="arag-dark bg-ink-950">
-          <div className="mx-auto flex h-11 max-w-7xl items-center justify-between px-4 sm:px-6">
-            <div className="flex items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/brand/arag-logo-alt.svg"
-                alt="Progress Agentic RAG"
-                className="h-4 w-auto sm:h-[18px]"
-              />
+        {/*
+          Progress Agentic RAG brand band. A partner deployment can hide the platform credit with
+          BRAND_POWERED_BY=0; the "How this works" reveal moves into the product header so the
+          architecture disclosure is never lost with it.
+        */}
+        {branding.poweredBy && (
+          <div className="arag-dark bg-ink-950" data-testid="powered-by-band">
+            <div className="mx-auto flex h-11 max-w-7xl items-center justify-between px-4 sm:px-6">
+              <div className="flex items-center gap-2">
+                {/* biome-ignore lint/performance/noImgElement: a static brand asset, not a build image */}
+                <img
+                  src="/brand/arag-logo-alt.svg"
+                  alt="Progress Agentic RAG"
+                  className="h-4 w-auto sm:h-[18px]"
+                />
+              </div>
+              <HowThisWorks />
             </div>
-            <HowThisWorks />
           </div>
-        </div>
+        )}
 
         {/* The Call Analysis product's own experience — its own identity, beneath the Progress frame. */}
         <header className="border-b border-brand-200 bg-white/95 backdrop-blur">
           <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
             <Link href="/" className="flex items-center gap-3 shrink-0">
-              <Logo />
-              <span className="hidden text-xs font-normal text-slate-400 md:inline">
-                Contact centre intelligence
-              </span>
+              <Logo branding={branding} />
+              {branding.tagline && (
+                <span className="hidden text-xs font-normal text-slate-400 md:inline">
+                  {branding.tagline}
+                </span>
+              )}
             </Link>
 
             <nav className="ml-2 hidden items-center gap-1 text-sm sm:flex">
@@ -103,12 +128,15 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
               ))}
             </nav>
 
-            <a
-              href="/api/v1/docs"
-              className="ml-auto hidden rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-ink-950 sm:inline-block"
-            >
-              API
-            </a>
+            <div className="ml-auto hidden items-center gap-1 sm:flex">
+              {!branding.poweredBy && <HowThisWorks />}
+              <a
+                href={branding.docsUrl}
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-ink-950"
+              >
+                API
+              </a>
+            </div>
 
             <button
               type="button"
@@ -186,11 +214,20 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
 
       <footer className="border-t border-brand-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-slate-500 sm:flex-row sm:px-6">
-          <span>Synthetic demo data - no real customer or call information.</span>
-          <span className="inline-flex items-center gap-1.5">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/arag-logo.svg" alt="" className="h-3.5 w-auto opacity-70" />
-            Built on Progress Agentic RAG
+          <span>{branding.footerText}</span>
+          <span className="inline-flex items-center gap-3">
+            {branding.supportUrl && (
+              <a href={branding.supportUrl} className="hover:text-brand-600 hover:underline">
+                Support
+              </a>
+            )}
+            {branding.poweredBy && (
+              <span className="inline-flex items-center gap-1.5" data-testid="powered-by-credit">
+                {/* biome-ignore lint/performance/noImgElement: a static brand asset, not a build image */}
+                <img src="/brand/arag-logo.svg" alt="" className="h-3.5 w-auto opacity-70" />
+                Built on Progress Agentic RAG
+              </span>
+            )}
           </span>
         </div>
       </footer>
