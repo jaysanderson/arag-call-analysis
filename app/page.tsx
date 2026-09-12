@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { dashboard } from "@/lib/calls";
+import { getRuntime } from "@/lib/runtime";
+import { dashboard } from "@/services/dashboard";
 import { Kpi, Card, SectionTitle, Button } from "@/components/ui";
 import { CallCard } from "@/components/CallCard";
 import { DashboardCharts } from "@/components/DashboardCharts";
@@ -10,12 +11,19 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   let d;
   try {
-    d = await dashboard();
-  } catch (e) {
+    // Server components call the same service layer the API does — no duplicated ARAG logic.
+    d = await dashboard(await getRuntime());
+  } catch {
     return (
       <Card className="p-6">
         <h1 className="font-display text-lg font-semibold text-ink-950">Dashboard unavailable</h1>
-        <p className="mt-2 text-sm text-slate-500">Could not load call analytics right now: {String(e)}</p>
+        <p className="mt-2 text-sm text-slate-500">
+          Could not reach the Knowledge Box right now. Open{" "}
+          <Link href="/admin/health" className="text-brand-600 underline">
+            admin health
+          </Link>{" "}
+          for the connection test.
+        </p>
       </Card>
     );
   }

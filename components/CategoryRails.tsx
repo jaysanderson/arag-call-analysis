@@ -10,10 +10,10 @@ type Datum = { name: string; value: number };
 /**
  * Multi-row, category-led discovery (standard B35 / ui-polish-standard §B —
  * the Netflix pattern): each row is a real category with a LIVE count badge
- * and a horizontal rail of real call cards, backed by the same /api/calls
- * and /api/dashboard routes the rest of the app already uses (no new ARAG
- * calls — this reuses the existing labelset-filtered listCalls() call,
- * issued once per rail category).
+ * and a horizontal rail of real call cards, backed by the same /api/v1/calls
+ * and /api/v1/dashboard routes the rest of the app already uses. Each rail is one
+ * cached service call: the catalog ids and every per-call summary behind it are
+ * served from the 60 s cache, so rails cost no extra ARAG round-trips.
  */
 export function CategoryRails({ byReason, bySentiment }: { byReason: Datum[]; bySentiment: Datum[] }) {
   const reasonRails = byReason.slice(0, 2);
@@ -40,9 +40,9 @@ function Rail({ labelset, name, count }: { labelset: string; name: string; count
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/calls?label=${encodeURIComponent(`${labelset}/${name}`)}`)
+    fetch(`/api/v1/calls?page_size=10&label=${encodeURIComponent(`${labelset}/${name}`)}`)
       .then((r) => r.json())
-      .then((d) => !cancelled && setCalls((d.calls ?? []).slice(0, 10)))
+      .then((d) => !cancelled && setCalls((d.items ?? []).slice(0, 10)))
       .catch(() => !cancelled && setCalls([]));
     return () => {
       cancelled = true;

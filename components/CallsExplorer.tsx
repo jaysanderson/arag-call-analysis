@@ -6,10 +6,9 @@ import type { CallSummary } from "@/lib/types";
 import { Card, Empty, SectionTitle } from "./ui";
 import { CallCard } from "./CallCard";
 import { CategoryRails } from "./CategoryRails";
-import type { Dashboard } from "@/lib/calls";
+import type { Dashboard } from "@/services/dashboard";
 
-type Labelset = { title: string; labels: { title: string }[] };
-type LabelsetMap = Record<string, Labelset>;
+type LabelsetView = { id: string; title: string; labels: string[] };
 
 // Labelsets we expose as filter facets (resource-level only).
 const FILTER_ORDER = ["call_reason", "call_outcome", "sentiment", "line_of_business", "disposition_flags"];
@@ -24,7 +23,7 @@ function countsFor(d: Dashboard | null, labelset: string): Record<string, number
 
 export function CallsExplorer() {
   const searchParams = useSearchParams();
-  const [labelsets, setLabelsets] = useState<LabelsetMap>({});
+  const [labelsets, setLabelsets] = useState<LabelsetView[]>([]);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [calls, setCalls] = useState<CallSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,8 +32,14 @@ export function CallsExplorer() {
   const [active, setActive] = useState<Set<string>>(() => new Set(searchParams.getAll("label"))); // "labelset/label"
 
   useEffect(() => {
-    fetch("/api/labelsets").then((r) => r.json()).then((d) => setLabelsets(d.labelsets ?? {}));
-    fetch("/api/dashboard").then((r) => r.json()).then(setDashboard).catch(() => {});
+    fetch("/api/v1/labelsets")
+      .then((r) => r.json())
+      .then((d) => setLabelsets(d.items ?? []))
+      .catch(() => setLabelsets([]));
+    fetch("/api/v1/dashboard")
+      .then((r) => r.json())
+      .then(setDashboard)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -46,9 +51,11 @@ export function CallsExplorer() {
       // Keep the address bar in sync so the view is shareable / back-navigable.
       const qs = params.toString();
       window.history.replaceState(null, "", qs ? `/calls?${qs}` : "/calls");
-      fetch(`/api/calls?${params}`)
+      params.set("page_size", "200");
+      fetch(`/api/v1/calls?${params}`)
         .then((r) => r.json())
-        .then((d) => setCalls(d.calls ?? []))
+        .then((d) => setCalls(d.items ?? []))
+        .catch(() => setCalls([]))
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(t);
@@ -57,20 +64,30 @@ export function CallsExplorer() {
   const toggle = (key: string) =>
     setActive((s) => {
       const n = new Set(s);
-      n.has(key) ? n.delete(key) : n.add(key);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
       return n;
     });
 
   const filterSets = useMemo(
-    () => FILTER_ORDER.filter((id) => labelsets[id]).map((id) => ({ id, ...labelsets[id], counts: countsFor(dashboard, id) })),
+    () =>
+      [...labelsets]
+        .filter((ls) => ls.labels.length > 0)
+        .sort((a, b) => {
+          const rank = (id: string) => (FILTER_ORDER.indexOf(id) + 1 || 99);
+          return rank(a.id) - rank(b.id);
+        })
+        .map((ls) => ({ ...ls, counts: countsFor(dashboard, ls.id) })),
     [labelsets, dashboard],
   );
 
-  const showRails = active.size === 0 && !q.trim() && dashboard;
+  const showRails = active.size === 0 && !q.trim();
 
   return (
     <div className="space-y-8">
-      {showRails && <CategoryRails byReason={dashboard!.byReason} bySentiment={dashboard!.bySentiment} />}
+      {showRails && dashboard && (
+        <CategoryRails byReason={dashboard.byReason} bySentiment={dashboard.bySentiment} />
+      )}
 
       <div>
         <SectionTitle count={dashboard?.total}>All calls</SectionTitle>
@@ -92,10 +109,10 @@ export function CallsExplorer() {
               <Card key={ls.id} className="p-3">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{ls.title}</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {ls.labels.map((l) => {
-                    const key = `${ls.id}/${l.title}`;
+                  {ls.labels.map((label) => {
+                    const key = `${ls.id}/${label}`;
                     const on = active.has(key);
-                    const c = ls.counts[l.title];
+                    const c = ls.counts[label];
                     return (
                       <button
                         key={key}
@@ -104,7 +121,7 @@ export function CallsExplorer() {
                           on ? "bg-brand-600 text-white" : "bg-brand-50 text-slate-700 hover:bg-brand-100"
                         }`}
                       >
-                        {l.title}
+                        {label}
                         {typeof c === "number" && (
                           <span className={`text-[10px] ${on ? "text-white/80" : "text-slate-400"}`}>{c}</span>
                         )}

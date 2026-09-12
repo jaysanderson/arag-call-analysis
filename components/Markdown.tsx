@@ -38,7 +38,7 @@ function parseBlocks(src: string): Block[] {
   let i = 0;
 
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i] ?? "";
 
     if (!line.trim()) {
       i++;
@@ -47,7 +47,7 @@ function parseBlocks(src: string): Block[] {
 
     const h = line.match(H_RE);
     if (h) {
-      blocks.push({ type: "heading", level: h[1].length as 1 | 2 | 3, text: h[2].trim() });
+      blocks.push({ type: "heading", level: (h[1] ?? "#").length as 1 | 2 | 3, text: (h[2] ?? "").trim() });
       i++;
       continue;
     }
@@ -60,18 +60,18 @@ function parseBlocks(src: string): Block[] {
       const items: string[] = [];
       let j = i;
       while (j < lines.length) {
-        const m = lines[j].match(re);
+        const m = (lines[j] ?? "").match(re);
         if (m) {
-          items.push(m[1].trim());
+          items.push((m[1] ?? "").trim());
           j++;
           continue;
         }
-        if (!lines[j].trim()) {
+        if (!(lines[j] ?? "").trim()) {
           // Blank line — peek ahead past any run of blank lines to see if
           // this loose list continues before deciding to close it.
           let k = j;
-          while (k < lines.length && !lines[k].trim()) k++;
-          if (k < lines.length && lines[k].match(re)) {
+          while (k < lines.length && !(lines[k] ?? "").trim()) k++;
+          if (k < lines.length && (lines[k] ?? "").match(re)) {
             j = k;
             continue;
           }
@@ -87,8 +87,14 @@ function parseBlocks(src: string): Block[] {
     // Paragraph: collect until a blank line or a new block starts.
     let j = i;
     const buf: string[] = [];
-    while (j < lines.length && lines[j].trim() && !lines[j].match(H_RE) && !lines[j].match(UL_RE) && !lines[j].match(OL_RE)) {
-      buf.push(lines[j]);
+    while (
+      j < lines.length &&
+      (lines[j] ?? "").trim() &&
+      !(lines[j] ?? "").match(H_RE) &&
+      !(lines[j] ?? "").match(UL_RE) &&
+      !(lines[j] ?? "").match(OL_RE)
+    ) {
+      buf.push(lines[j] ?? "");
       j++;
     }
     blocks.push({ type: "p", text: buf.join(" ").trim() });
@@ -184,7 +190,7 @@ function spreadTiedMarks(text: string, marks: { end: number; n: number }[]): { e
     const re = /(\S*)[.!?](?:\s|$)/g;
     let mm: RegExpExecArray | null;
     while ((mm = re.exec(text)) !== null) {
-      if (/^(Mr|Mrs|Ms|Dr|St|vs|etc|[A-Z])$/i.test(mm[1])) continue;
+      if (/^(Mr|Mrs|Ms|Dr|St|vs|etc|[A-Z])$/i.test(mm[1] ?? "")) continue;
       boundaries.push(mm.index + mm[0].length - (mm[0].endsWith(" ") ? 1 : 0));
     }
     if (boundaries.length < 2) {
@@ -192,7 +198,7 @@ function spreadTiedMarks(text: string, marks: { end: number; n: number }[]): { e
       continue;
     }
     const ordered = [...group].sort((a, b) => a.n - b.n);
-    ordered.forEach((m, i) => out.push({ end: boundaries[Math.min(i, boundaries.length - 1)], n: m.n }));
+    ordered.forEach((m, i) => out.push({ end: boundaries[Math.min(i, boundaries.length - 1)] ?? 0, n: m.n }));
   }
   return out;
 }
@@ -237,7 +243,7 @@ export function Markdown({
     <div className={`space-y-2 ${className ?? ""}`}>
       {blocks.map((b, i) => {
         if (b.type === "heading") {
-          const Tag = headingTags[b.level - 1];
+          const Tag = headingTags[b.level - 1] ?? "h4";
           return (
             <Tag key={i} className="font-display font-semibold text-ink-950">
               {inline(b.text, `h${i}`, onCite)}

@@ -1,47 +1,54 @@
 @import "tailwindcss";
+/* Shared ARAG UI kit: design tokens + components, identical across every ARAG product.
+   Vendored at vendor/arag-platform/ui/arag-ui.css — never edited here. */
+@import "../vendor/arag-platform/ui/arag-ui.css";
 
 /* ==========================================================================
-   Progress Agentic RAG brand tokens (progress-arag-branding skill), mapped
-   into Tailwind v4's CSS-first theme so utility classes stay ARAG-on-brand.
-   Progress Sans is a proprietary, non-redistributable typeface — this public
-   demo repo cannot bundle the font files, so the stack falls back to the
-   approved substitute (Arial) per the typography reference.
+   Progress Agentic RAG brand tokens, mapped into Tailwind v4's CSS-first theme
+   so utility classes and the shared .arag-* components share one palette.
+   Progress Sans is proprietary and cannot be bundled in a public repo; the
+   stack falls back to the approved substitute (Arial).
    ========================================================================== */
 @theme {
+  /* Every colour below resolves to an --arag-* token from the shared UI kit, so the Tailwind
+     utilities used by this app and the .arag-* component classes used by the admin panel are
+     guaranteed to render the same palette. */
   /* Primary */
-  --color-ink-950: #00123c; /* Blue P1 + 45% Shade */
-  --color-ink-900: #00216b; /* Blue P1 */
-  --color-ink-800: #0c2d7a;
-  --color-ink-700: #1c3f95;
+  --color-ink-950: var(--arag-ink-950);
+  --color-ink-900: var(--arag-ink-900);
+  --color-ink-800: var(--arag-ink-800);
+  --color-ink-700: var(--arag-ink-700);
 
   /* Action / link */
-  --color-brand-50: #eef1fd;
-  --color-brand-100: #dcecff; /* Blue P5 */
-  --color-brand-200: #c9d9ee; /* border */
-  --color-brand-400: #5777ea; /* Blue P4 */
-  --color-brand-500: #4b4bf7; /* Blue P3 */
-  --color-brand-600: #2b2bb2; /* Blue P2 — primary action on light */
-  --color-brand-700: #00216b; /* Blue P1 — hover */
+  --color-brand-50: var(--arag-brand-50);
+  --color-brand-100: var(--arag-brand-100);
+  --color-brand-200: var(--arag-brand-200);
+  --color-brand-400: var(--arag-brand-400);
+  --color-brand-500: var(--arag-brand-500);
+  --color-brand-600: var(--arag-brand-600);
+  --color-brand-700: var(--arag-brand-700);
 
   /* Accent green — fills / dark-surface text only, never light-surface text */
-  --color-accent-300: #90ef8e;
-  --color-accent-400: #00d364;
-  --color-accent-500: #00b563;
-  --color-accent-fg-light: #00663a; /* AA on green-s4 fill */
-  --color-accent-fill-soft: #cdffca;
+  --color-accent-300: var(--arag-accent-300);
+  --color-accent-400: var(--arag-accent-400);
+  --color-accent-500: var(--arag-accent-500);
+  --color-accent-fg-light: var(--arag-accent-fg);
+  --color-accent-fill-soft: var(--arag-accent-soft);
 
-  --color-warn-fg: #6b4e00;
-  --color-warn-bg: #fff3c2;
-  --color-danger-fg: #8c1f2e;
-  --color-danger-bg: #ffe3e7;
+  --color-warn-fg: var(--arag-warn-fg);
+  --color-warn-bg: var(--arag-warn-bg);
+  --color-danger-fg: var(--arag-danger-fg);
+  --color-danger-bg: var(--arag-danger-bg);
   --color-danger-dark: #ff9aa8;
+  --color-info-fg: var(--arag-info-fg);
+  --color-info-bg: var(--arag-info-bg);
 
-  --color-surface: #f4faff; /* Light Grey S4 */
-  --color-surface-raised: #ffffff;
+  --color-surface: var(--arag-surface);
+  --color-surface-raised: var(--arag-surface-raised);
 
-  --font-display: "Progress Sans Display", Arial, sans-serif;
-  --font-text: "Progress Sans Text", Arial, sans-serif;
-  --font-mono: "Roboto Mono", ui-monospace, monospace;
+  --font-display: var(--arag-font-display);
+  --font-text: var(--arag-font-text);
+  --font-mono: var(--arag-font-mono);
 }
 
 :root {
@@ -53,9 +60,9 @@ body {
   height: 100%;
 }
 body {
-  background: var(--color-surface);
-  color: #101828;
-  font-family: var(--font-text);
+  background: var(--arag-surface);
+  color: var(--arag-text);
+  font-family: var(--arag-font-text);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -72,7 +79,7 @@ h4 {
   height: 8px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: var(--color-brand-200);
+  background: var(--arag-border);
   border-radius: 9999px;
 }
 .scroll-thin::-webkit-scrollbar-track {
@@ -143,8 +150,10 @@ h4 {
 
 /* Hairline card + control system used everywhere (ui-polish-standard: one
    consistent card system, limited corner rounding, high-contrast controls) */
+/* The app's card frame is the UI kit's card, so the demo and the admin panel match exactly. */
 .arag-card {
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-brand-200);
-  border-radius: 10px;
+  background: var(--arag-surface-raised);
+  border: 1px solid var(--arag-border);
+  border-radius: var(--arag-radius-lg);
+  box-shadow: none;
 }

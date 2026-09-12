@@ -11,9 +11,16 @@ function parseCitationKey(key: string, answerRanges: [number, number][], n: numb
   // format: <rid>/<f|a|t|u>/<fieldName>/<start>-<end>
   const parts = key.split("/");
   const range = parts[parts.length - 1] ?? "";
-  const [s, e] = range.split("-").map((x) => parseInt(x, 10));
+  const [rawStart, rawEnd] = range.split("-").map((x) => Number.parseInt(x, 10));
   const field = parts.length >= 4 ? `${parts[1]}/${parts[2]}` : undefined;
-  return { key, field, start: isNaN(s) ? 0 : s, end: isNaN(e) ? 0 : e, n, answerRanges };
+  return {
+    key,
+    field,
+    start: Number.isFinite(rawStart) ? (rawStart as number) : 0,
+    end: Number.isFinite(rawEnd) ? (rawEnd as number) : 0,
+    n,
+    answerRanges,
+  };
 }
 
 type Msg = { role: "user" | "assistant"; text: string; citations?: Citation[]; error?: boolean; quality?: RemiQuality };
@@ -28,7 +35,7 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
     setMessages((m) => [...m, { role: "user", text: question }, { role: "assistant", text: "" }]);
     setBusy(true);
     try {
-      const res = await fetch(`/api/calls/${callId}/ask`, {
+      const res = await fetch(`/api/v1/calls/${callId}/ask`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ question }),

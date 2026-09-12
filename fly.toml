@@ -1,7 +1,26 @@
+# Fly.io deployment for Call Analysis. Set secrets out of band — never in this file:
+#   fly secrets set ARAG_KB_ID=… ARAG_API_KEY=… ARAG_REGION=aws-us-east-2-1 ADMIN_TOKEN=…
 app = "call-analysis-arag"
-primary_region = "iad"
+primary_region = "iad"   # co-located with the ARAG zone aws-us-east-2-1
 
 [build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  DATA_DIR = "/data"
+  LOG_LEVEL = "info"
+  RATE_LIMIT_RPS = "10"
+  RATE_LIMIT_BURST = "40"
+  MAX_BODY_BYTES = "104857600"
+  TRUST_PROXY = "fly"
+  CALLS_CACHE_TTL_MS = "60000"
+
+[[mounts]]
+  source = "data"
+  destination = "/data"
+  initial_size = "1gb"
 
 [http_service]
   internal_port = 3000
@@ -10,6 +29,17 @@ primary_region = "iad"
   auto_start_machines = true
   min_machines_running = 1
   processes = ["app"]
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 40
+    hard_limit = 80
+
+[[http_service.checks]]
+  interval = "15s"
+  timeout = "3s"
+  grace_period = "20s"
+  method = "GET"
+  path = "/healthz"
 
 [[vm]]
   size = "shared-cpu-1x"

@@ -51,7 +51,7 @@ const PALETTE = [
 export function colorFor(key: string): string {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length];
+  return PALETTE[h % PALETTE.length] ?? PALETTE[0]!;
 }
 
 export const SENTIMENT_COLOR: Record<string, string> = {

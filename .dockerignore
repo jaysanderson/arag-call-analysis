@@ -1,17 +1,18 @@
 node_modules
 .next
 .git
+.github
 .gitignore
 .env
 .env.local
 .env*.local
-npm-debug.log*
-Dockerfile
-.dockerignore
-fly.toml
-# seeding-only assets (not needed by the running app)
+data
+coverage
+test-results
+showcase/out
 scripts/output
 docs
-README.md
+enablement
 *.md
+!README.md
 .DS_Store

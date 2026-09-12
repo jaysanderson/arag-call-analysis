@@ -18,6 +18,20 @@ type PageFlow = {
  * brings. Nothing here is generic; every mechanism named is one this app's
  * server code genuinely calls (see lib/arag.ts, lib/calls.ts, app/api/*).
  */
+const ADMIN_FLOW: PageFlow = {
+  title: "Admin - how this works",
+  whatItDoes:
+    "Every panel here is a live read of the running service and its Knowledge Box through /api/v1/admin/* - health, effective configuration, usage counters, job history, logs, agent status and the cache.",
+  why:
+    "An operator can prove the KB connection, watch a provisioning run, read the last 500 log lines and clear a stale cache without shell access to the machine.",
+  steps: [
+    { label: "Admin token", detail: "POST /api/v1/admin/login exchanges ADMIN_TOKEN for an HttpOnly cookie; the token never lives in browser JavaScript." },
+    { label: "KB connection test", detail: "GET /api/v1/admin/health runs a real catalog read plus a configuration read against the Knowledge Box and reports the generative model and resource count." },
+    { label: "Provisioning job", detail: "POST /api/v1/admin/provision creates every labelset and restarts the three data-augmentation agents one at a time (ARAG allows one running task per operation type), streamed as job events." },
+    { label: "Cache control", detail: "GET/POST /api/v1/admin/cache shows and invalidates the catalog + per-call summary cache that keeps the dashboard off the N+1 path." },
+  ],
+};
+
 const FLOWS: { match: (path: string) => boolean; flow: PageFlow }[] = [
   {
     match: (p) => p === "/",
@@ -30,7 +44,7 @@ const FLOWS: { match: (path: string) => boolean; flow: PageFlow }[] = [
       steps: [
         { label: "Ingest", detail: "Each uploaded call recording is transcribed by ARAG into timestamped paragraphs." },
         { label: "Data-Augmentation agents", detail: "A Labeler agent classifies the whole call (reason, outcome, sentiment); an Ask agent extracts a structured call_metrics field per call, parsed from the model's response server-side (ARAG's native DA JSON-schema output isn't available on this platform yet)." },
-        { label: "Server proxy", detail: "This app's server (never the browser) calls the Knowledge Box catalog, reads each call's stored call_metrics field, and aggregates across all calls." },
+        { label: "Server proxy", detail: "This app's server (never the browser) calls the Knowledge Box catalog, reads each call's stored call_metrics field through a 60-second cache, and aggregates across all calls — one upstream fetch per call per window, not per view." },
         { label: "Dashboard", detail: "The KPI tiles and charts render the aggregated result - every number here traces to a real ARAG-generated field." },
       ],
     },
@@ -45,10 +59,14 @@ const FLOWS: { match: (path: string) => boolean; flow: PageFlow }[] = [
         "A team lead can find \"every complaint call in Claims this week\" in one click, and full-text search finds a call by what was actually said, not what it was named.",
       steps: [
         { label: "Labeler agent", detail: "A resource-level Labeler classified every call into facets - call reason, outcome, sentiment, line of business, disposition flags." },
-        { label: "Server proxy", detail: "The left-rail filters and the search box call this app's /api/calls route, which calls ARAG's /find (semantic + keyword search across every transcript) or the plain catalog when no query is set." },
+        { label: "Server proxy", detail: "The left-rail filters and the search box call this app's /api/v1/calls route, which calls ARAG's /find (semantic + keyword search across every transcript) or the plain catalog when no query is set." },
         { label: "Live results", detail: "Matching calls render as cards, each carrying its real ARAG-assigned labels - no client-side guessing." },
       ],
     },
+  },
+  {
+    match: (p) => p.startsWith("/admin"),
+    flow: ADMIN_FLOW,
   },
   {
     match: (p) => p.startsWith("/calls/"),
@@ -62,7 +80,7 @@ const FLOWS: { match: (path: string) => boolean; flow: PageFlow }[] = [
         { label: "Transcription", detail: "ARAG transcribed the uploaded audio/video into paragraphs carrying start/end timestamps - that's what drives the media scrubber." },
         { label: "Paragraph Labeler", detail: "A paragraph-level Labeler tagged individual transcript blocks (Complaint, Escalation, Cross-sell Pitch, PII, ...) - the chips under each transcript line." },
         { label: "Ask agent (Generator)", detail: "A Data-Augmentation Ask agent wrote a structured call_analysis field per call - the executive summary, scorecard, complaint/cross-sell detail and notable quotes in the AI Analysis panel - parsed from the model's JSON response server-side (ARAG's native DA JSON-schema output isn't available on this platform yet)." },
-        { label: "Scoped /ask + citations", detail: "The chat panel calls this app's own /api/calls/[id]/ask route, which calls the Knowledge Box /ask scoped to resource_filters:[this call] with citations:true - the model can only answer from this call's own transcript." },
+        { label: "Scoped /ask + citations", detail: "The chat panel calls this app's own /api/v1/calls/{id}/ask route, which calls the Knowledge Box /ask scoped to resource_filters:[this call] with citations:true - the model can only answer from this call's own transcript." },
         { label: "Citation resolution", detail: "Each citation is a char range into the transcript field. This app maps that range back to a paragraph and its timestamp, so clicking a citation scrubs the player and highlights the source line." },
         { label: "REMi trust scoring", detail: "Once the answer finishes, the server scores it against the full set of retrieved transcript passages with a real /predict/remi call and appends the result to the stream - the confidence badge below the answer is that genuine score, shown qualitatively." },
       ],
@@ -70,7 +88,7 @@ const FLOWS: { match: (path: string) => boolean; flow: PageFlow }[] = [
   },
 ];
 
-const DEFAULT_FLOW: PageFlow = FLOWS[0].flow;
+const DEFAULT_FLOW: PageFlow = FLOWS[0]!.flow;
 
 function flowFor(path: string): PageFlow {
   return FLOWS.find((f) => f.match(path))?.flow ?? DEFAULT_FLOW;

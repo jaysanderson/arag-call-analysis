@@ -1,7 +1,5 @@
 # dependencies
 node_modules/
-.pnp
-.pnp.js
 
 # next.js
 .next/
@@ -13,6 +11,17 @@ dist/
 .env
 .env.local
 .env*.local
+!.env.example
+
+# runtime state
+data/
+
+# test + build artefacts
+coverage/
+test-results/
+playwright-report/
+showcase/out/
+*.tsbuildinfo
 
 # generated demo media (large binaries)
 scripts/output/
@@ -20,11 +29,5 @@ scripts/output/
 # logs & os
 *.log
 .DS_Store
-npm-debug.log*
-
-# misc
-*.tsbuildinfo
 .vercel
-
-# QA scratch screenshots - never committed
 .qa-shots/

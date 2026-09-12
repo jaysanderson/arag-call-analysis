@@ -1,30 +1,45 @@
 {
   "name": "call-analysis",
   "version": "0.1.0",
+  "description": "Call Analysis — contact-centre call intelligence built on Progress Agentic RAG (ARAG). API-first Next.js app.",
+  "license": "Apache-2.0",
   "private": true,
-  "description": "Call intelligence app built entirely on Progress Agentic RAG (ARAG / Nuclia)",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
-    "kb:setup": "tsx scripts/setup-kb.ts",
-    "kb:reset": "tsx scripts/reset-kb.ts",
-    "data:gen": "tsx scripts/gen-media.ts",
-    "data:ingest": "tsx scripts/ingest.ts",
-    "seed": "tsx scripts/seed.ts",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "e2e": "playwright test",
+    "provision": "node --experimental-strip-types scripts/provision.ts",
+    "ingest": "node --experimental-strip-types scripts/ingest.ts",
+    "reset": "node --experimental-strip-types scripts/reset.ts",
+    "gen-media": "node --experimental-strip-types scripts/gen-media.ts"
   },
   "dependencies": {
-    "next": "^16.1.6",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "@types/node": "^22.10.0",
-    "@types/react": "^19.0.2",
-    "@types/react-dom": "^19.0.2",
-    "tailwindcss": "^4.2.1",
-    "@tailwindcss/postcss": "^4.2.1"
+    "@biomejs/biome": "2.0.0",
+    "@playwright/test": "1.52.0",
+    "@tailwindcss/postcss": "4.1.0",
+    "@types/node": "22.10.0",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "@vitest/coverage-v8": "3.2.4",
+    "tailwindcss": "4.1.0",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  },
+  "overrides": {
+    "nanoid": "3.3.11",
+    "baseline-browser-mapping": "2.8.0"
   }
 }

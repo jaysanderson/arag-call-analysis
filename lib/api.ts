@@ -1,0 +1,411 @@
+/**
+ * Next.js route-handler adapter for the ARAG platform HTTP conventions.
+ *
+ * Next's App Router owns routing, so the platform's `App` router cannot serve these endpoints
+ * directly. This module gives every `app/api/v1/**\/route.ts` handler the same behaviour the
+ * platform's router would: request ids, authentication (admin token cookie/bearer, optional API
+ * keys, demo session cookie), per-IP token-bucket rate limiting, OpenAPI-driven request
+ * validation, security headers, access logging, usage counters, and RFC 9457 problem responses.
+ *
+ * Session cookies are signed by an actual platform `App` instance (`rt.app`), so the HMAC format
+ * is identical to every other ARAG product.
+ */
+import { randomUUID } from "node:crypto";
+import {
+  AragError,
+  constantTimeEqual,
+  forbidden,
+  HttpError,
+  internalError,
+  notFound,
+  operationSchemas,
+  tooManyRequests,
+  unauthorized,
+  validate,
+  validationError,
+} from "@/vendor/arag-platform/src/index.ts";
+import { openapi, type RouteAuth } from "@/lib/openapi";
+import { getRuntime, type Runtime } from "@/lib/runtime";
+
+export interface AuthInfo {
+  admin: boolean;
+  apiKey: string | null;
+  session: boolean;
+  via: "admin-token" | "api-key" | "session" | "anonymous";
+}
+
+export interface ApiContext {
+  req: Request;
+  url: URL;
+  requestId: string;
+  /** Path parameters, validated/coerced against the spec. */
+  params: Record<string, string>;
+  /** Query parameters, coerced and validated against the spec (arrays kept as arrays). */
+  query: Record<string, unknown>;
+  /** JSON body, validated against the spec (undefined for multipart/none). */
+  body: unknown;
+  /** Parsed multipart form (only when the route declares `body: "multipart"`). */
+  form: FormData | null;
+  auth: AuthInfo;
+  ip: string;
+  rt: Runtime;
+  log: Runtime["log"];
+  /** Cookies queued by the handler; applied to the final response. */
+  cookies: string[];
+  setCookie(name: string, value: string, opts?: CookieOptions): void;
+}
+
+export interface CookieOptions {
+  maxAge?: number;
+  path?: string;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "Lax" | "Strict" | "None";
+}
+
+export interface RouteSpec {
+  /** OpenAPI path, e.g. `/api/v1/calls/{id}`. Used to look up the operation's schemas. */
+  path: string;
+  method: "get" | "post" | "delete";
+  auth?: RouteAuth;
+  /** Body handling. `auto` parses JSON when the content type says so. */
+  body?: "auto" | "json" | "multipart" | "none";
+  /** Skip the rate limiter (streaming sub-resources of an already-limited request). */
+  noRateLimit?: boolean;
+  /** Byte cap for this route's body (defaults to MAX_BODY_BYTES). */
+  bodyLimit?: number;
+}
+
+export type Handler = (ctx: ApiContext) => Promise<Response | unknown> | Response | unknown;
+
+const SECURITY_HEADERS: Record<string, string> = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), geolocation=(), microphone=()",
+};
+
+// ───────────────────────────── auth ─────────────────────────────
+
+export function parseCookies(header: string | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of (header ?? "").split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+
+/** Identify the caller. Mirrors `App.authenticate` (platform parity, ported for `Request`). */
+export function authenticate(rt: Runtime, req: Request): AuthInfo {
+  const authz = req.headers.get("authorization") ?? "";
+  const bearer = authz.toLowerCase().startsWith("bearer ") ? authz.slice(7).trim() : "";
+  const apiKeyHeader = req.headers.get("x-api-key") ?? "";
+  const cookies = parseCookies(req.headers.get("cookie"));
+  const adminToken = rt.env.adminToken;
+  if (
+    adminToken &&
+    ((bearer && constantTimeEqual(bearer, adminToken)) ||
+      (cookies.arag_admin && constantTimeEqual(cookies.arag_admin, adminToken)))
+  ) {
+    return { admin: true, apiKey: null, session: true, via: "admin-token" };
+  }
+  for (const key of rt.env.apiKeys) {
+    if ((bearer && constantTimeEqual(bearer, key)) || (apiKeyHeader && constantTimeEqual(apiKeyHeader, key))) {
+      return { admin: false, apiKey: key, session: false, via: "api-key" };
+    }
+  }
+  if (rt.app.verifySession(cookies.arag_session))
+    return { admin: false, apiKey: null, session: true, via: "session" };
+  return { admin: false, apiKey: null, session: false, via: "anonymous" };
+}
+
+function enforceAuth(rt: Runtime, auth: AuthInfo, mode: RouteAuth): void {
+  if (mode === "none") return;
+  if (mode === "admin") {
+    if (!rt.env.adminToken)
+      throw forbidden("Admin access is disabled: set ADMIN_TOKEN to enable the admin panel.");
+    if (!auth.admin) throw unauthorized("Admin token required");
+    return;
+  }
+  if (rt.env.apiKeys.length === 0) return; // open API
+  if (auth.admin || auth.apiKey || auth.session) return;
+  throw unauthorized("API key required (X-API-Key or Authorization: Bearer)");
+}
+
+// ───────────────────────────── rate limit ─────────────────────────────
+
+interface Bucket {
+  tokens: number;
+  ts: number;
+}
+const BUCKETS_KEY = "__callAnalysisBuckets__";
+type GlobalWithBuckets = typeof globalThis & { [BUCKETS_KEY]?: Map<string, Bucket> };
+
+function buckets(): Map<string, Bucket> {
+  const g = globalThis as GlobalWithBuckets;
+  if (!g[BUCKETS_KEY]) g[BUCKETS_KEY] = new Map();
+  return g[BUCKETS_KEY];
+}
+
+/** Per-IP (or per-key) token bucket; returns seconds to wait, or null when allowed. */
+export function rateLimit(
+  key: string,
+  rps: number,
+  burst: number,
+  now = Date.now(),
+  store = buckets(),
+): number | null {
+  if (rps <= 0) return null;
+  const cap = Math.max(1, burst);
+  let b = store.get(key);
+  if (!b) {
+    b = { tokens: cap, ts: now };
+    store.set(key, b);
+    if (store.size > 10_000) {
+      const oldest = store.keys().next().value;
+      if (oldest !== undefined) store.delete(oldest);
+    }
+  }
+  b.tokens = Math.min(cap, b.tokens + ((now - b.ts) / 1000) * rps);
+  b.ts = now;
+  if (b.tokens < 1) return Math.ceil((1 - b.tokens) / rps);
+  b.tokens -= 1;
+  return null;
+}
+
+/**
+ * Client IP for rate limiting. Proxy headers are trusted only per `TRUST_PROXY` (platform
+ * semantics): "fly" (default) trusts `Fly-Client-IP`, which Fly's edge sets and a client behind it
+ * cannot spoof; "xff" trusts the first `X-Forwarded-For` entry; "none" trusts nothing. Blindly
+ * trusting `X-Forwarded-For` would let a caller rotate it per request and defeat the limiter.
+ *
+ * Next.js does not expose the socket address to a route handler, so with `TRUST_PROXY=none` every
+ * caller shares one bucket — which is the safe direction to fail.
+ */
+export function clientIp(req: Request, trustProxy: Runtime["env"]["trustProxy"] = "fly"): string {
+  if (trustProxy === "fly") {
+    const fly = req.headers.get("fly-client-ip");
+    if (fly) return fly.trim();
+  } else if (trustProxy === "xff") {
+    const xff = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    if (xff) return xff;
+  }
+  return "unknown";
+}
+
+// ───────────────────────────── responses ─────────────────────────────
+
+function applyHeaders(res: Response, requestId: string, cookies: string[]): Response {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+  res.headers.set("X-Request-Id", requestId);
+  for (const c of cookies) res.headers.append("Set-Cookie", c);
+  return res;
+}
+
+export function problemResponse(err: HttpError, instance: string, requestId: string): Response {
+  return new Response(JSON.stringify(err.toProblem(instance, requestId)), {
+    status: err.status,
+    headers: {
+      "Content-Type": "application/problem+json; charset=utf-8",
+      "Cache-Control": "no-store",
+      ...err.headers,
+    },
+  });
+}
+
+export function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers },
+  });
+}
+
+/**
+ * Map non-HttpError exceptions to problems. `AragError` never leaks the upstream URL, token or
+ * body to a client; the request id links the response to the server log.
+ */
+export function toHttpError(err: unknown, production: boolean): HttpError {
+  if (err instanceof HttpError) return err;
+  if (err instanceof AragError) {
+    if (err.kind === "timeout")
+      return new HttpError(504, "Upstream timeout", "ARAG did not respond in time", {
+        type: "https://arag.dev/problems/upstream-timeout",
+      });
+    if (err.kind === "http" && err.status === 401)
+      return new HttpError(502, "Upstream error", "ARAG rejected the service-account token.", {
+        type: "https://arag.dev/problems/upstream",
+      });
+    if (err.kind === "http" && err.status === 404) return notFound("Upstream resource");
+    return new HttpError(502, "Upstream error", "The Knowledge Box request failed.", {
+      type: "https://arag.dev/problems/upstream",
+    });
+  }
+  return internalError(production ? "Internal server error" : ((err as Error)?.message ?? "Unknown error"));
+}
+
+// ───────────────────────────── validation ─────────────────────────────
+
+function groupQuery(url: URL, querySchema: Record<string, unknown> | undefined): Record<string, unknown> {
+  const props = ((querySchema?.properties ?? {}) as Record<string, Record<string, unknown>>) ?? {};
+  const grouped = new Map<string, string[]>();
+  for (const [rawKey, value] of url.searchParams) {
+    const key = rawKey.endsWith("[]") ? rawKey.slice(0, -2) : rawKey;
+    const arr = grouped.get(key) ?? [];
+    arr.push(value);
+    grouped.set(key, arr);
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, vals] of grouped) out[k] = props[k]?.type === "array" ? vals : vals[vals.length - 1];
+  return out;
+}
+
+// ───────────────────────────── the adapter ─────────────────────────────
+
+type NextRouteArgs = { params: Promise<Record<string, string | string[]>> };
+
+/**
+ * Wrap a handler with the full request pipeline. Returns the function Next expects to export from
+ * a `route.ts` module.
+ */
+export function route(spec: RouteSpec, handler: Handler) {
+  return async (req: Request, args?: NextRouteArgs): Promise<Response> => {
+    const requestId = (req.headers.get("x-request-id") ?? "").slice(0, 64) || randomUUID();
+    const url = new URL(req.url);
+    const cookies: string[] = [];
+    let rt: Runtime | null = null;
+    const started = Date.now();
+    let status = 500;
+    try {
+      rt = await getRuntime();
+      const log = rt.log.child({ requestId });
+      rt.usage.requests++;
+      const routeKey = `${spec.method.toUpperCase()} ${spec.path}`;
+      rt.usage.byRoute[routeKey] = (rt.usage.byRoute[routeKey] ?? 0) + 1;
+
+      const auth = authenticate(rt, req);
+      enforceAuth(rt, auth, spec.auth ?? "none");
+
+      if (!spec.noRateLimit && !auth.admin) {
+        const key = auth.apiKey ? `k:${auth.apiKey}` : `ip:${clientIp(req, rt.env.trustProxy)}`;
+        const retry = rateLimit(key, rt.env.rateLimitRps, rt.env.rateLimitBurst);
+        if (retry !== null) throw tooManyRequests(retry);
+      }
+
+      const schemas = operationSchemas(openapi, spec.path, spec.method);
+
+      // path params
+      const rawParams = (await args?.params) ?? {};
+      const params: Record<string, string> = {};
+      for (const [k, v] of Object.entries(rawParams)) params[k] = Array.isArray(v) ? (v[0] ?? "") : v;
+      if (schemas.params) {
+        const r = validate(params, schemas.params as Record<string, unknown>, {
+          root: openapi,
+          coerce: true,
+        });
+        if (r.errors.length) throw validationError(r.errors, "path");
+      }
+
+      // query
+      let query: Record<string, unknown> = groupQuery(url, schemas.query as Record<string, unknown>);
+      if (schemas.query) {
+        const r = validate(query, schemas.query as Record<string, unknown>, {
+          root: openapi,
+          coerce: true,
+        });
+        if (r.errors.length) throw validationError(r.errors, "query");
+        query = r.value as Record<string, unknown>;
+      }
+
+      // body
+      let body: unknown;
+      let form: FormData | null = null;
+      const mode = spec.body ?? "auto";
+      const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
+      const declared = Number(req.headers.get("content-length") ?? 0);
+      const limit = spec.bodyLimit ?? rt.env.maxBodyBytes;
+      if (declared > limit)
+        throw new HttpError(413, "Payload too large", `Body exceeds ${limit} bytes`);
+      if (mode === "multipart") {
+        if (!contentType.startsWith("multipart/form-data"))
+          throw new HttpError(415, "Unsupported media type", "Expected multipart/form-data");
+        form = await req.formData();
+      } else if (mode === "json" || (mode === "auto" && req.method !== "GET")) {
+        const text = await req.text();
+        if (text.length > limit) throw new HttpError(413, "Payload too large", `Body exceeds ${limit} bytes`);
+        if (text.trim()) {
+          try {
+            body = JSON.parse(text);
+          } catch {
+            throw validationError([{ path: "", message: "body is not valid JSON" }], "body");
+          }
+        } else {
+          body = {};
+        }
+        if (schemas.body) {
+          const r = validate(body, schemas.body as Record<string, unknown>, { root: openapi });
+          if (r.errors.length) throw validationError(r.errors, "body");
+          body = r.value;
+        }
+      }
+
+      const ctx: ApiContext = {
+        req,
+        url,
+        requestId,
+        params,
+        query,
+        body,
+        form,
+        auth,
+        ip: clientIp(req, rt.env.trustProxy),
+        rt,
+        log,
+        cookies,
+        setCookie(name, value, opts = {}) {
+          const parts = [
+            `${name}=${encodeURIComponent(value)}`,
+            `Path=${opts.path ?? "/"}`,
+            `SameSite=${opts.sameSite ?? "Lax"}`,
+          ];
+          if (opts.httpOnly !== false) parts.push("HttpOnly");
+          if (opts.secure ?? rt!.env.nodeEnv === "production") parts.push("Secure");
+          if (opts.maxAge !== undefined) parts.push(`Max-Age=${opts.maxAge}`);
+          cookies.push(parts.join("; "));
+        },
+      };
+
+      const out = await handler(ctx);
+      const res = out instanceof Response ? out : jsonResponse(out ?? {});
+      status = res.status;
+      return applyHeaders(res, requestId, cookies);
+    } catch (err) {
+      const httpErr = toHttpError(err, rt?.env.nodeEnv === "production");
+      status = httpErr.status;
+      if (rt) {
+        rt.usage.errors++;
+        if (httpErr.status >= 500)
+          rt.log.error("http.error", {
+            requestId,
+            path: url.pathname,
+            message: (err as Error)?.message,
+          });
+      }
+      return applyHeaders(problemResponse(httpErr, url.pathname, requestId), requestId, cookies);
+    } finally {
+      if (rt) {
+        const level = status >= 500 ? "error" : status >= 400 ? "warn" : "info";
+        rt.log[level]("http", {
+          requestId,
+          method: req.method,
+          path: url.pathname,
+          status,
+          ms: Date.now() - started,
+        });
+      }
+    }
+  };
+}
+
+/** 204 helper. */
+export const noContent = (): Response => new Response(null, { status: 204 });

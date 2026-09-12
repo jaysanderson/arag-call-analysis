@@ -100,7 +100,7 @@ export function CallDetailView({ call }: { call: CallDetail }) {
               {call.mediaType === "video" ? (
                 <video
                   ref={mediaRef as any}
-                  src={`/api/calls/${call.id}/media?field=${call.fieldId}`}
+                  src={`/api/v1/calls/${call.id}/media?field=${encodeURIComponent(call.fieldId)}`}
                   controls
                   className="w-full bg-black aspect-video"
                   onTimeUpdate={(e) => setCurrentTime((e.target as HTMLVideoElement).currentTime)}
@@ -109,7 +109,7 @@ export function CallDetailView({ call }: { call: CallDetail }) {
                 <div className="p-4">
                   <audio
                     ref={mediaRef as any}
-                    src={`/api/calls/${call.id}/media?field=${call.fieldId}`}
+                    src={`/api/v1/calls/${call.id}/media?field=${encodeURIComponent(call.fieldId)}`}
                     controls
                     className="w-full"
                     onTimeUpdate={(e) => setCurrentTime((e.target as HTMLAudioElement).currentTime)}

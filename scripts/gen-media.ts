@@ -1,17 +1,28 @@
 /**
- * Render media for every scenario into scripts/output/ and write a manifest.
- * Idempotent-ish: re-rendering overwrites existing files.
+ * OPTIONAL: render the 24 demo scenarios into real audio/video files and write a manifest for
+ * `scripts/ingest.ts`.
+ *
+ *   node scripts/gen-media.ts [--out scripts/output] [--limit 4] [--transcripts-only]
+ *
+ * Audio/video rendering uses macOS `say` plus `ffmpeg` and therefore only works on a Mac with
+ * ffmpeg installed. Everywhere else (and with `--transcripts-only`) the script still writes a
+ * complete manifest with `transcript` bodies, which `scripts/ingest.ts` ingests as text calls —
+ * the product never depends on rendered media.
  */
+import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { renderCall, transcriptText } from "./lib/media.js";
-import { SCENARIOS, iconFor, mediaTypeFor, type Scenario } from "./config/scenarios.js";
+import { join } from "node:path";
+import {
+  estimatedDurationSec,
+  iconFor,
+  mediaTypeFor,
+  SCENARIOS,
+  type Scenario,
+  transcriptOf,
+} from "../lib/domain/scenarios.ts";
+import { renderCall } from "./lib/media.ts";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const OUT = join(here, "output");
-
-export type ManifestEntry = {
+export interface ManifestEntry {
   slug: string;
   title: string;
   format: Scenario["format"];
@@ -22,36 +33,65 @@ export type ManifestEntry = {
   memberId: string;
   queue: string;
   durationSec: number;
-  filePath?: string; // media file (mp3/mp4)
-  transcript?: string; // text body (transcript format)
-};
+  filePath?: string;
+  transcript?: string;
+}
 
-async function main() {
-  mkdirSync(OUT, { recursive: true });
+function arg(name: string): string | undefined {
+  const withEq = process.argv.find((a) => a.startsWith(`--${name}=`));
+  if (withEq) return withEq.slice(name.length + 3);
+  const i = process.argv.indexOf(`--${name}`);
+  const next = i !== -1 ? process.argv[i + 1] : undefined;
+  return next && !next.startsWith("--") ? next : undefined;
+}
+
+function canRenderMedia(): boolean {
+  try {
+    execFileSync("say", ["-v", "?"], { stdio: "ignore" });
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function main(): void {
+  const out = arg("out") ?? join("scripts", "output");
+  const limit = Number(arg("limit") ?? SCENARIOS.length);
+  const transcriptsOnly = process.argv.includes("--transcripts-only");
+  const media = !transcriptsOnly && canRenderMedia();
+  if (!media && !transcriptsOnly) {
+    console.log("`say` or `ffmpeg` not available — writing a transcript-only manifest (this is fine).");
+  }
+  mkdirSync(out, { recursive: true });
+
   const manifest: ManifestEntry[] = [];
-  let i = 0;
-  for (const sc of SCENARIOS) {
-    i++;
-    const r = renderCall({ id: sc.slug, title: sc.title, turns: sc.turns }, OUT, sc.format);
-    const entry: ManifestEntry = {
+  const list = SCENARIOS.slice(0, limit);
+  for (const [i, sc] of list.entries()) {
+    const rendered =
+      media && sc.format !== "transcript"
+        ? renderCall({ id: sc.slug, title: sc.title, turns: sc.turns }, out, sc.format)
+        : null;
+    const filePath = rendered?.audioPath ?? rendered?.videoPath;
+    manifest.push({
       slug: sc.slug,
       title: sc.title,
-      format: sc.format,
-      icon: iconFor(sc.format),
-      mediaType: mediaTypeFor(sc.format),
+      format: filePath ? sc.format : "transcript",
+      icon: filePath ? iconFor(sc.format) : "text/plain",
+      mediaType: filePath ? mediaTypeFor(sc.format) : "transcript",
       createdISO: sc.createdISO,
       agentName: sc.agentName,
       memberId: sc.memberId,
       queue: sc.queue,
-      durationSec: r.duration,
-      filePath: r.audioPath ?? r.videoPath,
-      transcript: sc.format === "transcript" ? transcriptText({ id: sc.slug, title: sc.title, turns: sc.turns }) : undefined,
-    };
-    manifest.push(entry);
-    console.log(`  [${i}/${SCENARIOS.length}] ${sc.format.padEnd(10)} ${sc.slug} (${r.duration}s)`);
+      durationSec: rendered?.duration ?? estimatedDurationSec(sc),
+      filePath,
+      transcript: filePath ? undefined : transcriptOf(sc),
+    });
+    console.log(`  [${i + 1}/${list.length}] ${(filePath ? sc.format : "transcript").padEnd(10)} ${sc.slug}`);
   }
-  const manifestPath = join(OUT, "manifest.json");
+  const manifestPath = join(out, "manifest.json");
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   console.log(`\nManifest written: ${manifestPath} (${manifest.length} calls)`);
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+
+main();

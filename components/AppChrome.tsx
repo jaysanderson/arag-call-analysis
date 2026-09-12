@@ -8,6 +8,7 @@ import { HowThisWorks } from "./HowThisWorks";
 const NAV = [
   { href: "/", label: "Dashboard" },
   { href: "/calls", label: "Calls" },
+  { href: "/admin", label: "Admin" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -86,9 +87,16 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
+          <a
+            href="/api/v1/docs"
+            className="ml-auto hidden rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-ink-950 sm:inline-block"
+          >
+            API
+          </a>
+
           <button
             onClick={() => setDrawerOpen(true)}
-            className="ml-auto grid h-9 w-9 place-items-center rounded-md border border-brand-200 text-ink-950 sm:hidden"
+            className="ml-auto grid h-9 w-9 place-items-center sm:ml-0 rounded-md border border-brand-200 text-ink-950 sm:hidden"
             aria-label="Open menu"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
