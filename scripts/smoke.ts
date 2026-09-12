@@ -7,9 +7,10 @@
  * rebuild the dashboard aggregation, and one scoped `/ask`. It never creates, updates or deletes
  * anything — the demo Knowledge Box holds the seeded calls the showcase depends on.
  */
-import { AragClient, assertAragEnv, loadDotEnv, readEnv } from "../vendor/arag-platform/src/index.ts";
+
 import { parseSummary } from "../lib/parse.ts";
 import { aggregate } from "../services/dashboard.ts";
+import { AragClient, assertAragEnv, loadDotEnv, readEnv } from "../vendor/arag-platform/src/index.ts";
 
 function fail(msg: string): never {
   console.error(`✗ ${msg}`);
@@ -35,7 +36,9 @@ async function main(): Promise<void> {
 
   const health = await arag.health();
   if (!health.ok) fail(`health check failed: ${health.error}`);
-  console.log(`  ✓ connection ok — ${health.resources} resources, model ${health.generativeModel ?? "default"} (${health.ms} ms)`);
+  console.log(
+    `  ✓ connection ok — ${health.resources} resources, model ${health.generativeModel ?? "default"} (${health.ms} ms)`,
+  );
 
   const ids = await arag.listResourceIds({ max: 200 });
   if (ids.length === 0) fail("catalog is empty");

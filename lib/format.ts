@@ -1,5 +1,5 @@
 export function fmtTime(seconds: number): string {
-  if (!isFinite(seconds) || seconds < 0) seconds = 0;
+  if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
@@ -19,15 +19,26 @@ const DATE_TZ = "UTC";
 export function fmtDate(iso?: string): string {
   if (!iso) return "n/a";
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return "n/a";
-  return d.toLocaleDateString(DATE_LOCALE, { year: "numeric", month: "short", day: "numeric", timeZone: DATE_TZ });
+  if (Number.isNaN(d.getTime())) return "n/a";
+  return d.toLocaleDateString(DATE_LOCALE, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: DATE_TZ,
+  });
 }
 
 export function fmtDateTime(iso?: string): string {
   if (!iso) return "n/a";
   const d = new Date(iso);
-  if (isNaN(d.getTime())) return "n/a";
-  return d.toLocaleString(DATE_LOCALE, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: DATE_TZ });
+  if (Number.isNaN(d.getTime())) return "n/a";
+  return d.toLocaleString(DATE_LOCALE, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: DATE_TZ,
+  });
 }
 
 export function pct(n: number, digits = 0): string {

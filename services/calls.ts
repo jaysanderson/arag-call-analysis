@@ -5,11 +5,12 @@
  * demo UI and the public API can never drift apart. Every read is cached (catalog ids + per-call
  * summaries, TTL from `CALLS_CACHE_TTL_MS`, default 60 s) and every write invalidates.
  */
-import { AragError, notFound, withRetry } from "@/vendor/arag-platform/src/index.ts";
-import type { Resource } from "@/vendor/arag-platform/src/arag/types.ts";
-import type { Runtime } from "@/lib/runtime";
+
 import { parseDetail, parseSummary } from "@/lib/parse";
+import type { Runtime } from "@/lib/runtime";
 import type { CallDetail, CallSummary } from "@/lib/types";
+import type { Resource } from "@/vendor/arag-platform/src/arag/types.ts";
+import { AragError, notFound, withRetry } from "@/vendor/arag-platform/src/index.ts";
 import { cacheKeys } from "./cache";
 
 /**
@@ -49,9 +50,7 @@ export async function catalogIds(rt: Runtime): Promise<string[]> {
 /** Semantic + keyword search across transcripts; returns matching resource ids (cached). */
 export async function searchIds(rt: Runtime, query: string): Promise<string[]> {
   return rt.cache.getOrLoad(cacheKeys.find(query), async () => {
-    const r = await withRetry(() =>
-      rt.arag.find({ query, features: ["keyword", "semantic"], top_k: 60 }),
-    );
+    const r = await withRetry(() => rt.arag.find({ query, features: ["keyword", "semantic"], top_k: 60 }));
     return Object.keys(r.resources ?? {});
   });
 }

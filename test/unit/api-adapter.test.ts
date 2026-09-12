@@ -57,7 +57,9 @@ describe("clientIp", () => {
   });
 
   it("trusts nothing with TRUST_PROXY=none", () => {
-    expect(clientIp(req({ "fly-client-ip": "1.2.3.4", "x-forwarded-for": "9.9.9.9" }), "none")).toBe("unknown");
+    expect(clientIp(req({ "fly-client-ip": "1.2.3.4", "x-forwarded-for": "9.9.9.9" }), "none")).toBe(
+      "unknown",
+    );
   });
 });
 

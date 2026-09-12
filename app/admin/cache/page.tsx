@@ -1,7 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { adminFetch, AdminShell, KeyValues, Panel, StateBlock, useAdminData } from "@/components/admin/AdminShell";
+import {
+  AdminShell,
+  adminFetch,
+  KeyValues,
+  Panel,
+  StateBlock,
+  useAdminData,
+} from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui";
 
 type CacheView = {

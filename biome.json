@@ -25,9 +25,22 @@
     "rules": {
       "recommended": true,
       "style": { "noNonNullAssertion": "off", "useTemplate": "off" },
+      "performance": {
+        "noImgElement": "off"
+      },
+      "nursery": {
+        "useUniqueElementIds": "off"
+      },
       "complexity": { "noForEach": "off" },
-      "correctness": { "useUniqueElementIds": "off" },
-      "a11y": { "useKeyWithClickEvents": "off", "noStaticElementInteractions": "off", "useMediaCaption": "off" }
+      "suspicious": {
+        "noArrayIndexKey": "off",
+        "noAssignInExpressions": "off"
+      },
+      "a11y": {
+        "useKeyWithClickEvents": "off",
+        "noStaticElementInteractions": "off",
+        "useMediaCaption": "off"
+      }
     }
   },
   "javascript": {

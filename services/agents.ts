@@ -5,9 +5,10 @@
  * (resource labeler, paragraph labeler, call-insights ask) must be started one at a time with a
  * wait in between — which is why provisioning is a job, not a request/response call.
  */
-import type { TaskInfo } from "@/vendor/arag-platform/src/arag/types.ts";
-import type { Runtime } from "@/lib/runtime";
+
 import { AGENTS, type AgentDef } from "@/lib/domain/taxonomy";
+import type { Runtime } from "@/lib/runtime";
+import type { TaskInfo } from "@/vendor/arag-platform/src/arag/types.ts";
 
 export interface AgentStatus {
   key: string;

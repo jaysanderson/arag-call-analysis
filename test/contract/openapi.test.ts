@@ -9,8 +9,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { testing } from "@/vendor/arag-platform/src/index.ts";
 import { API_ROUTES, openapi } from "@/lib/openapi";
+import { APP_VERSION } from "@/lib/version";
+import { testing } from "@/vendor/arag-platform/src/index.ts";
 import { makeClient, startAppServer, type TestClient, type TestServer } from "../helpers/server";
 
 const ROOT = resolve(import.meta.dirname, "..", "..");
@@ -64,6 +65,12 @@ describe("spec lint", () => {
     expect(lintSpec(openapi)).toEqual([]);
   });
 
+  it("keeps lib/version.ts in step with package.json (see DECISIONS D-CA-11)", () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string };
+    expect(APP_VERSION).toBe(pkg.version);
+    expect((openapi.info as { version: string }).version).toBe(pkg.version);
+  });
+
   it("declares OpenAPI 3.1 with security schemes and the Problem schema", () => {
     expect(openapi.openapi).toBe("3.1.0");
     const components = openapi.components as Record<string, Record<string, unknown>>;
@@ -98,7 +105,8 @@ describe("spec ↔ implementation", () => {
     const undocumented: string[] = [];
     for (const [p, ops] of Object.entries(paths)) {
       for (const m of Object.keys(ops)) {
-        if (!discovered.some((r) => r.path === p && r.method === m)) undocumented.push(`${m.toUpperCase()} ${p}`);
+        if (!discovered.some((r) => r.path === p && r.method === m))
+          undocumented.push(`${m.toUpperCase()} ${p}`);
       }
     }
     expect(undocumented).toEqual([]);
@@ -113,7 +121,9 @@ describe("spec ↔ implementation", () => {
     const declared = new Set(API_ROUTES.map((r) => `${r.method} ${r.path}`));
     for (const r of discovered) {
       if (NOT_IN_SPEC.has(r.path)) continue;
-      expect(declared.has(`${r.method} ${r.path}`), `${r.method} ${r.path} declared in API_ROUTES`).toBe(true);
+      expect(declared.has(`${r.method} ${r.path}`), `${r.method} ${r.path} declared in API_ROUTES`).toBe(
+        true,
+      );
     }
   });
 
@@ -200,9 +210,9 @@ describe("response validation (checkResponse)", () => {
     expect(checkResponse(openapi, "/api/v1/admin/provision", "post", 202, provision.json)).toEqual([]);
 
     const invalidate = await api.post("/api/v1/admin/cache/invalidate", {}, { admin: true });
-    expect(
-      checkResponse(openapi, "/api/v1/admin/cache/invalidate", "post", 200, invalidate.json),
-    ).toEqual([]);
+    expect(checkResponse(openapi, "/api/v1/admin/cache/invalidate", "post", 200, invalidate.json)).toEqual(
+      [],
+    );
   });
 
   it("problem documents validate against the Problem schema", async () => {

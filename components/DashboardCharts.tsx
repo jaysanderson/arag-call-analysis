@@ -7,9 +7,23 @@ import { Card, SectionTitle } from "./ui";
 type Datum = { name: string; value: number };
 type HrefFor = (name: string) => string | null;
 
-const BARS = ["#2B2BB2", "#00B563", "#5777EA", "#FFD000", "#4B4BF7", "#00216B", "#90EF8E", "#8892b0", "#00D364", "#1c3f95"];
+const BARS = [
+  "#2B2BB2",
+  "#00B563",
+  "#5777EA",
+  "#FFD000",
+  "#4B4BF7",
+  "#00216B",
+  "#90EF8E",
+  "#8892b0",
+  "#00D364",
+  "#1c3f95",
+];
 const SENTIMENT_COLORS: Record<string, string> = {
-  Positive: "#00B563", Neutral: "#8892b0", Negative: "#e2536b", Mixed: "#e0ab00",
+  Positive: "#00B563",
+  Neutral: "#8892b0",
+  Negative: "#e2536b",
+  Mixed: "#e0ab00",
 };
 
 function clickable(href: string | null, key: string, className: string, children: React.ReactNode) {
@@ -20,7 +34,11 @@ function clickable(href: string | null, key: string, className: string, children
       </Link>
     );
   }
-  return <div key={key} className={className}>{children}</div>;
+  return (
+    <div key={key} className={className}>
+      {children}
+    </div>
+  );
 }
 
 function HBar({ data, hrefFor }: { data: Datum[]; hrefFor?: HrefFor }) {
@@ -34,7 +52,12 @@ function HBar({ data, hrefFor }: { data: Datum[]; hrefFor?: HrefFor }) {
           d.name,
           "flex items-center gap-2 group",
           <>
-            <div className="w-32 shrink-0 truncate text-right text-xs text-slate-600 group-hover:text-brand-600" title={d.name}>{d.name}</div>
+            <div
+              className="w-32 shrink-0 truncate text-right text-xs text-slate-600 group-hover:text-brand-600"
+              title={d.name}
+            >
+              {d.name}
+            </div>
             <div className="h-5 flex-1 rounded bg-slate-100">
               <div
                 className="flex h-5 items-center justify-end rounded px-1.5 text-[10px] font-semibold text-white transition-[filter] group-hover:brightness-110"
@@ -54,21 +77,30 @@ function Donut({ data, hrefFor }: { data: Datum[]; hrefFor?: HrefFor }) {
   const router = useRouter();
   if (!data.length) return <Empty />;
   const total = data.reduce((a, b) => a + b.value, 0) || 1;
-  const R = 60, C = 2 * Math.PI * R;
+  const R = 60,
+    C = 2 * Math.PI * R;
   let offset = 0;
   return (
     <div className="flex items-center gap-5">
-      <svg viewBox="0 0 160 160" className="h-40 w-40 -rotate-90">
+      <svg aria-hidden="true" viewBox="0 0 160 160" className="h-40 w-40 -rotate-90">
         {data.map((d, i) => {
           const frac = d.value / total;
           const dash = frac * C;
           const href = hrefFor?.(d.name) ?? null;
           const seg = (
-            <circle key={d.name} cx="80" cy="80" r={R} fill="none"
+            <circle
+              key={d.name}
+              cx="80"
+              cy="80"
+              r={R}
+              fill="none"
               stroke={SENTIMENT_COLORS[d.name] ?? BARS[i % BARS.length]}
-              strokeWidth="24" strokeDasharray={`${dash} ${C - dash}`} strokeDashoffset={-offset}
+              strokeWidth="24"
+              strokeDasharray={`${dash} ${C - dash}`}
+              strokeDashoffset={-offset}
               onClick={href ? () => router.push(href) : undefined}
-              className={href ? "cursor-pointer transition-opacity hover:opacity-80" : ""}>
+              className={href ? "cursor-pointer transition-opacity hover:opacity-80" : ""}
+            >
               {href && <title>{`${d.name} (${d.value}) - view calls`}</title>}
             </circle>
           );
@@ -84,7 +116,10 @@ function Donut({ data, hrefFor }: { data: Datum[]; hrefFor?: HrefFor }) {
             d.name,
             "flex items-center gap-1.5 text-slate-600 hover:text-brand-600",
             <>
-              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: SENTIMENT_COLORS[d.name] ?? BARS[i % BARS.length] }} />
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ background: SENTIMENT_COLORS[d.name] ?? BARS[i % BARS.length] }}
+              />
               {d.name} <span className="text-slate-400">({d.value})</span>
             </>,
           ),
@@ -98,11 +133,26 @@ function Empty() {
   return <div className="flex h-24 items-center justify-center text-sm text-slate-400">No data yet</div>;
 }
 
-function Funnel({ label, value, max, color, href }: { label: string; value: number; max: number; color: string; href: string | null }) {
+function Funnel({
+  label,
+  value,
+  max,
+  color,
+  href,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color: string;
+  href: string | null;
+}) {
   const h = Math.round((value / max) * 110) + 10;
   const inner = (
     <>
-      <div className="w-16 rounded-t-md transition-[filter] group-hover:brightness-110" style={{ height: h, background: color }} />
+      <div
+        className="w-16 rounded-t-md transition-[filter] group-hover:brightness-110"
+        style={{ height: h, background: color }}
+      />
       <div className="text-sm font-semibold text-slate-800">{value}</div>
       <div className="text-xs text-slate-500">{label}</div>
     </>
@@ -111,12 +161,22 @@ function Funnel({ label, value, max, color, href }: { label: string; value: numb
 }
 
 export function DashboardCharts({
-  byReason, bySentiment, byOutcome, byLob, complaintsByCategory, crossSell,
+  byReason,
+  bySentiment,
+  byOutcome,
+  byLob,
+  complaintsByCategory,
+  crossSell,
 }: {
-  byReason: Datum[]; bySentiment: Datum[]; byOutcome: Datum[]; byLob: Datum[];
-  complaintsByCategory: Datum[]; crossSell: { offered: number; accepted: number };
+  byReason: Datum[];
+  bySentiment: Datum[];
+  byOutcome: Datum[];
+  byLob: Datum[];
+  complaintsByCategory: Datum[];
+  crossSell: { offered: number; accepted: number };
 }) {
-  const link = (labelset: string, label: string) => `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}`;
+  const link = (labelset: string, label: string) =>
+    `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}`;
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <Card className="p-4">
@@ -143,8 +203,20 @@ export function DashboardCharts({
       <Card className="p-4">
         <SectionTitle>Cross-sell funnel</SectionTitle>
         <div className="flex items-end gap-6 px-2 pt-4">
-          <Funnel label="Offered" value={crossSell.offered} max={Math.max(crossSell.offered, 1)} color="#2B2BB2" href={link("disposition_flags", "Cross-sell Offered")} />
-          <Funnel label="Accepted" value={crossSell.accepted} max={Math.max(crossSell.offered, 1)} color="#00B563" href={link("disposition_flags", "Cross-sell Accepted")} />
+          <Funnel
+            label="Offered"
+            value={crossSell.offered}
+            max={Math.max(crossSell.offered, 1)}
+            color="#2B2BB2"
+            href={link("disposition_flags", "Cross-sell Offered")}
+          />
+          <Funnel
+            label="Accepted"
+            value={crossSell.accepted}
+            max={Math.max(crossSell.offered, 1)}
+            color="#00B563"
+            href={link("disposition_flags", "Cross-sell Accepted")}
+          />
           <div className="ml-auto text-right">
             <div className="font-display text-3xl font-semibold text-ink-950">
               {crossSell.offered ? Math.round((crossSell.accepted / crossSell.offered) * 100) : 0}%

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
+import { CallDetailView } from "@/components/CallDetailView";
 import { getRuntime } from "@/lib/runtime";
 import { tryGetCall } from "@/services/calls";
-import { CallDetailView } from "@/components/CallDetailView";
 
 export const dynamic = "force-dynamic";
 

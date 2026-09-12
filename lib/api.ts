@@ -11,6 +11,8 @@
  * is identical to every other ARAG product.
  */
 import { randomUUID } from "node:crypto";
+import { openapi, type RouteAuth } from "@/lib/openapi";
+import { getRuntime, type Runtime } from "@/lib/runtime";
 import {
   AragError,
   constantTimeEqual,
@@ -24,8 +26,6 @@ import {
   validate,
   validationError,
 } from "@/vendor/arag-platform/src/index.ts";
-import { openapi, type RouteAuth } from "@/lib/openapi";
-import { getRuntime, type Runtime } from "@/lib/runtime";
 
 export interface AuthInfo {
   admin: boolean;
@@ -111,7 +111,10 @@ export function authenticate(rt: Runtime, req: Request): AuthInfo {
     return { admin: true, apiKey: null, session: true, via: "admin-token" };
   }
   for (const key of rt.env.apiKeys) {
-    if ((bearer && constantTimeEqual(bearer, key)) || (apiKeyHeader && constantTimeEqual(apiKeyHeader, key))) {
+    if (
+      (bearer && constantTimeEqual(bearer, key)) ||
+      (apiKeyHeader && constantTimeEqual(apiKeyHeader, key))
+    ) {
       return { admin: false, apiKey: key, session: false, via: "api-key" };
     }
   }
@@ -324,8 +327,7 @@ export function route(spec: RouteSpec, handler: Handler) {
       const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
       const declared = Number(req.headers.get("content-length") ?? 0);
       const limit = spec.bodyLimit ?? rt.env.maxBodyBytes;
-      if (declared > limit)
-        throw new HttpError(413, "Payload too large", `Body exceeds ${limit} bytes`);
+      if (declared > limit) throw new HttpError(413, "Payload too large", `Body exceeds ${limit} bytes`);
       if (mode === "multipart") {
         if (!contentType.startsWith("multipart/form-data"))
           throw new HttpError(415, "Unsupported media type", "Expected multipart/form-data");

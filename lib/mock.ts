@@ -8,13 +8,14 @@
  * `call_metrics` — the dashboard, rails, filters and detail page all have real data with no
  * credentials.
  */
-import type { Logger, MockOptions } from "@/vendor/arag-platform/src/index.ts";
-import { AragClient, startMockArag } from "@/vendor/arag-platform/src/index.ts";
+
+import { estimatedDurationSec, iconFor, mediaTypeFor, SCENARIOS, transcriptOf } from "@/lib/domain/scenarios";
+import { AGENTS, ALL_LABELSETS } from "@/lib/domain/taxonomy";
+import type { CallsEnv } from "@/lib/runtime";
 // `SAMPLE_CALL_TRANSCRIPT` is not re-exported from the platform index (platform gap PG-1).
 import { SAMPLE_CALL_TRANSCRIPT } from "@/vendor/arag-platform/src/arag/mock/fixtures.ts";
-import { AGENTS, ALL_LABELSETS } from "@/lib/domain/taxonomy";
-import { estimatedDurationSec, iconFor, mediaTypeFor, SCENARIOS, transcriptOf } from "@/lib/domain/scenarios";
-import type { CallsEnv } from "@/lib/runtime";
+import type { Logger, MockOptions } from "@/vendor/arag-platform/src/index.ts";
+import { AragClient, startMockArag } from "@/vendor/arag-platform/src/index.ts";
 
 export interface DemoMock {
   url: string;

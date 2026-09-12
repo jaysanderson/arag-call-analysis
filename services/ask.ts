@@ -11,10 +11,11 @@
  * Best-effort and time-capped: the answer is never held hostage by the scorer, and a scoring
  * failure degrades silently to the client's citation-coverage floor.
  */
-import { NdjsonSplitter, normaliseItem, toNdjsonLine } from "@/vendor/arag-platform/src/index.ts";
-import type { AskStreamItem, RetrievalResults } from "@/vendor/arag-platform/src/arag/types.ts";
+
 import { isDeclinedAnswer } from "@/lib/confidence";
 import type { Runtime } from "@/lib/runtime";
+import type { AskStreamItem, RetrievalResults } from "@/vendor/arag-platform/src/arag/types.ts";
+import { NdjsonSplitter, normaliseItem, toNdjsonLine } from "@/vendor/arag-platform/src/index.ts";
 
 export const REMI_TIMEOUT_MS = 12_000;
 

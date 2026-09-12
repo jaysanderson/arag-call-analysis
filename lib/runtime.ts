@@ -8,17 +8,18 @@
  * Route handlers AND server components both go through `getRuntime()`; there is no second code
  * path that talks to ARAG.
  */
+
+import { TtlCache } from "@/services/cache";
 import {
   App,
   AragClient,
   JobManager,
-  loadDotEnv,
   Logger,
+  loadDotEnv,
   type PlatformEnv,
   readEnv,
   Store,
 } from "@/vendor/arag-platform/src/index.ts";
-import { TtlCache } from "@/services/cache";
 
 export type CallsEnv = PlatformEnv & {
   /** Cache TTL for catalog ids and per-call summaries (ms). */
@@ -144,7 +145,12 @@ async function buildRuntime(): Promise<Runtime> {
       usage.aragCalls++;
       usage.aragMs += info.ms;
       if (info.error || (info.status ?? 200) >= 400) usage.aragErrors++;
-      log.debug("arag", { method: info.method, path: info.path, status: info.status, ms: Math.round(info.ms) });
+      log.debug("arag", {
+        method: info.method,
+        path: info.path,
+        status: info.status,
+        ms: Math.round(info.ms),
+      });
     },
   });
 

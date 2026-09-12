@@ -45,9 +45,12 @@ describe("TtlCache", () => {
 
   it("de-duplicates concurrent loads for the same key (single flight)", async () => {
     let resolveLoad: (v: string) => void = () => {};
-    const load = vi.fn(() => new Promise<string>((r) => {
-      resolveLoad = r;
-    }));
+    const load = vi.fn(
+      () =>
+        new Promise<string>((r) => {
+          resolveLoad = r;
+        }),
+    );
     const a = cache.getOrLoad("k", load);
     const b = cache.getOrLoad("k", load);
     resolveLoad("shared");

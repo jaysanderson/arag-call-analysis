@@ -39,11 +39,13 @@ export default function AdminLoginPage() {
       <Card className="w-full p-6">
         <h1 className="font-display text-xl font-semibold text-ink-950">Admin sign in</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Enter the <code className="font-mono text-xs">ADMIN_TOKEN</code> configured for this
-          deployment.
+          Enter the <code className="font-mono text-xs">ADMIN_TOKEN</code> configured for this deployment.
         </p>
         <form onSubmit={submit} className="mt-5 space-y-3">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="admin-token">
+          <label
+            className="block text-xs font-semibold uppercase tracking-wide text-slate-500"
+            htmlFor="admin-token"
+          >
             Admin token
           </label>
           <input
@@ -57,7 +59,11 @@ export default function AdminLoginPage() {
             placeholder="••••••••••••"
           />
           {error && (
-            <div role="alert" className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger-fg">
+            <div
+              data-testid="login-error"
+              role="alert"
+              className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger-fg"
+            >
               {error}
             </div>
           )}

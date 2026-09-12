@@ -58,27 +58,23 @@ export async function startAppServer(extraEnv: Record<string, string> = {}): Pro
   const port = await freePort();
   const dataDir = resolve(ROOT, `data/test-${port}`);
   rmSync(dataDir, { recursive: true, force: true });
-  const child = spawn(
-    process.execPath,
-    [NEXT_BIN, "start", "-p", String(port)],
-    {
-      cwd: ROOT,
-      env: {
-        ...process.env,
-        NODE_ENV: "production",
-        ARAG_MOCK: "1",
-        ADMIN_TOKEN,
-        DATA_DIR: dataDir,
-        LOG_LEVEL: "warn",
-        RATE_LIMIT_RPS: "200",
-        RATE_LIMIT_BURST: "1000",
-        CALLS_MOCK_SEED: "6",
-        PORT: String(port),
-        ...extraEnv,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
+  const child = spawn(process.execPath, [NEXT_BIN, "start", "-p", String(port)], {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      ARAG_MOCK: "1",
+      ADMIN_TOKEN,
+      DATA_DIR: dataDir,
+      LOG_LEVEL: "warn",
+      RATE_LIMIT_RPS: "200",
+      RATE_LIMIT_BURST: "1000",
+      CALLS_MOCK_SEED: "6",
+      PORT: String(port),
+      ...extraEnv,
     },
-  );
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   let out = "";
   child.stdout?.on("data", (b) => {
     out += String(b);

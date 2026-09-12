@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 /**
  * Minimal, dependency-free markdown renderer for ARAG-generated answer text
@@ -141,7 +141,13 @@ function inline(text: string, keyBase: string, onCite?: (n: number) => void): Re
       const label = tok.slice(1, close);
       const href = tok.slice(close + 2, -1);
       nodes.push(
-        <a key={`${keyBase}-${idx++}`} href={href} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+        <a
+          key={`${keyBase}-${idx++}`}
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2"
+        >
           {label}
         </a>,
       );

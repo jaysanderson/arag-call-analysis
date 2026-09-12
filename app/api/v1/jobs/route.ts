@@ -1,6 +1,6 @@
 import { route } from "@/lib/api";
-import type { JobStatus } from "@/vendor/arag-platform/src/index.ts";
 import { jobView } from "@/services/jobs";
+import type { JobStatus } from "@/vendor/arag-platform/src/index.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

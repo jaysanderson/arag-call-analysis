@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { colorFor, fmtDateTime, fmtTime, SENTIMENT_COLOR } from "@/lib/format";
 import type { CallDetail, CallParagraph } from "@/lib/types";
-import { Chip, Card, MediaBadge } from "./ui";
-import { fmtTime, fmtDateTime, colorFor, SENTIMENT_COLOR } from "@/lib/format";
 import { AnalysisPanel } from "./AnalysisPanel";
 import { ChatPanel, type Citation } from "./ChatPanel";
+import { Card, Chip, MediaBadge } from "./ui";
 
 export function CallDetailView({ call }: { call: CallDetail }) {
   const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
@@ -57,7 +57,10 @@ export function CallDetailView({ call }: { call: CallDetail }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-xs text-slate-500">
-            <a href="/calls" className="hover:underline">Calls</a> / {call.slug}
+            <a href="/calls" className="hover:underline">
+              Calls
+            </a>{" "}
+            / {call.slug}
           </div>
           <h1 className="mt-1 font-display text-2xl font-semibold text-ink-950">{call.title}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
@@ -99,7 +102,7 @@ export function CallDetailView({ call }: { call: CallDetail }) {
             <Card className="overflow-hidden">
               {call.mediaType === "video" ? (
                 <video
-                  ref={mediaRef as any}
+                  ref={mediaRef as React.RefObject<HTMLVideoElement>}
                   src={`/api/v1/calls/${call.id}/media?field=${encodeURIComponent(call.fieldId)}`}
                   controls
                   className="w-full bg-black aspect-video"
@@ -108,7 +111,7 @@ export function CallDetailView({ call }: { call: CallDetail }) {
               ) : (
                 <div className="p-4">
                   <audio
-                    ref={mediaRef as any}
+                    ref={mediaRef as React.RefObject<HTMLVideoElement>}
                     src={`/api/v1/calls/${call.id}/media?field=${encodeURIComponent(call.fieldId)}`}
                     controls
                     className="w-full"
@@ -183,7 +186,9 @@ function Transcript({
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-ink-950">Transcript</h2>
           <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">
-            {filtered.length === paragraphs.length ? `${paragraphs.length} segments` : `${filtered.length} of ${paragraphs.length}`}
+            {filtered.length === paragraphs.length
+              ? `${paragraphs.length} segments`
+              : `${filtered.length} of ${paragraphs.length}`}
           </span>
           <input
             value={q}
@@ -194,11 +199,14 @@ function Transcript({
         </div>
         {allMoments.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-1">
-            <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">Filter by moment:</span>
+            <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              Filter by moment:
+            </span>
             {allMoments.map((m) => {
               const on = activeMoments.has(m);
               return (
                 <button
+                  type="button"
                   key={m}
                   onClick={() => toggleMoment(m)}
                   className={`rounded-md px-2 py-0.5 text-xs font-medium transition ${colorFor(m)} ${
@@ -210,7 +218,11 @@ function Transcript({
               );
             })}
             {activeMoments.size > 0 && (
-              <button onClick={() => setActiveMoments(new Set())} className="ml-1 text-xs text-brand-600 hover:underline">
+              <button
+                type="button"
+                onClick={() => setActiveMoments(new Set())}
+                className="ml-1 text-xs text-brand-600 hover:underline"
+              >
                 clear
               </button>
             )}
@@ -241,11 +253,18 @@ function Transcript({
                   {/* In-line block labels double as filter toggles. */}
                   {p.moments.map((m) => (
                     <button
+                      type="button"
                       key={m}
-                      onClick={(e) => { e.stopPropagation(); toggleMoment(m); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleMoment(m);
+                      }}
                       title="Filter transcript by this label"
                     >
-                      <Chip label={m} className={`${colorFor(m)} ${activeMoments.has(m) ? "ring-2 ring-brand-500 ring-offset-1" : ""}`} />
+                      <Chip
+                        label={m}
+                        className={`${colorFor(m)} ${activeMoments.has(m) ? "ring-2 ring-brand-500 ring-offset-1" : ""}`}
+                      />
                     </button>
                   ))}
                 </div>
@@ -254,7 +273,9 @@ function Transcript({
                 {turns.map((t, i) => (
                   <p key={i} className="text-sm leading-relaxed text-slate-700">
                     {t.speaker && (
-                      <span className={`mr-1.5 text-xs font-semibold ${t.speaker === "Agent" ? "text-brand-600" : "text-emerald-600"}`}>
+                      <span
+                        className={`mr-1.5 text-xs font-semibold ${t.speaker === "Agent" ? "text-brand-600" : "text-emerald-600"}`}
+                      >
                         {t.speaker}:
                       </span>
                     )}

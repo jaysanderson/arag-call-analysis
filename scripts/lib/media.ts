@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type Turn = { speaker: "Agent" | "Member"; text: string };
@@ -25,9 +25,16 @@ function run(cmd: string, args: string[], timeout = 60000) {
 
 function ffprobeDuration(path: string): number {
   const out = run("ffprobe", [
-    "-v", "error", "-show_entries", "format=duration",
-    "-of", "default=noprint_wrappers=1:nokey=1", path,
-  ]).toString().trim();
+    "-v",
+    "error",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "default=noprint_wrappers=1:nokey=1",
+    path,
+  ])
+    .toString()
+    .trim();
   return Math.round(parseFloat(out) * 100) / 100;
 }
 
@@ -37,8 +44,16 @@ function renderWav(script: CallScript, work: string): { wav: string; duration: n
   // silence spacer (pcm_s16le @ SAMPLE_RATE mono — matches `say` WAV output)
   const silence = join(work, "silence.wav");
   run("ffmpeg", [
-    "-y", "-f", "lavfi", "-i", `anullsrc=r=${SAMPLE_RATE}:cl=mono`,
-    "-t", String(GAP_SEC), "-c:a", "pcm_s16le", silence,
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `anullsrc=r=${SAMPLE_RATE}:cl=mono`,
+    "-t",
+    String(GAP_SEC),
+    "-c:a",
+    "pcm_s16le",
+    silence,
   ]);
 
   const parts: string[] = [];
@@ -47,11 +62,20 @@ function renderWav(script: CallScript, work: string): { wav: string; duration: n
     writeFileSync(txt, turn.text);
     const wav = join(work, `t${i}.wav`);
     // `say` writes WAV (pcm_s16le @ SAMPLE_RATE) directly — no per-turn ffmpeg.
-    run("say", [
-      "-v", VOICE[turn.speaker],
-      "--file-format=WAVE", `--data-format=LEI16@${SAMPLE_RATE}`,
-      "-f", txt, "-o", wav,
-    ], 45000);
+    run(
+      "say",
+      [
+        "-v",
+        VOICE[turn.speaker],
+        "--file-format=WAVE",
+        `--data-format=LEI16@${SAMPLE_RATE}`,
+        "-f",
+        txt,
+        "-o",
+        wav,
+      ],
+      45000,
+    );
     parts.push(wav);
     if (i < script.turns.length - 1) parts.push(silence);
   });
@@ -92,11 +116,27 @@ export function renderCall(
     const wave = `showwaves=s=1280x720:mode=cline:rate=25:colors=0x38bdf8|0x6366f1`;
     const filter = `[0:a]${wave}[w];color=c=0x0b1220:s=1280x720:r=25[bg];[bg][w]overlay=0:0[v]`;
     run("ffmpeg", [
-      "-y", "-i", wav,
-      "-filter_complex", filter,
-      "-map", "[v]", "-map", "0:a",
-      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast",
-      "-c:a", "aac", "-b:a", "128k", "-shortest", mp4,
+      "-y",
+      "-i",
+      wav,
+      "-filter_complex",
+      filter,
+      "-map",
+      "[v]",
+      "-map",
+      "0:a",
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-preset",
+      "veryfast",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-shortest",
+      mp4,
     ]);
     result.videoPath = mp4;
   }

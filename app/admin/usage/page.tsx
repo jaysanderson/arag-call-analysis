@@ -1,6 +1,13 @@
 "use client";
 
-import { AdminShell, JsonView, KeyValues, Panel, StateBlock, useAdminData } from "@/components/admin/AdminShell";
+import {
+  AdminShell,
+  JsonView,
+  KeyValues,
+  Panel,
+  StateBlock,
+  useAdminData,
+} from "@/components/admin/AdminShell";
 
 type Usage = {
   uptimeSec: number;

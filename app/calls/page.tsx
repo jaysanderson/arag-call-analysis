@@ -8,7 +8,9 @@ export default function CallsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="font-display text-2xl font-semibold text-ink-950">Calls</h1>
-        <p className="text-sm text-slate-500">Browse, search, and filter every analyzed call by its automatic classification.</p>
+        <p className="text-sm text-slate-500">
+          Browse, search, and filter every analyzed call by its automatic classification.
+        </p>
       </div>
       <Suspense fallback={<div className="text-sm text-slate-400">Loading…</div>}>
         <CallsExplorer />

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { aggregate, tally } from "@/services/dashboard";
 import type { CallMetrics, CallSummary } from "@/lib/types";
+import { aggregate, tally } from "@/services/dashboard";
 
 function call(id: string, metrics?: CallMetrics, createdISO?: string): CallSummary {
   return {

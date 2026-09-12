@@ -1,12 +1,19 @@
-import { badRequest } from "@/vendor/arag-platform/src/index.ts";
 import { route } from "@/lib/api";
 import { MEDIA_FIELD_ALLOWLIST, mediaStream } from "@/services/calls";
+import { badRequest } from "@/vendor/arag-platform/src/index.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Headers worth forwarding from the upstream file response so the player can seek. */
-const PASS_THROUGH = ["content-type", "content-length", "content-range", "accept-ranges", "etag", "last-modified"];
+const PASS_THROUGH = [
+  "content-type",
+  "content-length",
+  "content-range",
+  "accept-ranges",
+  "etag",
+  "last-modified",
+];
 
 export const GET = route(
   { path: "/api/v1/calls/{id}/media", method: "get", noRateLimit: true },

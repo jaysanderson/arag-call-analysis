@@ -39,7 +39,9 @@ describe("deriveConfidence (citation coverage floor)", () => {
 
 describe("deriveConfidenceFromRemi", () => {
   it("returns null when REMi produced no usable score", () => {
-    expect(deriveConfidenceFromRemi({ answerRelevance: null, groundedness: null, contextRelevance: null }, 2)).toBeNull();
+    expect(
+      deriveConfidenceFromRemi({ answerRelevance: null, groundedness: null, contextRelevance: null }, 2),
+    ).toBeNull();
   });
 
   it("takes the max of relevance and groundedness so synthesis is not punished", () => {
@@ -48,9 +50,16 @@ describe("deriveConfidenceFromRemi", () => {
   });
 
   it("buckets moderate and low scores", () => {
-    expect(deriveConfidenceFromRemi({ answerRelevance: 2.5, groundedness: null, contextRelevance: null }, 1)?.level).toBe("moderate");
-    expect(deriveConfidenceFromRemi({ answerRelevance: 1, groundedness: null, contextRelevance: null }, 1)?.level).toBe("low");
-    expect(deriveConfidenceFromRemi({ answerRelevance: 0, groundedness: 0, contextRelevance: null }, 1)?.level).toBe("none");
+    expect(
+      deriveConfidenceFromRemi({ answerRelevance: 2.5, groundedness: null, contextRelevance: null }, 1)
+        ?.level,
+    ).toBe("moderate");
+    expect(
+      deriveConfidenceFromRemi({ answerRelevance: 1, groundedness: null, contextRelevance: null }, 1)?.level,
+    ).toBe("low");
+    expect(
+      deriveConfidenceFromRemi({ answerRelevance: 0, groundedness: 0, contextRelevance: null }, 1)?.level,
+    ).toBe("none");
   });
 });
 

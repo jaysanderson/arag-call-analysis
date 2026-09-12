@@ -32,12 +32,20 @@ function headers(extra: Record<string, string> = {}, admin = false): Record<stri
 
 export async function api<T = unknown>(
   path: string,
-  opts: { method?: string; json?: unknown; body?: BodyInit; admin?: boolean; headers?: Record<string, string> } = {},
+  opts: {
+    method?: string;
+    json?: unknown;
+    body?: BodyInit;
+    admin?: boolean;
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<T> {
   const init: RequestInit = {
     method: opts.method ?? "GET",
     headers: headers(
-      opts.json !== undefined ? { "Content-Type": "application/json", ...opts.headers } : (opts.headers ?? {}),
+      opts.json !== undefined
+        ? { "Content-Type": "application/json", ...opts.headers }
+        : (opts.headers ?? {}),
       opts.admin,
     ),
   };

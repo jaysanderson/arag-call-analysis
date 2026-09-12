@@ -57,12 +57,16 @@ export default function AdminJobsPage() {
                   >
                     <td className="py-1.5 font-mono text-xs">{j.kind}</td>
                     <td className="py-1.5">
-                      <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[j.status] ?? ""}`}>
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[j.status] ?? ""}`}
+                      >
                         {j.status}
                       </span>
                     </td>
                     <td className="py-1.5 text-xs text-slate-500">{j.stage ?? "—"}</td>
-                    <td className="py-1.5 text-xs text-slate-400">{new Date(j.createdAt).toISOString().slice(11, 19)}</td>
+                    <td className="py-1.5 text-xs text-slate-400">
+                      {new Date(j.createdAt).toISOString().slice(11, 19)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -72,7 +76,9 @@ export default function AdminJobsPage() {
             {job ? (
               <div className="space-y-3">
                 {job.error && (
-                  <div className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger-fg">{job.error.message}</div>
+                  <div className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger-fg">
+                    {job.error.message}
+                  </div>
                 )}
                 <ol className="space-y-1.5">
                   {job.events.map((e, i) => (

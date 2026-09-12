@@ -1,6 +1,6 @@
-import { notFound } from "@/vendor/arag-platform/src/index.ts";
 import { route } from "@/lib/api";
 import { jobView } from "@/services/jobs";
+import { notFound } from "@/vendor/arag-platform/src/index.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

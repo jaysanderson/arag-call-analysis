@@ -142,7 +142,10 @@ const CallParagraph = {
   properties: {
     index: { type: "integer" },
     text: { type: "string" },
-    charStart: { type: "integer", description: "Offset into the field's extracted text; citations use the same range." },
+    charStart: {
+      type: "integer",
+      description: "Offset into the field's extracted text; citations use the same range.",
+    },
     charEnd: { type: "integer" },
     startSeconds: { type: "number" },
     endSeconds: { type: "number" },
@@ -407,7 +410,12 @@ const paths: Record<string, Record<string, unknown>> = {
       description:
         "Full-text/semantic search across transcripts when `q` is set, otherwise the whole catalog, filtered by ARAG-assigned labels.",
       parameters: [
-        { name: "q", in: "query", description: "Search query across transcripts.", schema: { type: "string", maxLength: 200 } },
+        {
+          name: "q",
+          in: "query",
+          description: "Search query across transcripts.",
+          schema: { type: "string", maxLength: 200 },
+        },
         {
           name: "label",
           in: "query",
@@ -495,8 +503,14 @@ const paths: Record<string, Record<string, unknown>> = {
         },
       ],
       responses: {
-        200: { description: "The media stream", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
-        206: { description: "Partial content (Range request)", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
+        200: {
+          description: "The media stream",
+          content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } },
+        },
+        206: {
+          description: "Partial content (Range request)",
+          content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } },
+        },
         ...problemResponses,
       },
     },
@@ -534,7 +548,11 @@ const paths: Record<string, Record<string, unknown>> = {
       summary: "List the Knowledge Box labelsets used as filter facets",
       responses: {
         200: jsonResponse(
-          { type: "object", required: ["items"], properties: { items: { type: "array", items: ref("LabelsetView") } } },
+          {
+            type: "object",
+            required: ["items"],
+            properties: { items: { type: "array", items: ref("LabelsetView") } },
+          },
           "Labelsets",
         ),
         ...problemResponses,
@@ -574,7 +592,10 @@ const paths: Record<string, Record<string, unknown>> = {
       summary: "Stream job progress (SSE)",
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
       responses: {
-        200: { description: "Server-sent events", content: { "text/event-stream": { schema: { type: "string" } } } },
+        200: {
+          description: "Server-sent events",
+          content: { "text/event-stream": { schema: { type: "string" } } },
+        },
         ...problemResponses,
       },
     },
@@ -719,12 +740,22 @@ export const API_ROUTES: RouteDef[] = [
     auth: "none",
     file: "app/api/v1/calls/[id]/media/route.ts",
   },
-  { method: "post", path: "/api/v1/calls/{id}/ask", auth: "none", file: "app/api/v1/calls/[id]/ask/route.ts" },
+  {
+    method: "post",
+    path: "/api/v1/calls/{id}/ask",
+    auth: "none",
+    file: "app/api/v1/calls/[id]/ask/route.ts",
+  },
   { method: "get", path: "/api/v1/dashboard", auth: "none", file: "app/api/v1/dashboard/route.ts" },
   { method: "get", path: "/api/v1/labelsets", auth: "none", file: "app/api/v1/labelsets/route.ts" },
   { method: "get", path: "/api/v1/jobs", auth: "none", file: "app/api/v1/jobs/route.ts" },
   { method: "get", path: "/api/v1/jobs/{id}", auth: "none", file: "app/api/v1/jobs/[id]/route.ts" },
-  { method: "get", path: "/api/v1/jobs/{id}/events", auth: "none", file: "app/api/v1/jobs/[id]/events/route.ts" },
+  {
+    method: "get",
+    path: "/api/v1/jobs/{id}/events",
+    auth: "none",
+    file: "app/api/v1/jobs/[id]/events/route.ts",
+  },
   { method: "post", path: "/api/v1/session", auth: "none", file: "app/api/v1/session/route.ts" },
   { method: "post", path: "/api/v1/admin/login", auth: "none", file: "app/api/v1/admin/login/route.ts" },
   { method: "get", path: "/api/v1/admin/health", auth: "admin", file: "app/api/v1/admin/health/route.ts" },
@@ -732,7 +763,12 @@ export const API_ROUTES: RouteDef[] = [
   { method: "get", path: "/api/v1/admin/usage", auth: "admin", file: "app/api/v1/admin/usage/route.ts" },
   { method: "get", path: "/api/v1/admin/logs", auth: "admin", file: "app/api/v1/admin/logs/route.ts" },
   { method: "get", path: "/api/v1/admin/agents", auth: "admin", file: "app/api/v1/admin/agents/route.ts" },
-  { method: "post", path: "/api/v1/admin/provision", auth: "admin", file: "app/api/v1/admin/provision/route.ts" },
+  {
+    method: "post",
+    path: "/api/v1/admin/provision",
+    auth: "admin",
+    file: "app/api/v1/admin/provision/route.ts",
+  },
   { method: "get", path: "/api/v1/admin/cache", auth: "admin", file: "app/api/v1/admin/cache/route.ts" },
   {
     method: "post",

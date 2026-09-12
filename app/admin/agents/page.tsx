@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { adminFetch, AdminShell, Panel, StateBlock, useAdminData } from "@/components/admin/AdminShell";
+import { AdminShell, adminFetch, Panel, StateBlock, useAdminData } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui";
 
 type Agent = {

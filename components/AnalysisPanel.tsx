@@ -1,9 +1,9 @@
 "use client";
 
-import type { CallAnalysis, CallMetrics } from "@/lib/types";
-import { Card, Chip } from "./ui";
-import { Markdown } from "./Markdown";
 import { colorFor } from "@/lib/format";
+import type { CallAnalysis, CallMetrics } from "@/lib/types";
+import { Markdown } from "./Markdown";
+import { Card, Chip } from "./ui";
 
 function Score({ label, value }: { label: string; value?: number }) {
   const v = Math.max(0, Math.min(100, value ?? 0));
@@ -65,12 +65,18 @@ export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; 
       )}
 
       {a.cross_sell?.offered && (
-        <div className={`rounded-lg border p-3 ${a.cross_sell.accepted ? "border-accent-500/30 bg-accent-fill-soft" : "border-warn-fg/20 bg-warn-bg"}`}>
-          <div className={`text-xs font-semibold ${a.cross_sell.accepted ? "text-accent-fg-light" : "text-warn-fg"}`}>
+        <div
+          className={`rounded-lg border p-3 ${a.cross_sell.accepted ? "border-accent-500/30 bg-accent-fill-soft" : "border-warn-fg/20 bg-warn-bg"}`}
+        >
+          <div
+            className={`text-xs font-semibold ${a.cross_sell.accepted ? "text-accent-fg-light" : "text-warn-fg"}`}
+          >
             Cross-sell {a.cross_sell.accepted ? "accepted" : "offered (not accepted)"}
             {a.cross_sell.product ? ` · ${a.cross_sell.product}` : ""}
           </div>
-          {a.cross_sell.objection && <p className="mt-1 text-sm text-warn-fg">Objection: {a.cross_sell.objection}</p>}
+          {a.cross_sell.objection && (
+            <p className="mt-1 text-sm text-warn-fg">Objection: {a.cross_sell.objection}</p>
+          )}
         </div>
       )}
 
@@ -78,7 +84,9 @@ export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; 
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Action items</div>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-slate-700">
-            {a.action_items.map((it, i) => <li key={i}>{it}</li>)}
+            {a.action_items.map((it, i) => (
+              <li key={i}>{it}</li>
+            ))}
           </ul>
         </div>
       )}
@@ -87,7 +95,9 @@ export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; 
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Risk flags</div>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            {a.risk_flags.map((r) => <Chip key={r} label={r} className="bg-danger-bg text-danger-fg" />)}
+            {a.risk_flags.map((r) => (
+              <Chip key={r} label={r} className="bg-danger-bg text-danger-fg" />
+            ))}
           </div>
         </div>
       )}

@@ -3,14 +3,22 @@ import { contextTextsFrom, reduceRemi } from "@/services/ask";
 
 describe("reduceRemi", () => {
   it("takes the best grounding context, not the average", () => {
-    const r = reduceRemi({ answer_relevance: { score: 4 }, groundedness: [1, 4, 2], context_relevance: [4, 2] });
+    const r = reduceRemi({
+      answer_relevance: { score: 4 },
+      groundedness: [1, 4, 2],
+      context_relevance: [4, 2],
+    });
     expect(r.answerRelevance).toBe(4);
     expect(r.groundedness).toBe(4);
     expect(r.contextRelevance).toBe(3);
   });
 
   it("ignores nulls in the arrays", () => {
-    const r = reduceRemi({ answer_relevance: null, groundedness: [null, 3], context_relevance: [null, null] });
+    const r = reduceRemi({
+      answer_relevance: null,
+      groundedness: [null, 3],
+      context_relevance: [null, null],
+    });
     expect(r.answerRelevance).toBeNull();
     expect(r.groundedness).toBe(3);
     expect(r.contextRelevance).toBeNull();

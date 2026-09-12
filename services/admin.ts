@@ -1,9 +1,10 @@
 /** Admin read models: KB health, redacted config, usage counters and the log ring buffer. */
-import { describeEnv, PLATFORM_VERSION } from "@/vendor/arag-platform/src/index.ts";
-import type { LogLevel } from "@/vendor/arag-platform/src/config/env.ts";
-import type { Runtime } from "@/lib/runtime";
+
 import { AGENTS, ALL_LABELSETS } from "@/lib/domain/taxonomy";
+import type { Runtime } from "@/lib/runtime";
 import { APP_VERSION } from "@/lib/version";
+import type { LogLevel } from "@/vendor/arag-platform/src/config/env.ts";
+import { describeEnv, PLATFORM_VERSION } from "@/vendor/arag-platform/src/index.ts";
 
 export interface HealthView {
   ok: boolean;

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { colorFor } from "@/lib/format";
 import type { ConfidenceResult } from "@/lib/confidence";
+import { colorFor } from "@/lib/format";
 
 export function Chip({ label, className, href }: { label: string; className?: string; href?: string }) {
   const cls = `inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${className ?? colorFor(label)}`;
@@ -36,13 +36,19 @@ export function Button({
   disabled?: boolean;
   className?: string;
 }) {
-  const base = "inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40";
+  const base =
+    "inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40";
   const styles =
     variant === "primary"
       ? "bg-brand-600 text-white hover:bg-brand-700"
       : "border border-brand-600 bg-white text-brand-600 hover:bg-brand-50";
   const cls = `${base} ${styles} ${className ?? ""}`;
-  if (href) return <Link href={href} className={cls}>{children}</Link>;
+  if (href)
+    return (
+      <Link href={href} className={cls}>
+        {children}
+      </Link>
+    );
   return (
     <button type={type} onClick={onClick} disabled={disabled} className={cls}>
       {children}
@@ -57,7 +63,17 @@ const MEDIA_BADGE: Record<MediaType, { label: string; cls: string; icon: React.R
     label: "Video",
     cls: "bg-violet-100 text-violet-800",
     icon: (
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        aria-hidden="true"
+        width="11"
+        height="11"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <rect x="2" y="6" width="13" height="12" rx="2" />
         <path d="M15 10l6-3v10l-6-3" />
       </svg>
@@ -67,7 +83,17 @@ const MEDIA_BADGE: Record<MediaType, { label: string; cls: string; icon: React.R
     label: "Audio",
     cls: "bg-sky-100 text-sky-800",
     icon: (
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        aria-hidden="true"
+        width="11"
+        height="11"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M4 14a8 8 0 0 1 16 0" />
         <rect x="2" y="13" width="4" height="7" rx="1.2" />
         <rect x="18" y="13" width="4" height="7" rx="1.2" />
@@ -78,7 +104,17 @@ const MEDIA_BADGE: Record<MediaType, { label: string; cls: string; icon: React.R
     label: "Transcript",
     cls: "bg-slate-100 text-slate-700",
     icon: (
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        aria-hidden="true"
+        width="11"
+        height="11"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
         <path d="M14 3v6h6" />
         <path d="M8 13h8M8 17h5" />
@@ -89,9 +125,11 @@ const MEDIA_BADGE: Record<MediaType, { label: string; cls: string; icon: React.R
 
 /** File-type badge (Video / Audio / Transcript) shown wherever a call is listed. */
 export function MediaBadge({ type, className }: { type: string; className?: string }) {
-  const m = MEDIA_BADGE[(type as MediaType)] ?? MEDIA_BADGE.transcript;
+  const m = MEDIA_BADGE[type as MediaType] ?? MEDIA_BADGE.transcript;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${m.cls} ${className ?? ""}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${m.cls} ${className ?? ""}`}
+    >
       {m.icon}
       {m.label}
     </span>
@@ -104,12 +142,12 @@ export function MediaBadge({ type, className }: { type: string; className?: stri
 // so there is no risk of an undefined var() resolving transparent inside an
 // inline SVG (the exact bug found on revolution-dms).
 const MOMENT_COLOR: Record<string, string> = {
-  "Complaint": "#e2536b",
-  "Escalation": "#e0ab00",
+  Complaint: "#e2536b",
+  Escalation: "#e0ab00",
   "Cross-sell Pitch": "#9333ea",
-  "Resolution": "#00B563",
+  Resolution: "#00B563",
   "Empathy Statement": "#0891b2",
-  "Objection": "#ea580c",
+  Objection: "#ea580c",
 };
 
 const THUMB_BASE: Record<MediaType, string> = {
@@ -130,15 +168,28 @@ const THUMB_BASE: Record<MediaType, string> = {
  * back to the plain branded tile only when a call genuinely has no moment
  * data yet (still processing) - never breaks, never blank.
  */
-export function CallThumb({ type, moments, className }: { type: string; moments?: string[]; className?: string }) {
-  const m = MEDIA_BADGE[(type as MediaType)] ?? MEDIA_BADGE.transcript;
-  const grad = THUMB_BASE[(type as MediaType)] ?? THUMB_BASE.transcript;
+export function CallThumb({
+  type,
+  moments,
+  className,
+}: {
+  type: string;
+  moments?: string[];
+  className?: string;
+}) {
+  const m = MEDIA_BADGE[type as MediaType] ?? MEDIA_BADGE.transcript;
+  const grad = THUMB_BASE[type as MediaType] ?? THUMB_BASE.transcript;
   const track = moments?.length ? moments : null;
 
   return (
     <div className={`relative overflow-hidden rounded-lg bg-gradient-to-br ${grad} ${className ?? ""}`}>
       {track ? (
-        <svg viewBox="0 0 200 60" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 200 60"
+          preserveAspectRatio="none"
+          className="absolute inset-0 h-full w-full"
+        >
           {track.map((mo, i) => {
             const w = 200 / track.length;
             const hue = MOMENT_COLOR[mo];
@@ -184,16 +235,32 @@ export function Kpi({
       {sub && <div className="mt-1 text-xs text-slate-500">{sub}</div>}
     </Card>
   );
-  return href ? <Link href={href} className="block">{inner}</Link> : inner;
+  return href ? (
+    <Link href={href} className="block">
+      {inner}
+    </Link>
+  ) : (
+    inner
+  );
 }
 
-export function SectionTitle({ children, right, count }: { children: React.ReactNode; right?: React.ReactNode; count?: number }) {
+export function SectionTitle({
+  children,
+  right,
+  count,
+}: {
+  children: React.ReactNode;
+  right?: React.ReactNode;
+  count?: number;
+}) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
       <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
         {children}
         {typeof count === "number" && (
-          <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">{count}</span>
+          <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">
+            {count}
+          </span>
         )}
       </h2>
       {right}
@@ -202,7 +269,11 @@ export function SectionTitle({ children, right, count }: { children: React.React
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-lg border border-dashed border-brand-200 bg-white/60 p-8 text-center text-sm text-slate-500">{children}</div>;
+  return (
+    <div className="rounded-lg border border-dashed border-brand-200 bg-white/60 p-8 text-center text-sm text-slate-500">
+      {children}
+    </div>
+  );
 }
 
 const CONFIDENCE_STYLE: Record<ConfidenceResult["level"], string> = {
@@ -223,7 +294,11 @@ export function ConfidenceBadge({ result, className }: { result: ConfidenceResul
   return (
     <span
       className={`fade-in inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold ${CONFIDENCE_STYLE[result.level]} ${className ?? ""}`}
-      title={result.citationCount > 0 ? `${result.citationCount} source${result.citationCount === 1 ? "" : "s"} grounding this answer` : "No grounded source found for this answer"}
+      title={
+        result.citationCount > 0
+          ? `${result.citationCount} source${result.citationCount === 1 ? "" : "s"} grounding this answer`
+          : "No grounded source found for this answer"
+      }
     >
       <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
       {result.label}

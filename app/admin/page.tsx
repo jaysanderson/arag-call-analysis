@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { AdminShell, KeyValues, Panel, StateBlock, StatusPill, useAdminData } from "@/components/admin/AdminShell";
+import {
+  AdminShell,
+  KeyValues,
+  Panel,
+  StateBlock,
+  StatusPill,
+  useAdminData,
+} from "@/components/admin/AdminShell";
 
 type Health = {
   ok: boolean;
@@ -9,16 +16,35 @@ type Health = {
   platformVersion: string;
   uptimeSec: number;
   mock: boolean;
-  arag: { ok: boolean; kbId: string; baseUrl: string; resources?: number; generativeModel?: string; ms: number };
+  arag: {
+    ok: boolean;
+    kbId: string;
+    baseUrl: string;
+    resources?: number;
+    generativeModel?: string;
+    ms: number;
+  };
   jobs: { queued: number; running: number; failed: number };
   cache: { entries: number; hits: number; misses: number };
 };
 
 const TILES = [
-  { href: "/admin/health", title: "Health", body: "Live Knowledge Box connection test, model and resource count." },
-  { href: "/admin/config", title: "Configuration", body: "Effective environment with every secret redacted." },
+  {
+    href: "/admin/health",
+    title: "Health",
+    body: "Live Knowledge Box connection test, model and resource count.",
+  },
+  {
+    href: "/admin/config",
+    title: "Configuration",
+    body: "Effective environment with every secret redacted.",
+  },
   { href: "/admin/usage", title: "Usage", body: "Requests, ARAG calls, tokens, jobs and cache counters." },
-  { href: "/admin/agents", title: "Agents", body: "Data-augmentation task status; re-provision the taxonomy." },
+  {
+    href: "/admin/agents",
+    title: "Agents",
+    body: "Data-augmentation task status; re-provision the taxonomy.",
+  },
   { href: "/admin/jobs", title: "Jobs", body: "Ingestion and provisioning runs with stage timings." },
   { href: "/admin/logs", title: "Logs", body: "The last 500 structured log records, filterable." },
   { href: "/admin/cache", title: "Cache", body: "Catalog and per-call summary cache; invalidate on demand." },
@@ -30,7 +56,14 @@ export default function AdminHome() {
     <AdminShell
       title="Operations"
       description="Everything on these pages is read live from /api/v1/admin/*."
-      actions={data ? <StatusPill ok={data.ok} label={data.ok ? "Knowledge Box reachable" : "Knowledge Box unreachable"} /> : null}
+      actions={
+        data ? (
+          <StatusPill
+            ok={data.ok}
+            label={data.ok ? "Knowledge Box reachable" : "Knowledge Box unreachable"}
+          />
+        ) : null
+      }
     >
       <StateBlock loading={loading} error={error}>
         {data && (

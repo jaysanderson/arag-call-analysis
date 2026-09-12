@@ -6,8 +6,8 @@
  */
 import type { Runtime } from "@/lib/runtime";
 import type { CallMetrics, CallSummary } from "@/lib/types";
-import { allSummaries } from "./calls";
 import { cacheKeys } from "./cache";
+import { allSummaries } from "./calls";
 
 export type Datum = { name: string; value: number };
 

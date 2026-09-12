@@ -1,7 +1,8 @@
 /** Labelset reads (facet definitions for the calls explorer) and provisioning helpers. */
-import type { Labelset } from "@/vendor/arag-platform/src/arag/types.ts";
-import type { Runtime } from "@/lib/runtime";
+
 import { ALL_LABELSETS, type LabelsetDef } from "@/lib/domain/taxonomy";
+import type { Runtime } from "@/lib/runtime";
+import type { Labelset } from "@/vendor/arag-platform/src/arag/types.ts";
 import { cacheKeys } from "./cache";
 
 export interface LabelsetView {

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { Resource } from "@/vendor/arag-platform/src/arag/types.ts";
 import {
   extractLabels,
   findContentField,
@@ -10,6 +9,7 @@ import {
   sanitizeMetrics,
   stripCodeFence,
 } from "@/lib/parse";
+import type { Resource } from "@/vendor/arag-platform/src/arag/types.ts";
 
 const TRANSCRIPT = [
   "Agent: Thank you for calling Meridian Health Plan.",
@@ -28,7 +28,9 @@ function resource(overrides: Partial<Resource> = {}): Resource {
     created: "2026-06-02T10:00:00Z",
     metadata: { status: "PROCESSED" },
     origin: { created: "2026-06-02T15:12:00Z" },
-    extra: { metadata: { agent_name: "Maria Gonzales", queue: "Billing", duration_sec: 66, member_id: "IFP-1" } },
+    extra: {
+      metadata: { agent_name: "Maria Gonzales", queue: "Billing", duration_sec: 66, member_id: "IFP-1" },
+    },
     computedmetadata: {
       field_classifications: [
         { field: { field: "media" }, classifications: [{ labelset: "sentiment", label: "Negative" }] },
@@ -151,7 +153,10 @@ describe("sanitizeMetrics", () => {
 describe("findContentField", () => {
   it("prefers a file field, then a non-generated text field", () => {
     expect(findContentField(resource())).toEqual({ group: "files", id: "media" });
-    const textOnly = { id: "t", data: { texts: { "da-call_metrics-t-transcript": {}, transcript: {} } } } as Resource;
+    const textOnly = {
+      id: "t",
+      data: { texts: { "da-call_metrics-t-transcript": {}, transcript: {} } },
+    } as Resource;
     expect(findContentField(textOnly)).toEqual({ group: "texts", id: "transcript" });
     expect(findContentField({ id: "empty" } as Resource)).toBeUndefined();
   });

@@ -21,7 +21,7 @@ process.env.LOG_LEVEL = "error";
 process.env.RATE_LIMIT_RPS = "1000";
 process.env.RATE_LIMIT_BURST = "5000";
 process.env.CALLS_MOCK_SEED = "5";
-process.env.NODE_ENV = "test";
+(process.env as Record<string, string>).NODE_ENV = "test";
 
 type Handler = (req: Request, args?: { params: Promise<Record<string, string>> }) => Promise<Response>;
 
@@ -126,10 +126,10 @@ describe("runtime", () => {
 
   it("keeps reading the legacy ARAG_BASE variable as ARAG_BASE_URL", async () => {
     const { applyLegacyEnvAliases } = await import("@/lib/runtime");
-    const src = { ARAG_BASE: "https://legacy.example/api/v1" } as NodeJS.ProcessEnv;
+    const src = { ARAG_BASE: "https://legacy.example/api/v1" } as unknown as NodeJS.ProcessEnv;
     applyLegacyEnvAliases(src);
     expect(src.ARAG_BASE_URL).toBe("https://legacy.example/api/v1");
-    const keep = { ARAG_BASE: "a", ARAG_BASE_URL: "b" } as NodeJS.ProcessEnv;
+    const keep = { ARAG_BASE: "a", ARAG_BASE_URL: "b" } as unknown as NodeJS.ProcessEnv;
     applyLegacyEnvAliases(keep);
     expect(keep.ARAG_BASE_URL).toBe("b");
   });
@@ -137,9 +137,10 @@ describe("runtime", () => {
 
 describe("GET /api/v1/calls", () => {
   it("lists, searches and filters", async () => {
-    const all = await body<{ items: Array<{ id: string; labels: Array<{ labelset: string; label: string }> }>; total: number }>(
-      await mod.calls.GET(req("/api/v1/calls?page_size=200")),
-    );
+    const all = await body<{
+      items: Array<{ id: string; labels: Array<{ labelset: string; label: string }> }>;
+      total: number;
+    }>(await mod.calls.GET(req("/api/v1/calls?page_size=200")));
     expect(all.total).toBe(6);
 
     const searched = await body<{ items: unknown[] }>(await mod.calls.GET(req("/api/v1/calls?q=premium")));
@@ -147,7 +148,9 @@ describe("GET /api/v1/calls", () => {
 
     const label = all.items.flatMap((c) => c.labels).find((l) => l.labelset === "sentiment")!;
     const filtered = await body<{ items: Array<{ id: string }> }>(
-      await mod.calls.GET(req(`/api/v1/calls?label=${encodeURIComponent(`${label.labelset}/${label.label}`)}`)),
+      await mod.calls.GET(
+        req(`/api/v1/calls?label=${encodeURIComponent(`${label.labelset}/${label.label}`)}`),
+      ),
     );
     expect(filtered.items.length).toBeGreaterThan(0);
   });
@@ -292,7 +295,10 @@ describe("upload and delete", () => {
     expect(detail.agentName).toBe("Test Agent");
     expect(detail.durationSec).toBe(42);
 
-    const del = await mod.call.DELETE(req(`/api/v1/calls/${created.call.id}`, { method: "DELETE" }), params({ id: created.call.id }));
+    const del = await mod.call.DELETE(
+      req(`/api/v1/calls/${created.call.id}`, { method: "DELETE" }),
+      params({ id: created.call.id }),
+    );
     expect(del.status).toBe(204);
     const gone = await mod.call.GET(req(`/api/v1/calls/${created.call.id}`), params({ id: created.call.id }));
     expect(gone.status).toBe(404);
@@ -380,10 +386,22 @@ describe("dashboard and labelsets", () => {
 
 describe("jobs", () => {
   it("lists, fetches and streams a job", async () => {
-    const job = runtime.jobs.submit("ingest-call", { callId: "x", title: "t", transcribed: false, waitForProcessing: false });
-    await runtime.jobs.run("ingest-call", { callId: "x", title: "t", transcribed: false, waitForProcessing: false });
+    const job = runtime.jobs.submit("ingest-call", {
+      callId: "x",
+      title: "t",
+      transcribed: false,
+      waitForProcessing: false,
+    });
+    await runtime.jobs.run("ingest-call", {
+      callId: "x",
+      title: "t",
+      transcribed: false,
+      waitForProcessing: false,
+    });
 
-    const list = await body<{ items: Array<{ id: string }> }>(await mod.jobs.GET(req("/api/v1/jobs?limit=10")));
+    const list = await body<{ items: Array<{ id: string }> }>(
+      await mod.jobs.GET(req("/api/v1/jobs?limit=10")),
+    );
     expect(list.items.length).toBeGreaterThan(0);
 
     const one = await mod.job.GET(req(`/api/v1/jobs/${job.id}`), params({ id: job.id }));

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { filterByLabels, mediaTypeFor, MEDIA_FIELD_ALLOWLIST } from "@/services/calls";
-import { classifyAgents } from "@/services/agents";
-import { orderFacets, toView } from "@/services/labelsets";
 import { AGENTS } from "@/lib/domain/taxonomy";
 import type { CallSummary } from "@/lib/types";
+import { classifyAgents } from "@/services/agents";
+import { filterByLabels, MEDIA_FIELD_ALLOWLIST, mediaTypeFor } from "@/services/calls";
+import { orderFacets, toView } from "@/services/labelsets";
 
 const base = (id: string, labels: Array<[string, string]>): CallSummary => ({
   id,
@@ -16,8 +16,14 @@ const base = (id: string, labels: Array<[string, string]>): CallSummary => ({
 
 describe("filterByLabels", () => {
   const calls = [
-    base("a", [["call_reason", "Claims"], ["sentiment", "Negative"]]),
-    base("b", [["call_reason", "Claims"], ["sentiment", "Positive"]]),
+    base("a", [
+      ["call_reason", "Claims"],
+      ["sentiment", "Negative"],
+    ]),
+    base("b", [
+      ["call_reason", "Claims"],
+      ["sentiment", "Positive"],
+    ]),
     base("c", [["call_reason", "Billing & Payments"]]),
   ];
 
@@ -27,7 +33,9 @@ describe("filterByLabels", () => {
 
   it("ANDs across facets", () => {
     expect(filterByLabels(calls, ["call_reason/Claims"]).map((c) => c.id)).toEqual(["a", "b"]);
-    expect(filterByLabels(calls, ["call_reason/Claims", "sentiment/Positive"]).map((c) => c.id)).toEqual(["b"]);
+    expect(filterByLabels(calls, ["call_reason/Claims", "sentiment/Positive"]).map((c) => c.id)).toEqual([
+      "b",
+    ]);
   });
 
   it("handles labels containing a slash", () => {
@@ -45,10 +53,16 @@ describe("mediaTypeFor", () => {
   it("classifies uploads", () => {
     expect(mediaTypeFor({ title: "t", transcript: "x" })).toBe("transcript");
     expect(
-      mediaTypeFor({ title: "t", recording: { bytes: new Uint8Array(), filename: "a.mp3", contentType: "audio/mpeg" } }),
+      mediaTypeFor({
+        title: "t",
+        recording: { bytes: new Uint8Array(), filename: "a.mp3", contentType: "audio/mpeg" },
+      }),
     ).toBe("audio");
     expect(
-      mediaTypeFor({ title: "t", recording: { bytes: new Uint8Array(), filename: "a.mp4", contentType: "video/mp4" } }),
+      mediaTypeFor({
+        title: "t",
+        recording: { bytes: new Uint8Array(), filename: "a.mp4", contentType: "video/mp4" },
+      }),
     ).toBe("video");
   });
 });
@@ -77,7 +91,9 @@ describe("classifyAgents", () => {
   });
 
   it("marks a failed task as failed", () => {
-    const status = classifyAgents({ done: [{ id: "9", parameters: { name: "call-insights" }, failed: true }] });
+    const status = classifyAgents({
+      done: [{ id: "9", parameters: { name: "call-insights" }, failed: true }],
+    });
     expect(status.find((s) => s.key === "call-insights")?.state).toBe("failed");
   });
 });
@@ -85,7 +101,12 @@ describe("classifyAgents", () => {
 describe("labelset views", () => {
   it("flattens a KB labelset into the facet view", () => {
     expect(
-      toView("call_reason", { title: "Call Reason", multiple: false, kind: ["RESOURCES"], labels: [{ title: "Claims" }] }),
+      toView("call_reason", {
+        title: "Call Reason",
+        multiple: false,
+        kind: ["RESOURCES"],
+        labels: [{ title: "Claims" }],
+      }),
     ).toEqual({
       id: "call_reason",
       title: "Call Reason",

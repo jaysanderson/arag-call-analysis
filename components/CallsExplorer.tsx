@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import type { CallSummary } from "@/lib/types";
-import { Card, Empty, SectionTitle } from "./ui";
+import type { Dashboard } from "@/services/dashboard";
 import { CallCard } from "./CallCard";
 import { CategoryRails } from "./CategoryRails";
-import type { Dashboard } from "@/services/dashboard";
+import { Card, Empty, SectionTitle } from "./ui";
 
 type LabelsetView = { id: string; title: string; labels: string[] };
 
@@ -17,7 +17,15 @@ const FILTER_ORDER = ["call_reason", "call_outcome", "sentiment", "line_of_busin
 function countsFor(d: Dashboard | null, labelset: string): Record<string, number> {
   if (!d) return {};
   const src =
-    labelset === "call_reason" ? d.byReason : labelset === "sentiment" ? d.bySentiment : labelset === "call_outcome" ? d.byOutcome : labelset === "line_of_business" ? d.byLob : [];
+    labelset === "call_reason"
+      ? d.byReason
+      : labelset === "sentiment"
+        ? d.bySentiment
+        : labelset === "call_outcome"
+          ? d.byOutcome
+          : labelset === "line_of_business"
+            ? d.byLob
+            : [];
   return Object.fromEntries(src.map((x) => [x.name, x.value]));
 }
 
@@ -74,7 +82,7 @@ export function CallsExplorer() {
       [...labelsets]
         .filter((ls) => ls.labels.length > 0)
         .sort((a, b) => {
-          const rank = (id: string) => (FILTER_ORDER.indexOf(id) + 1 || 99);
+          const rank = (id: string) => FILTER_ORDER.indexOf(id) + 1 || 99;
           return rank(a.id) - rank(b.id);
         })
         .map((ls) => ({ ...ls, counts: countsFor(dashboard, ls.id) })),
@@ -101,13 +109,19 @@ export function CallsExplorer() {
               className="w-full rounded-md border border-brand-200 bg-white px-3 py-2 text-sm text-ink-950 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
             {active.size > 0 && (
-              <button onClick={() => setActive(new Set())} className="text-xs font-medium text-brand-600 hover:underline">
+              <button
+                type="button"
+                onClick={() => setActive(new Set())}
+                className="text-xs font-medium text-brand-600 hover:underline"
+              >
                 Clear {active.size} filter{active.size > 1 ? "s" : ""}
               </button>
             )}
             {filterSets.map((ls) => (
               <Card key={ls.id} className="p-3">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{ls.title}</div>
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {ls.title}
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {ls.labels.map((label) => {
                     const key = `${ls.id}/${label}`;
@@ -115,6 +129,7 @@ export function CallsExplorer() {
                     const c = ls.counts[label];
                     return (
                       <button
+                        type="button"
                         key={key}
                         onClick={() => toggle(key)}
                         className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition ${
@@ -123,7 +138,9 @@ export function CallsExplorer() {
                       >
                         {label}
                         {typeof c === "number" && (
-                          <span className={`text-[10px] ${on ? "text-white/80" : "text-slate-400"}`}>{c}</span>
+                          <span className={`text-[10px] ${on ? "text-white/80" : "text-slate-400"}`}>
+                            {c}
+                          </span>
                         )}
                       </button>
                     );
@@ -135,7 +152,9 @@ export function CallsExplorer() {
 
           {/* Results */}
           <div className="lg:col-span-3">
-            <div className="mb-2 text-sm text-slate-500">{loading ? "Loading…" : `${calls.length} call${calls.length === 1 ? "" : "s"}`}</div>
+            <div className="mb-2 text-sm text-slate-500">
+              {loading ? "Loading…" : `${calls.length} call${calls.length === 1 ? "" : "s"}`}
+            </div>
             {calls.length === 0 && !loading ? (
               <Empty>No calls match your filters.</Empty>
             ) : (

@@ -1,15 +1,15 @@
 import Link from "next/link";
-import { getRuntime } from "@/lib/runtime";
-import { dashboard } from "@/services/dashboard";
-import { Kpi, Card, SectionTitle, Button } from "@/components/ui";
 import { CallCard } from "@/components/CallCard";
 import { DashboardCharts } from "@/components/DashboardCharts";
+import { Button, Card, Kpi, SectionTitle } from "@/components/ui";
 import { pct } from "@/lib/format";
+import { getRuntime } from "@/lib/runtime";
+import { dashboard } from "@/services/dashboard";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  let d;
+  let d: Awaited<ReturnType<typeof dashboard>>;
   try {
     // Server components call the same service layer the API does — no duplicated ARAG logic.
     d = await dashboard(await getRuntime());
@@ -43,9 +43,25 @@ export default async function Home() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <Kpi label="Total calls" value={String(d.total)} href="/calls" />
-        <Kpi label="First-call resolution" value={pct(d.fcrRate)} accent="text-accent-fg-light" href={lc("disposition_flags", "First-Call Resolution")} />
-        <Kpi label="Complaint rate" value={pct(d.complaintRate)} accent="text-danger-fg" href={lc("disposition_flags", "Complaint Raised")} />
-        <Kpi label="Cross-sell accept" value={pct(d.crossSellAcceptRate)} sub={`${pct(d.crossSellOfferRate)} offered`} accent="text-brand-600" href={lc("disposition_flags", "Cross-sell Accepted")} />
+        <Kpi
+          label="First-call resolution"
+          value={pct(d.fcrRate)}
+          accent="text-accent-fg-light"
+          href={lc("disposition_flags", "First-Call Resolution")}
+        />
+        <Kpi
+          label="Complaint rate"
+          value={pct(d.complaintRate)}
+          accent="text-danger-fg"
+          href={lc("disposition_flags", "Complaint Raised")}
+        />
+        <Kpi
+          label="Cross-sell accept"
+          value={pct(d.crossSellAcceptRate)}
+          sub={`${pct(d.crossSellOfferRate)} offered`}
+          accent="text-brand-600"
+          href={lc("disposition_flags", "Cross-sell Accepted")}
+        />
         <Kpi label="Avg compliance" value={String(d.avgCompliance)} sub="0–100" href="/calls" />
         <Kpi label="Avg CSAT" value={d.avgCsat ? `${d.avgCsat}/5` : "n/a"} href="/calls" />
       </div>
@@ -60,7 +76,14 @@ export default async function Home() {
       />
 
       <div>
-        <SectionTitle count={d.recent.length} right={<Link href="/calls" className="text-xs font-medium text-brand-600 hover:underline">View all</Link>}>
+        <SectionTitle
+          count={d.recent.length}
+          right={
+            <Link href="/calls" className="text-xs font-medium text-brand-600 hover:underline">
+              View all
+            </Link>
+          }
+        >
           Recent calls
         </SectionTitle>
         {d.recent.length === 0 ? (

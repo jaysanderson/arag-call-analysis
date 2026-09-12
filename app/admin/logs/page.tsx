@@ -24,7 +24,10 @@ export default function AdminLogsPage() {
   );
 
   return (
-    <AdminShell title="Logs" description="The in-memory ring buffer of structured log records (secrets redacted).">
+    <AdminShell
+      title="Logs"
+      description="The in-memory ring buffer of structured log records (secrets redacted)."
+    >
       <Panel
         title="Filter"
         right={<span className="text-xs text-slate-400">{data?.items.length ?? 0} records</span>}
@@ -62,7 +65,9 @@ export default function AdminLogsPage() {
                 <span className="text-ink-950">{r.msg}</span>{" "}
                 <span className="text-slate-500">
                   {JSON.stringify(
-                    Object.fromEntries(Object.entries(r).filter(([k]) => !["ts", "level", "msg"].includes(k))),
+                    Object.fromEntries(
+                      Object.entries(r).filter(([k]) => !["ts", "level", "msg"].includes(k)),
+                    ),
                   )}
                 </span>
               </div>

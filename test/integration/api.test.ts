@@ -247,7 +247,10 @@ describe("POST /api/v1/calls and DELETE", () => {
   it("rejects a recording with a disallowed content type", async () => {
     const form = new FormData();
     form.set("title", "Bad type");
-    form.set("recording", new File([new Uint8Array([1, 2, 3])], "x.exe", { type: "application/x-msdownload" }));
+    form.set(
+      "recording",
+      new File([new Uint8Array([1, 2, 3])], "x.exe", { type: "application/x-msdownload" }),
+    );
     const res = await api.request<Problem>("POST", "/api/v1/calls", { body: form });
     expect(res.status).toBe(415);
   });
@@ -371,7 +374,11 @@ describe("admin", () => {
   });
 
   it("runs a provisioning job to completion and streams its events", async () => {
-    const started = await api.post<{ id: string }>("/api/v1/admin/provision", { agents: false }, { admin: true });
+    const started = await api.post<{ id: string }>(
+      "/api/v1/admin/provision",
+      { agents: false },
+      { admin: true },
+    );
     expect(started.status).toBe(202);
 
     const events = await fetch(`${server.baseUrl}/api/v1/jobs/${started.json.id}/events`, {
@@ -404,7 +411,11 @@ describe("admin", () => {
     expect(invalidated.status).toBe(200);
     expect(invalidated.json.invalidated).toBeGreaterThan(0);
 
-    const all = await api.post<{ invalidated: number }>("/api/v1/admin/cache/invalidate", {}, { admin: true });
+    const all = await api.post<{ invalidated: number }>(
+      "/api/v1/admin/cache/invalidate",
+      {},
+      { admin: true },
+    );
     expect(all.status).toBe(200);
     const after = await api.get<{ keys: string[] }>("/api/v1/admin/cache", { admin: true });
     expect(after.json.keys).toHaveLength(0);

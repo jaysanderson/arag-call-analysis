@@ -17,7 +17,10 @@ const NAV = [
 
 /** Problem-aware fetch for every admin page: RFC 9457 `detail` becomes the thrown message. */
 export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { ...init, headers: { Accept: "application/json", ...(init?.headers ?? {}) } });
+  const res = await fetch(path, {
+    ...init,
+    headers: { Accept: "application/json", ...(init?.headers ?? {}) },
+  });
   const text = await res.text();
   const body = text ? JSON.parse(text) : undefined;
   if (!res.ok) {
@@ -70,7 +73,11 @@ export function AdminShell({
   const pathname = usePathname() ?? "/admin";
   return (
     <div className="space-y-5">
-      <nav className="arag-card flex flex-wrap items-center gap-1 p-2">
+      <nav
+        data-testid="admin-nav"
+        aria-label="Admin sections"
+        className="arag-card flex flex-wrap items-center gap-1 p-2"
+      >
         {NAV.map((n) => {
           const active = n.href === "/admin" ? pathname === "/admin" : pathname.startsWith(n.href);
           return (
@@ -121,9 +128,7 @@ export function Panel({
     <section className={`arag-card p-4 ${className ?? ""}`}>
       {(title || right) && (
         <div className="mb-3 flex items-center justify-between gap-3">
-          {title && (
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
-          )}
+          {title && <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</h2>}
           {right}
         </div>
       )}
@@ -145,7 +150,10 @@ export function StateBlock({
 }) {
   if (error)
     return (
-      <div className="rounded-md border border-danger-dark/40 bg-danger-bg p-3 text-sm text-danger-fg">
+      <div
+        data-testid="admin-error"
+        className="rounded-md border border-danger-dark/40 bg-danger-bg p-3 text-sm text-danger-fg"
+      >
         {error}
         {error.toLowerCase().includes("admin token") && (
           <>

@@ -42,15 +42,25 @@ export const SCENARIOS: Scenario[] = [
     memberId: "IFP-558201",
     queue: "Billing",
     turns: [
-      A("Thank you for calling Meridian Health Plan, this call may be recorded for quality and training. My name is Maria. Can I please verify your full name and date of birth?"),
+      A(
+        "Thank you for calling Meridian Health Plan, this call may be recorded for quality and training. My name is Maria. Can I please verify your full name and date of birth?",
+      ),
       M("Yes, this is Robert Carlisle, date of birth March 4th, 1979. And I am pretty upset right now."),
       A("Thank you Robert, I have verified your account. I am sorry to hear that. Tell me what happened."),
-      M("You charged my card twice for my June premium. Two hundred and forty dollars, taken out twice. That is a real problem for me, my account is now overdrawn."),
-      A("I completely understand why that is frustrating, and I apologize. I can see the duplicate charge on June first. I am going to file a refund for the second two hundred and forty dollar charge right now."),
+      M(
+        "You charged my card twice for my June premium. Two hundred and forty dollars, taken out twice. That is a real problem for me, my account is now overdrawn.",
+      ),
+      A(
+        "I completely understand why that is frustrating, and I apologize. I can see the duplicate charge on June first. I am going to file a refund for the second two hundred and forty dollar charge right now.",
+      ),
       M("How long is that going to take? Because I have overdraft fees now because of this."),
-      A("The refund will post in three to five business days. For the overdraft fees, I am opening a service complaint so our resolution team can review reimbursement. While I have you, you do not currently have our supplemental hospital indemnity plan, which would only be twelve dollars a month."),
+      A(
+        "The refund will post in three to five business days. For the overdraft fees, I am opening a service complaint so our resolution team can review reimbursement. While I have you, you do not currently have our supplemental hospital indemnity plan, which would only be twelve dollars a month.",
+      ),
       M("No. I am not interested in buying anything else right now, honestly. I just want my money back."),
-      A("That is completely fair, I will not push it. So to confirm, a refund of two hundred and forty dollars in three to five days, and a complaint filed for the overdraft fees with a callback within forty-eight hours. Is there anything else I can help with?"),
+      A(
+        "That is completely fair, I will not push it. So to confirm, a refund of two hundred and forty dollars in three to five days, and a complaint filed for the overdraft fees with a callback within forty-eight hours. Is there anything else I can help with?",
+      ),
       M("No, that is it. Thank you for at least fixing it."),
     ],
   },
@@ -64,15 +74,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "MA-770914",
     queue: "Member Services",
     turns: [
-      A("Thanks for calling Meridian Health Plan Medicare team, this call may be recorded. This is Darnell. May I have your name and member ID to verify the account?"),
-      M("Hello dear, yes, my name is Eleanor Whitfield, member ID Mike Alpha seven seven zero nine one four. I am seventy-two."),
+      A(
+        "Thanks for calling Meridian Health Plan Medicare team, this call may be recorded. This is Darnell. May I have your name and member ID to verify the account?",
+      ),
+      M(
+        "Hello dear, yes, my name is Eleanor Whitfield, member ID Mike Alpha seven seven zero nine one four. I am seventy-two.",
+      ),
       A("Thank you Eleanor, you are verified. How can I help you today?"),
-      M("I wanted to understand what my plan covers for a hearing aid, and also I have been having some dental trouble."),
-      A("Of course. Your Medicare Advantage plan includes a hearing aid allowance of one thousand dollars per ear every two years through our network providers. On dental, your current plan only covers preventive cleanings, not major work like crowns."),
+      M(
+        "I wanted to understand what my plan covers for a hearing aid, and also I have been having some dental trouble.",
+      ),
+      A(
+        "Of course. Your Medicare Advantage plan includes a hearing aid allowance of one thousand dollars per ear every two years through our network providers. On dental, your current plan only covers preventive cleanings, not major work like crowns.",
+      ),
       M("Oh dear. The dentist said I might need a crown. That sounds expensive."),
-      A("I hear you, and I do not want you to face a surprise bill. We offer an optional dental add-on for nineteen dollars a month that covers fifty percent of major procedures like crowns, with no waiting period for existing members. Would you like me to add that?"),
+      A(
+        "I hear you, and I do not want you to face a surprise bill. We offer an optional dental add-on for nineteen dollars a month that covers fifty percent of major procedures like crowns, with no waiting period for existing members. Would you like me to add that?",
+      ),
       M("Yes, that actually sounds wonderful. Please add it. Nineteen a month is fine."),
-      A("Wonderful, I have added the dental add-on effective the first of next month. I am required to let you know you have a thirty day right to cancel for a full refund. You will receive confirmation in the mail."),
+      A(
+        "Wonderful, I have added the dental add-on effective the first of next month. I am required to let you know you have a thirty day right to cancel for a full refund. You will receive confirmation in the mail.",
+      ),
       M("Thank you so much, you have been very kind and helpful."),
     ],
   },
@@ -86,15 +108,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "EG-330145",
     queue: "Clinical",
     turns: [
-      A("Meridian Health Plan, clinical authorizations, this is Priya, the call is recorded. Can you verify your name and date of birth?"),
+      A(
+        "Meridian Health Plan, clinical authorizations, this is Priya, the call is recorded. Can you verify your name and date of birth?",
+      ),
       M("Jason Toomey, June 22nd, 1986. I'm calling because my MRI was denied and I'm in a lot of pain."),
-      A("I'm sorry you're dealing with that, Jason. Let me pull up the authorization. I see the request for a lumbar MRI was denied as not meeting medical necessity criteria because physical therapy wasn't documented first."),
-      M("But I did six weeks of physical therapy. My doctor sent the notes. This is ridiculous, I can barely walk."),
-      A("I understand, and I want to get this right for you. It's possible the PT documentation didn't reach the review team. I can submit an expedited appeal and request a peer-to-peer review with your physician."),
+      A(
+        "I'm sorry you're dealing with that, Jason. Let me pull up the authorization. I see the request for a lumbar MRI was denied as not meeting medical necessity criteria because physical therapy wasn't documented first.",
+      ),
+      M(
+        "But I did six weeks of physical therapy. My doctor sent the notes. This is ridiculous, I can barely walk.",
+      ),
+      A(
+        "I understand, and I want to get this right for you. It's possible the PT documentation didn't reach the review team. I can submit an expedited appeal and request a peer-to-peer review with your physician.",
+      ),
       M("How long does an appeal take? I can't wait weeks like this."),
-      A("An expedited clinical appeal is decided within seventy-two hours. Given your pain level, I'd also like to escalate this to my clinical supervisor right now to flag it as urgent. Let me bring them on."),
+      A(
+        "An expedited clinical appeal is decided within seventy-two hours. Given your pain level, I'd also like to escalate this to my clinical supervisor right now to flag it as urgent. Let me bring them on.",
+      ),
       M("Yes, please escalate it. I need this handled."),
-      A("I'm escalating now and filing the expedited appeal with the PT records attached. You'll get a decision call within seventy-two hours, and a reference number by text. I'm sorry again for the delay in your care."),
+      A(
+        "I'm escalating now and filing the expedited appeal with the PT records attached. You'll get a decision call within seventy-two hours, and a reference number by text. I'm sorry again for the delay in your care.",
+      ),
     ],
   },
   // 4
@@ -107,13 +141,19 @@ export const SCENARIOS: Scenario[] = [
     memberId: "IFP-204417",
     queue: "Claims",
     turns: [
-      A("Thank you for calling Meridian Health Plan, this is Tom, the call may be recorded. Can I verify your name and date of birth?"),
+      A(
+        "Thank you for calling Meridian Health Plan, this is Tom, the call may be recorded. Can I verify your name and date of birth?",
+      ),
       M("Sure, Angela Reyes, date of birth February 14th, 1990."),
       A("Thank you Angela, you're verified. What can I help you with?"),
       M("I had bloodwork done three weeks ago and I just want to know if the claim was paid."),
-      A("Let me look. Yes, I see claim ending in four-two-one for your lab work on May twentieth. It was processed and paid. Your plan covered it at one hundred percent as preventive, so you owe nothing."),
+      A(
+        "Let me look. Yes, I see claim ending in four-two-one for your lab work on May twentieth. It was processed and paid. Your plan covered it at one hundred percent as preventive, so you owe nothing.",
+      ),
       M("Oh great, so I won't get a bill?"),
-      A("Correct, your patient responsibility is zero dollars. If the lab sends you a bill, just call us and we'll sort it out, but you shouldn't receive one."),
+      A(
+        "Correct, your patient responsibility is zero dollars. If the lab sends you a bill, just call us and we'll sort it out, but you shouldn't receive one.",
+      ),
       M("Perfect, that's all I needed. Thank you so much."),
       A("You're welcome, Angela. Thanks for being a member, have a great day."),
     ],
@@ -128,13 +168,23 @@ export const SCENARIOS: Scenario[] = [
     memberId: "EG-661238",
     queue: "Enrollment",
     turns: [
-      A("Meridian Health Plan enrollment, this is Sofia, the call is recorded. May I have your name and date of birth?"),
-      M("Hi Sofia, this is Marcus Lee, date of birth August 9th, 1988. We just had a baby and I need to add him to my plan."),
-      A("Congratulations Marcus, that's wonderful. Adding a newborn is a qualifying life event, so we can do that today. What's the baby's full name and date of birth?"),
+      A(
+        "Meridian Health Plan enrollment, this is Sofia, the call is recorded. May I have your name and date of birth?",
+      ),
+      M(
+        "Hi Sofia, this is Marcus Lee, date of birth August 9th, 1988. We just had a baby and I need to add him to my plan.",
+      ),
+      A(
+        "Congratulations Marcus, that's wonderful. Adding a newborn is a qualifying life event, so we can do that today. What's the baby's full name and date of birth?",
+      ),
       M("His name is Oliver Lee, born June 3rd, 2026."),
-      A("Thank you. I'm adding Oliver effective his date of birth, June 3rd, so all his newborn care is covered retroactively. You have thirty days from birth to enroll and you're well within that."),
+      A(
+        "Thank you. I'm adding Oliver effective his date of birth, June 3rd, so all his newborn care is covered retroactively. You have thirty days from birth to enroll and you're well within that.",
+      ),
       M("Oh good, I was worried the hospital visit wouldn't be covered."),
-      A("It will be, because coverage goes back to his birth date. Your premium will increase by one hundred and ten dollars a month for the family tier starting next cycle. I'll mail the updated ID cards within seven to ten days."),
+      A(
+        "It will be, because coverage goes back to his birth date. Your premium will increase by one hundred and ten dollars a month for the family tier starting next cycle. I'll mail the updated ID cards within seven to ten days.",
+      ),
       M("That's great, thank you. That was easier than I expected."),
       A("Happy to help, and congratulations again to your family. Is there anything else?"),
       M("No, that's everything. Thanks Sofia."),
@@ -150,15 +200,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "MA-559070",
     queue: "Pharmacy",
     turns: [
-      A("Meridian Health Plan pharmacy services, this is Priya, the call is recorded. Can you verify your name and date of birth?"),
-      M("Helen Park, date of birth December 1st, 1951. My pharmacy says my new diabetes medication isn't covered and it would cost me four hundred dollars."),
-      A("I'm sorry, Helen, that's a lot. Let me check. Yes, that brand isn't on our formulary, but there's a covered generic alternative that's therapeutically equivalent and would be a ten dollar copay."),
+      A(
+        "Meridian Health Plan pharmacy services, this is Priya, the call is recorded. Can you verify your name and date of birth?",
+      ),
+      M(
+        "Helen Park, date of birth December 1st, 1951. My pharmacy says my new diabetes medication isn't covered and it would cost me four hundred dollars.",
+      ),
+      A(
+        "I'm sorry, Helen, that's a lot. Let me check. Yes, that brand isn't on our formulary, but there's a covered generic alternative that's therapeutically equivalent and would be a ten dollar copay.",
+      ),
       M("Will that work the same? I don't want my blood sugar to get worse."),
-      A("That's an important question for your doctor. If your doctor believes you specifically need the brand, they can submit a formulary exception request and I can start that for you today."),
+      A(
+        "That's an important question for your doctor. If your doctor believes you specifically need the brand, they can submit a formulary exception request and I can start that for you today.",
+      ),
       M("Yes, please start it. My doctor did say this specific one works best for me."),
-      A("I've opened the formulary exception. Your prescriber needs to submit a short clinical justification. I'm faxing the form to their office now. A decision usually takes three to five business days and we'll call you with the outcome."),
+      A(
+        "I've opened the formulary exception. Your prescriber needs to submit a short clinical justification. I'm faxing the form to their office now. A decision usually takes three to five business days and we'll call you with the outcome.",
+      ),
       M("Okay. So for now I just wait?"),
-      A("Yes, we'll follow up within five business days. If you need the medication immediately, ask your pharmacist about a one-time emergency supply while the exception is reviewed."),
+      A(
+        "Yes, we'll follow up within five business days. If you need the medication immediately, ask your pharmacist about a one-time emergency supply while the exception is reviewed.",
+      ),
       M("Alright, thank you for explaining it."),
     ],
   },
@@ -172,15 +234,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "IFP-119922",
     queue: "Retention",
     turns: [
-      A("Thank you for calling Meridian Health Plan, this is Darnell, the call may be recorded. May I verify your name and date of birth?"),
-      M("Greg Sandoval, July 30th, 1983. Honestly, I'm calling to cancel my plan. It's gotten too expensive."),
-      A("I'm sorry to hear that, Greg, and I'd like to understand. May I ask what the premium is costing you now and what's changed?"),
+      A(
+        "Thank you for calling Meridian Health Plan, this is Darnell, the call may be recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Greg Sandoval, July 30th, 1983. Honestly, I'm calling to cancel my plan. It's gotten too expensive.",
+      ),
+      A(
+        "I'm sorry to hear that, Greg, and I'd like to understand. May I ask what the premium is costing you now and what's changed?",
+      ),
       M("It's four hundred and sixty a month and money's tight. I found something cheaper online."),
-      A("That's completely understandable. Before you cancel, let me check options. You're on our Gold plan. We have a Silver plan that would drop you to three hundred and ten a month, saving you about eighteen hundred a year, with the same doctor network."),
+      A(
+        "That's completely understandable. Before you cancel, let me check options. You're on our Gold plan. We have a Silver plan that would drop you to three hundred and ten a month, saving you about eighteen hundred a year, with the same doctor network.",
+      ),
       M("Hmm. Would I keep my same doctor?"),
-      A("Yes, your primary care doctor is in-network on Silver. The main difference is a slightly higher deductible. Given you said money is tight, the lower premium may be the better fit."),
+      A(
+        "Yes, your primary care doctor is in-network on Silver. The main difference is a slightly higher deductible. Given you said money is tight, the lower premium may be the better fit.",
+      ),
       M("Okay, yeah, let's do the Silver plan instead of cancelling. That actually helps."),
-      A("Great, I've switched you to Silver effective the first of next month and stopped the cancellation. You'll see the lower premium on your next bill. I'm glad we could keep you covered."),
+      A(
+        "Great, I've switched you to Silver effective the first of next month and stopped the cancellation. You'll see the lower premium on your next bill. I'm glad we could keep you covered.",
+      ),
       M("Thanks, I appreciate you actually finding me something."),
     ],
   },
@@ -195,14 +269,22 @@ export const SCENARIOS: Scenario[] = [
     queue: "Member Services",
     turns: [
       A("Meridian Health Plan, this is Sofia, the call is recorded. Can I have your name and date of birth?"),
-      M("Yeah, Tanya Brooks, date of birth October 18th, 1995. I need a dermatologist that takes my insurance."),
+      M(
+        "Yeah, Tanya Brooks, date of birth October 18th, 1995. I need a dermatologist that takes my insurance.",
+      ),
       A("Happy to help, Tanya. You're on our Medicaid plan. What city or zip code should I search near?"),
       M("I'm in zip code six zero six one two, Chicago."),
-      A("Thanks. I found three in-network dermatologists within five miles. The closest is Dr. Amara Okafor, about one and a half miles away, accepting new patients, next availability in two weeks."),
+      A(
+        "Thanks. I found three in-network dermatologists within five miles. The closest is Dr. Amara Okafor, about one and a half miles away, accepting new patients, next availability in two weeks.",
+      ),
       M("That works. Do I need a referral first?"),
-      A("On your plan, dermatology does require a referral from your primary care doctor. I can send a message to your PCP's office requesting it so it's ready before your visit."),
+      A(
+        "On your plan, dermatology does require a referral from your primary care doctor. I can send a message to your PCP's office requesting it so it's ready before your visit.",
+      ),
       M("Yes please, that'd save me a step."),
-      A("Done. I've requested the referral and texted you Dr. Okafor's office number and address. Call them to book once the referral is on file, usually within two business days."),
+      A(
+        "Done. I've requested the referral and texted you Dr. Okafor's office number and address. Call them to book once the referral is on file, usually within two business days.",
+      ),
       M("Great, thanks for setting that up."),
     ],
   },
@@ -216,15 +298,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "EG-447781",
     queue: "Claims",
     turns: [
-      A("Meridian Health Plan claims, this is Maria, the call is recorded. May I verify your name and date of birth?"),
-      M("David Okonkwo, March 12th, 1975. I'm furious. You denied my emergency room claim and now I have a six thousand dollar bill."),
-      A("I'm very sorry, David. An ER bill that size is stressful. Let me review the claim before we go further. I see it was denied as out-of-network."),
+      A(
+        "Meridian Health Plan claims, this is Maria, the call is recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "David Okonkwo, March 12th, 1975. I'm furious. You denied my emergency room claim and now I have a six thousand dollar bill.",
+      ),
+      A(
+        "I'm very sorry, David. An ER bill that size is stressful. Let me review the claim before we go further. I see it was denied as out-of-network.",
+      ),
       M("It was an emergency. I had chest pains. You're supposed to cover emergencies at any hospital."),
-      A("You're right, and that's an important point. Emergency services are covered at the in-network level regardless of the hospital under federal rules. This denial looks incorrect to me."),
+      A(
+        "You're right, and that's an important point. Emergency services are covered at the in-network level regardless of the hospital under federal rules. This denial looks incorrect to me.",
+      ),
       M("So you made a mistake and I've been getting collection notices for weeks?"),
-      A("I understand your frustration and I apologize for that experience. I'm filing a formal complaint and a claim reprocessing request, and I'm escalating this to our claims review supervisor as a priority emergency-coverage error."),
+      A(
+        "I understand your frustration and I apologize for that experience. I'm filing a formal complaint and a claim reprocessing request, and I'm escalating this to our claims review supervisor as a priority emergency-coverage error.",
+      ),
       M("It needs to be fixed. This has been a nightmare."),
-      A("I'm escalating it now with all the notes. You'll get a callback within two business days, and I'm placing a hold so no further collection activity happens while we reprocess. Again, I'm sorry this happened."),
+      A(
+        "I'm escalating it now with all the notes. You'll get a callback within two business days, and I'm placing a hold so no further collection activity happens while we reprocess. Again, I'm sorry this happened.",
+      ),
       M("Fine. I expect that callback."),
     ],
   },
@@ -238,13 +332,23 @@ export const SCENARIOS: Scenario[] = [
     memberId: "IFP-665012",
     queue: "Tech Support",
     turns: [
-      A("Thanks for calling Meridian Health Plan, this is Tom, the call may be recorded. Can I get your name and date of birth?"),
-      M("Hi, Nadia Hassan, date of birth May 5th, 1992. I can't log into the member portal to see my ID card."),
-      A("I can help with that, Nadia. When you try to log in, what happens, an error message or a password issue?"),
+      A(
+        "Thanks for calling Meridian Health Plan, this is Tom, the call may be recorded. Can I get your name and date of birth?",
+      ),
+      M(
+        "Hi, Nadia Hassan, date of birth May 5th, 1992. I can't log into the member portal to see my ID card.",
+      ),
+      A(
+        "I can help with that, Nadia. When you try to log in, what happens, an error message or a password issue?",
+      ),
       M("It says my account is locked after I tried my password a few times."),
-      A("Got it, that's a security lockout. I've verified your identity, so I'll reset it. I'm sending a secure password reset link to the email on file, the one ending in at gmail dot com."),
+      A(
+        "Got it, that's a security lockout. I've verified your identity, so I'll reset it. I'm sending a secure password reset link to the email on file, the one ending in at gmail dot com.",
+      ),
       M("Okay, I see the email coming in now."),
-      A("Great, click that link, set a new password, and you'll be back in. Your digital ID card is on the home screen once you log in. You can also add it to your phone's wallet."),
+      A(
+        "Great, click that link, set a new password, and you'll be back in. Your digital ID card is on the home screen once you log in. You can also add it to your phone's wallet.",
+      ),
       M("It worked, I'm in. There's my ID card. Thank you."),
       A("Perfect, glad that's sorted. Anything else I can help with?"),
       M("No, that's it, thanks Tom."),
@@ -260,15 +364,29 @@ export const SCENARIOS: Scenario[] = [
     memberId: "IFP-773300",
     queue: "Member Services",
     turns: [
-      A("Meridian Health Plan, this is Darnell, the call is recorded. May I verify your name and date of birth?"),
-      M("Sure, Brian Foster, date of birth September 2nd, 1987. I wanted to understand my out-of-pocket maximum."),
-      A("Of course, Brian. Your individual out-of-pocket maximum this year is eight thousand dollars. After you reach that, the plan pays one hundred percent of covered services for the rest of the year."),
-      M("Okay. I ask because my son plays a lot of sports and I'm worried about an injury costing a fortune."),
-      A("That's a really common concern. We offer a supplemental accident plan that pays cash benefits directly to you for things like ER visits, fractures, and stitches, regardless of your deductible. It's about fourteen dollars a month for family coverage."),
+      A(
+        "Meridian Health Plan, this is Darnell, the call is recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Sure, Brian Foster, date of birth September 2nd, 1987. I wanted to understand my out-of-pocket maximum.",
+      ),
+      A(
+        "Of course, Brian. Your individual out-of-pocket maximum this year is eight thousand dollars. After you reach that, the plan pays one hundred percent of covered services for the rest of the year.",
+      ),
+      M(
+        "Okay. I ask because my son plays a lot of sports and I'm worried about an injury costing a fortune.",
+      ),
+      A(
+        "That's a really common concern. We offer a supplemental accident plan that pays cash benefits directly to you for things like ER visits, fractures, and stitches, regardless of your deductible. It's about fourteen dollars a month for family coverage.",
+      ),
       M("So it pays me cash on top of regular insurance if he breaks an arm?"),
-      A("Exactly, it helps with the deductible and out-of-pocket costs, and the cash goes to you. Given your situation it could be worth it. Would you like me to add it?"),
+      A(
+        "Exactly, it helps with the deductible and out-of-pocket costs, and the cash goes to you. Given your situation it could be worth it. Would you like me to add it?",
+      ),
       M("Yeah, let's add the accident plan. Fourteen a month is reasonable."),
-      A("Done, effective the first of next month, with a thirty day free-look period to cancel for a full refund. Confirmation will arrive by mail and email."),
+      A(
+        "Done, effective the first of next month, with a thirty day free-look period to cancel for a full refund. Confirmation will arrive by mail and email.",
+      ),
       M("Great, thanks for the suggestion, that gives me peace of mind."),
     ],
   },
@@ -282,15 +400,25 @@ export const SCENARIOS: Scenario[] = [
     memberId: "MA-220198",
     queue: "Billing",
     turns: [
-      A("Meridian Health Plan billing, this is Sofia, the call is recorded. May I verify your name and date of birth?"),
-      M("Walter Briggs, date of birth April 27th, 1949. I keep forgetting to pay my premium and I got a late notice. I'd like to set up automatic payment."),
-      A("I can absolutely set that up, Walter, that's a great way to avoid late notices. First, your account is current as of today, the late notice crossed in the mail with your payment. So you're all caught up."),
+      A(
+        "Meridian Health Plan billing, this is Sofia, the call is recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Walter Briggs, date of birth April 27th, 1949. I keep forgetting to pay my premium and I got a late notice. I'd like to set up automatic payment.",
+      ),
+      A(
+        "I can absolutely set that up, Walter, that's a great way to avoid late notices. First, your account is current as of today, the late notice crossed in the mail with your payment. So you're all caught up.",
+      ),
       M("Oh good, I was worried I'd lose coverage."),
       A("You're fine, no lapse. Now for autopay, would you like it from a bank account or a card?"),
       M("Bank account, please."),
-      A("For your security I'll send you a secure link to enter your bank details rather than reading them over the phone. Autopay will draft on the first of each month. You'll get an email confirmation each time."),
+      A(
+        "For your security I'll send you a secure link to enter your bank details rather than reading them over the phone. Autopay will draft on the first of each month. You'll get an email confirmation each time.",
+      ),
       M("That's perfect. I should have done this years ago."),
-      A("It'll make life easier. The link is on its way to your email. Once you submit it, you're all set. Anything else, Walter?"),
+      A(
+        "It'll make life easier. The link is on its way to your email. Once you submit it, you're all set. Anything else, Walter?",
+      ),
       M("No, thank you for your patience."),
     ],
   },
@@ -304,15 +432,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "EG-905512",
     queue: "Clinical",
     turns: [
-      A("Meridian Health Plan clinical, this is Priya, the call is recorded. May I verify your name and date of birth?"),
-      M("Carmen Diaz, date of birth November 8th, 1968. I'm checking on a prior authorization for my knee surgery."),
-      A("Let me look, Carmen. I see the request from your orthopedic surgeon came in two days ago. It's currently in clinical review, which typically takes up to five business days for a standard request."),
+      A(
+        "Meridian Health Plan clinical, this is Priya, the call is recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Carmen Diaz, date of birth November 8th, 1968. I'm checking on a prior authorization for my knee surgery.",
+      ),
+      A(
+        "Let me look, Carmen. I see the request from your orthopedic surgeon came in two days ago. It's currently in clinical review, which typically takes up to five business days for a standard request.",
+      ),
       M("My surgery is scheduled in two weeks. Will it be approved in time?"),
-      A("It should be, since five business days leaves a comfortable buffer. The reviewer did request one additional document, your recent knee X-ray report, which hasn't arrived yet."),
+      A(
+        "It should be, since five business days leaves a comfortable buffer. The reviewer did request one additional document, your recent knee X-ray report, which hasn't arrived yet.",
+      ),
       M("Oh no, so it's stuck?"),
-      A("Not stuck, just waiting on that one item. I'm sending a request to your surgeon's office right now to submit the X-ray report. Once they do, review resumes immediately."),
+      A(
+        "Not stuck, just waiting on that one item. I'm sending a request to your surgeon's office right now to submit the X-ray report. Once they do, review resumes immediately.",
+      ),
       M("Can you call me when it's approved?"),
-      A("Yes, I've flagged your file for a callback the moment a decision is made, and I'll also follow up in three days to make sure the X-ray report arrived. You'll hear from us either way."),
+      A(
+        "Yes, I've flagged your file for a callback the moment a decision is made, and I'll also follow up in three days to make sure the X-ray report arrived. You'll hear from us either way.",
+      ),
       M("Thank you, that's reassuring."),
     ],
   },
@@ -327,14 +467,26 @@ export const SCENARIOS: Scenario[] = [
     queue: "Member Services",
     turns: [
       A("Meridian Health Plan, this is Maria, the call is recorded. May I have your name and date of birth?"),
-      M("This is Dorothy Vance, I'm eighty-one years old, date of birth January 3rd, 1945. I've been on hold for nearly an hour and I'm exhausted and confused about all this."),
-      A("Dorothy, I'm so sorry you waited that long, that's not acceptable and I understand you're tired. Take your time. I'm here and we'll go at your pace. What's going on?"),
-      M("I got three different letters saying different things about my coverage and I don't understand any of them. I'm scared I've lost my insurance."),
-      A("I hear you, and I promise we'll sort this out together. Let me look at your account right now. Your Medicaid coverage is active and in good standing. You have not lost your insurance."),
+      M(
+        "This is Dorothy Vance, I'm eighty-one years old, date of birth January 3rd, 1945. I've been on hold for nearly an hour and I'm exhausted and confused about all this.",
+      ),
+      A(
+        "Dorothy, I'm so sorry you waited that long, that's not acceptable and I understand you're tired. Take your time. I'm here and we'll go at your pace. What's going on?",
+      ),
+      M(
+        "I got three different letters saying different things about my coverage and I don't understand any of them. I'm scared I've lost my insurance.",
+      ),
+      A(
+        "I hear you, and I promise we'll sort this out together. Let me look at your account right now. Your Medicaid coverage is active and in good standing. You have not lost your insurance.",
+      ),
       M("Oh thank goodness. Then why all these letters?"),
-      A("They were automated renewal notices that went out in the wrong order, which is confusing and I'm sorry. Because of the distress this caused, I'm filing a complaint and flagging your account for a single, clear summary letter."),
+      A(
+        "They were automated renewal notices that went out in the wrong order, which is confusing and I'm sorry. Because of the distress this caused, I'm filing a complaint and flagging your account for a single, clear summary letter.",
+      ),
       M("That would help. The small print is so hard for me to read."),
-      A("Understood. I'm escalating to our member advocate team who will call you, speak slowly, and walk you through everything, and I'll note your preference for large-print mail. You're in good hands."),
+      A(
+        "Understood. I'm escalating to our member advocate team who will call you, speak slowly, and walk you through everything, and I'll note your preference for large-print mail. You're in good hands.",
+      ),
       M("Thank you, dear, you've calmed me down."),
     ],
   },
@@ -348,15 +500,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "IFP-556677",
     queue: "Enrollment",
     turns: [
-      A("Meridian Health Plan enrollment, this is Tom, the call is recorded. May I verify your name and date of birth?"),
-      M("Hi, Priya Raman, date of birth June 14th, 1991. I just lost my job and my work insurance ends this month. Can I sign up now even though it's not open enrollment?"),
-      A("I'm sorry about the job, Priya. The good news is losing job-based coverage is a qualifying life event, so you're eligible for a special enrollment period."),
+      A(
+        "Meridian Health Plan enrollment, this is Tom, the call is recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Hi, Priya Raman, date of birth June 14th, 1991. I just lost my job and my work insurance ends this month. Can I sign up now even though it's not open enrollment?",
+      ),
+      A(
+        "I'm sorry about the job, Priya. The good news is losing job-based coverage is a qualifying life event, so you're eligible for a special enrollment period.",
+      ),
       M("Oh, that's a relief. How long do I have?"),
-      A("You have sixty days from the date your current coverage ends to enroll. I can help you start an application today so there's no gap in coverage."),
+      A(
+        "You have sixty days from the date your current coverage ends to enroll. I can help you start an application today so there's no gap in coverage.",
+      ),
       M("Yes, let's do that. I don't want to be uninsured."),
-      A("Smart. Based on your situation you may also qualify for premium subsidies through the marketplace, which could lower your cost significantly. I'll note that and send you the application link."),
+      A(
+        "Smart. Based on your situation you may also qualify for premium subsidies through the marketplace, which could lower your cost significantly. I'll note that and send you the application link.",
+      ),
       M("That would be amazing, I was worried about affording it."),
-      A("I've emailed you the special enrollment application and a subsidy estimate worksheet. Complete it within sixty days and your coverage can start the first of next month. Call us if you get stuck."),
+      A(
+        "I've emailed you the special enrollment application and a subsidy estimate worksheet. Complete it within sixty days and your coverage can start the first of next month. Call us if you get stuck.",
+      ),
       M("Thank you so much, this took a weight off my shoulders."),
     ],
   },
@@ -370,15 +534,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "MA-668120",
     queue: "Pharmacy",
     turns: [
-      A("Meridian Health Plan pharmacy, this is Darnell, the call is recorded. May I verify your name and date of birth?"),
-      M("Frank Mueller, date of birth February 2nd, 1955. I take three medications every month and driving to the pharmacy is getting hard on me."),
-      A("I understand, Frank, that drive can be a hassle. I can set you up with our mail-order pharmacy, which delivers a ninety day supply right to your door, usually at a lower copay than monthly pickups."),
+      A(
+        "Meridian Health Plan pharmacy, this is Darnell, the call is recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Frank Mueller, date of birth February 2nd, 1955. I take three medications every month and driving to the pharmacy is getting hard on me.",
+      ),
+      A(
+        "I understand, Frank, that drive can be a hassle. I can set you up with our mail-order pharmacy, which delivers a ninety day supply right to your door, usually at a lower copay than monthly pickups.",
+      ),
       M("Lower copay and delivered? How much lower?"),
-      A("For your three maintenance medications, a ninety day mail-order supply would save you roughly fifteen dollars per fill compared to thirty day pickups, plus no trips to the store."),
+      A(
+        "For your three maintenance medications, a ninety day mail-order supply would save you roughly fifteen dollars per fill compared to thirty day pickups, plus no trips to the store.",
+      ),
       M("That sounds great, let's set it up."),
-      A("Wonderful. I'm transferring your three prescriptions to mail-order now. Your first shipment arrives in seven to ten days, and you'll get reminders before each refill. I'm required to confirm your mailing address before we ship."),
+      A(
+        "Wonderful. I'm transferring your three prescriptions to mail-order now. Your first shipment arrives in seven to ten days, and you'll get reminders before each refill. I'm required to confirm your mailing address before we ship.",
+      ),
       M("Yes, it's the same address you have on file."),
-      A("Confirmed. You're all set for mail-order delivery. This should make things much easier on you, Frank."),
+      A(
+        "Confirmed. You're all set for mail-order delivery. This should make things much easier on you, Frank.",
+      ),
       M("Thank you, that's a big help at my age."),
     ],
   },
@@ -393,12 +569,20 @@ export const SCENARIOS: Scenario[] = [
     queue: "Member Services",
     turns: [
       A("Meridian Health Plan, this is Sofia, the call is recorded. May I have your name and date of birth?"),
-      M("Hi, Kevin Tran, date of birth July 7th, 1993. I have a standalone vision plan and I want to know if new glasses are covered."),
-      A("Let me check, Kevin. I can see you have our standalone dental and vision product. For the specific frame allowance and lens coverage, that's handled by our dedicated dental and vision specialty team."),
+      M(
+        "Hi, Kevin Tran, date of birth July 7th, 1993. I have a standalone vision plan and I want to know if new glasses are covered.",
+      ),
+      A(
+        "Let me check, Kevin. I can see you have our standalone dental and vision product. For the specific frame allowance and lens coverage, that's handled by our dedicated dental and vision specialty team.",
+      ),
       M("Okay, can you just tell me the basics?"),
-      A("I can see you have a once-a-year frame allowance, but for exact dollar amounts and in-network optical shops, the specialty team has the detailed benefit grid and can also check your remaining allowance for this year."),
+      A(
+        "I can see you have a once-a-year frame allowance, but for exact dollar amounts and in-network optical shops, the specialty team has the detailed benefit grid and can also check your remaining allowance for this year.",
+      ),
       M("Alright, can you connect me?"),
-      A("Yes, I'll transfer you now. So you don't have to repeat yourself, I'm adding a note with your question about the frame and lens allowance. Please hold while I connect you to the dental and vision team."),
+      A(
+        "Yes, I'll transfer you now. So you don't have to repeat yourself, I'm adding a note with your question about the frame and lens allowance. Please hold while I connect you to the dental and vision team.",
+      ),
       M("Okay, thanks."),
       A("You're welcome, Kevin. Transferring you now, they'll take great care of you."),
     ],
@@ -413,15 +597,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "IFP-889431",
     queue: "Claims",
     turns: [
-      A("Meridian Health Plan claims, this is Priya, the call is recorded. May I verify your name and date of birth?"),
-      M("Sure, Olivia Bennett, March 19th, 1984. I saw an out-of-network therapist and paid out of pocket. How do I get reimbursed?"),
-      A("Thanks, Olivia. Your plan does have out-of-network mental health benefits, so you can submit for partial reimbursement. Do you have an itemized receipt, what's called a superbill, from the therapist?"),
+      A(
+        "Meridian Health Plan claims, this is Priya, the call is recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Sure, Olivia Bennett, March 19th, 1984. I saw an out-of-network therapist and paid out of pocket. How do I get reimbursed?",
+      ),
+      A(
+        "Thanks, Olivia. Your plan does have out-of-network mental health benefits, so you can submit for partial reimbursement. Do you have an itemized receipt, what's called a superbill, from the therapist?",
+      ),
       M("I have receipts but I'm not sure they're itemized. This is already kind of annoying."),
-      A("I understand, the paperwork is tedious. The superbill needs the provider's details, dates, the service codes, and the amount paid. If your receipts don't have the codes, the therapist can provide a superbill, they're used to these requests."),
+      A(
+        "I understand, the paperwork is tedious. The superbill needs the provider's details, dates, the service codes, and the amount paid. If your receipts don't have the codes, the therapist can provide a superbill, they're used to these requests.",
+      ),
       M("Okay, so I have to go back to them. Then what?"),
-      A("Once you have it, upload it through the member portal under Submit a Claim, or mail it in. Reimbursement is typically fifty percent of the allowed amount after your out-of-network deductible, and processing takes about thirty days."),
+      A(
+        "Once you have it, upload it through the member portal under Submit a Claim, or mail it in. Reimbursement is typically fifty percent of the allowed amount after your out-of-network deductible, and processing takes about thirty days.",
+      ),
       M("Thirty days, of course. Fine. Can someone follow up if I send it in?"),
-      A("Yes, I'm opening a reference so when your superbill arrives it's expedited, and we'll email you when it's processed. I know it's a few steps, I appreciate your patience."),
+      A(
+        "Yes, I'm opening a reference so when your superbill arrives it's expedited, and we'll email you when it's processed. I know it's a few steps, I appreciate your patience.",
+      ),
       M("Alright, thanks for at least explaining it clearly."),
     ],
   },
@@ -435,13 +631,23 @@ export const SCENARIOS: Scenario[] = [
     memberId: "IFP-330960",
     queue: "Retention",
     turns: [
-      A("Thanks for calling Meridian Health Plan, this is Tom, the call may be recorded. May I verify your name and date of birth?"),
-      M("Hi, Rachel Kim, date of birth October 30th, 1989. I'm moving to Texas next month and I think I need to cancel my plan here."),
-      A("Congratulations on the move, Rachel. Since your current plan is specific to this state, moving is a qualifying life event. Rather than just cancel and risk a coverage gap, let's make sure you're covered in Texas."),
+      A(
+        "Thanks for calling Meridian Health Plan, this is Tom, the call may be recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Hi, Rachel Kim, date of birth October 30th, 1989. I'm moving to Texas next month and I think I need to cancel my plan here.",
+      ),
+      A(
+        "Congratulations on the move, Rachel. Since your current plan is specific to this state, moving is a qualifying life event. Rather than just cancel and risk a coverage gap, let's make sure you're covered in Texas.",
+      ),
       M("Oh, I didn't realize moving counted as a qualifying event."),
-      A("It does, which gives you a special enrollment window. We do offer plans in Texas. I'd like to transfer you to our relocation team who can line up a Texas plan to start the day your move is effective, with no gap."),
+      A(
+        "It does, which gives you a special enrollment window. We do offer plans in Texas. I'd like to transfer you to our relocation team who can line up a Texas plan to start the day your move is effective, with no gap.",
+      ),
       M("That would be ideal. I was dreading being uninsured during the move."),
-      A("No need to be. I'll note your move date and that you want continuous coverage. Please hold while I connect you to the relocation specialists."),
+      A(
+        "No need to be. I'll note your move date and that you want continuous coverage. Please hold while I connect you to the relocation specialists.",
+      ),
       M("Great, thank you for making this easy."),
       A("My pleasure, Rachel. Transferring you now, and good luck with the move."),
     ],
@@ -456,15 +662,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "MA-447712",
     queue: "Member Services",
     turns: [
-      A("Meridian Health Plan Medicare team, this is Darnell, the call is recorded. May I have your name and date of birth?"),
-      M("Yes, this is Gloria Hayes, date of birth May 22nd, 1948. I wanted to ask about my yearly wellness visit."),
-      A("Happy to help, Gloria. Your annual wellness visit is fully covered at zero dollars once per year. I can see you haven't used yours yet this year, so it's a great time to schedule it."),
+      A(
+        "Meridian Health Plan Medicare team, this is Darnell, the call is recorded. May I have your name and date of birth?",
+      ),
+      M(
+        "Yes, this is Gloria Hayes, date of birth May 22nd, 1948. I wanted to ask about my yearly wellness visit.",
+      ),
+      A(
+        "Happy to help, Gloria. Your annual wellness visit is fully covered at zero dollars once per year. I can see you haven't used yours yet this year, so it's a great time to schedule it.",
+      ),
       M("Good, I'll book that. While I have you, my hearing has gotten worse lately."),
-      A("I'm glad you mentioned it. Your plan includes a hearing benefit, a covered hearing exam and an allowance toward hearing aids through our network. There's also an enhanced hearing package for nine dollars a month that increases the hearing aid allowance substantially."),
+      A(
+        "I'm glad you mentioned it. Your plan includes a hearing benefit, a covered hearing exam and an allowance toward hearing aids through our network. There's also an enhanced hearing package for nine dollars a month that increases the hearing aid allowance substantially.",
+      ),
       M("My hearing aids last time were so expensive. How much more would the enhanced package give me?"),
-      A("It roughly doubles your hearing aid allowance, which for most members more than pays for the nine dollars a month if you need devices. Given your hearing concern, would you like me to add it?"),
+      A(
+        "It roughly doubles your hearing aid allowance, which for most members more than pays for the nine dollars a month if you need devices. Given your hearing concern, would you like me to add it?",
+      ),
       M("Yes, please add the enhanced hearing package. That makes sense for me."),
-      A("Added, effective the first of next month, with a thirty day right to cancel. I'll also send you a list of in-network audiologists. Shall I help you book that wellness visit too?"),
+      A(
+        "Added, effective the first of next month, with a thirty day right to cancel. I'll also send you a list of in-network audiologists. Shall I help you book that wellness visit too?",
+      ),
       M("Yes please, you've been so helpful."),
     ],
   },
@@ -478,15 +696,29 @@ export const SCENARIOS: Scenario[] = [
     memberId: "EG-770345",
     queue: "Grievances",
     turns: [
-      A("Meridian Health Plan, this is Maria, I want to let you know this call is recorded. May I verify your name and date of birth?"),
-      M("Yes. Samuel Adeyemi, date of birth August 17th, 1972. I want to file a formal grievance. You shared my claim information with my employer without my permission."),
-      A("Samuel, thank you for raising this, and I take it very seriously. A privacy concern like this is exactly the kind of thing we must document formally. I'm sorry this happened."),
-      M("My diagnosis is private. My manager should never have known about my treatment. This is a serious breach."),
-      A("You're absolutely right, your protected health information should never be disclosed to your employer. I'm opening a formal privacy grievance and a potential HIPAA incident review right now."),
+      A(
+        "Meridian Health Plan, this is Maria, I want to let you know this call is recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Yes. Samuel Adeyemi, date of birth August 17th, 1972. I want to file a formal grievance. You shared my claim information with my employer without my permission.",
+      ),
+      A(
+        "Samuel, thank you for raising this, and I take it very seriously. A privacy concern like this is exactly the kind of thing we must document formally. I'm sorry this happened.",
+      ),
+      M(
+        "My diagnosis is private. My manager should never have known about my treatment. This is a serious breach.",
+      ),
+      A(
+        "You're absolutely right, your protected health information should never be disclosed to your employer. I'm opening a formal privacy grievance and a potential HIPAA incident review right now.",
+      ),
       M("What happens next? I want this taken seriously, not brushed off."),
-      A("It will be. I'm escalating this to our privacy officer and compliance team, who are required to investigate and respond to you in writing within thirty days, sooner if possible. You'll receive a grievance reference number by secure mail."),
+      A(
+        "It will be. I'm escalating this to our privacy officer and compliance team, who are required to investigate and respond to you in writing within thirty days, sooner if possible. You'll receive a grievance reference number by secure mail.",
+      ),
       M("And what about the information that was already shared?"),
-      A("The compliance team will investigate how it occurred and what corrective action is needed, and they'll address that directly with you. I'm documenting everything you've told me verbatim. Again, I'm sorry, and thank you for reporting it."),
+      A(
+        "The compliance team will investigate how it occurred and what corrective action is needed, and they'll address that directly with you. I'm documenting everything you've told me verbatim. Again, I'm sorry, and thank you for reporting it.",
+      ),
       M("Alright. I expect to hear from that compliance officer."),
     ],
   },
@@ -500,15 +732,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "SUP-220114",
     queue: "Claims",
     turns: [
-      A("Thanks for calling Meridian Health Plan, this is Sofia, the call may be recorded. May I verify your name and date of birth?"),
-      M("Hi, James Whitaker, date of birth April 11th, 1966. I have your critical illness supplemental policy and I was just diagnosed with cancer. I don't really know how the benefit works."),
-      A("James, I'm sorry to hear about your diagnosis, that's a lot to deal with. I'll make the benefit part as easy as possible. Your critical illness policy pays a lump-sum cash benefit directly to you upon a covered diagnosis like this."),
+      A(
+        "Thanks for calling Meridian Health Plan, this is Sofia, the call may be recorded. May I verify your name and date of birth?",
+      ),
+      M(
+        "Hi, James Whitaker, date of birth April 11th, 1966. I have your critical illness supplemental policy and I was just diagnosed with cancer. I don't really know how the benefit works.",
+      ),
+      A(
+        "James, I'm sorry to hear about your diagnosis, that's a lot to deal with. I'll make the benefit part as easy as possible. Your critical illness policy pays a lump-sum cash benefit directly to you upon a covered diagnosis like this.",
+      ),
       M("A lump sum? So it's not paid to the hospital?"),
-      A("Correct, it's paid directly to you to use however you need, treatment costs, bills, anything. Based on your policy, the covered cancer diagnosis benefit is a one-time payment of fifteen thousand dollars."),
+      A(
+        "Correct, it's paid directly to you to use however you need, treatment costs, bills, anything. Based on your policy, the covered cancer diagnosis benefit is a one-time payment of fifteen thousand dollars.",
+      ),
       M("That would really help right now. What do I need to do?"),
-      A("Just submit the claim form with your physician's statement confirming the diagnosis and date. I'll email it to you now, and you can return it by portal upload or mail. Most claims pay within ten business days of receiving the documents."),
+      A(
+        "Just submit the claim form with your physician's statement confirming the diagnosis and date. I'll email it to you now, and you can return it by portal upload or mail. Most claims pay within ten business days of receiving the documents.",
+      ),
       M("That's faster than I expected. Thank you for explaining it so clearly."),
-      A("Of course, James. I've emailed the form and flagged your claim for priority handling given the circumstances. Take care of yourself, and call us if you need anything."),
+      A(
+        "Of course, James. I've emailed the form and flagged your claim for priority handling given the circumstances. Take care of yourself, and call us if you need anything.",
+      ),
       M("I really appreciate your kindness. Thank you."),
     ],
   },
@@ -524,13 +768,21 @@ export const SCENARIOS: Scenario[] = [
     turns: [
       A("Meridian Health Plan, this is Tom, the call is recorded. May I have your name and date of birth?"),
       M("Hey, Marcus Bell, date of birth December 9th, 1990. Does my plan cover telehealth video visits?"),
-      A("Yes, Marcus. Your employer plan covers telehealth visits with in-network providers at a fifteen dollar copay, and our twenty-four seven virtual urgent care is even lower, ten dollars a visit."),
+      A(
+        "Yes, Marcus. Your employer plan covers telehealth visits with in-network providers at a fifteen dollar copay, and our twenty-four seven virtual urgent care is even lower, ten dollars a visit.",
+      ),
       M("Oh nice, that's convenient. So I can just video call a doctor for a cold?"),
-      A("Exactly, for things like colds, rashes, or prescriptions refills, virtual urgent care is fast. For ongoing care you can also do video visits with your regular doctor if they offer it."),
+      A(
+        "Exactly, for things like colds, rashes, or prescriptions refills, virtual urgent care is fast. For ongoing care you can also do video visits with your regular doctor if they offer it.",
+      ),
       M("Good to know. That's mainly what I needed."),
-      A("Great. One thing I can mention, we also offer a virtual mental health add-on with unlimited therapy video sessions for twenty dollars a month, if that's ever of interest."),
+      A(
+        "Great. One thing I can mention, we also offer a virtual mental health add-on with unlimited therapy video sessions for twenty dollars a month, if that's ever of interest.",
+      ),
       M("No thanks, I don't need that right now, just the regular telehealth is fine."),
-      A("Totally fine, no problem at all. So you're all set with telehealth and virtual urgent care. Anything else, Marcus?"),
+      A(
+        "Totally fine, no problem at all. So you're all set with telehealth and virtual urgent care. Anything else, Marcus?",
+      ),
       M("Nope, that covers it. Thanks Tom."),
     ],
   },
@@ -544,15 +796,27 @@ export const SCENARIOS: Scenario[] = [
     memberId: "MA-119087",
     queue: "Billing",
     turns: [
-      A("Meridian Health Plan billing, this is Priya, the call is recorded. May I verify your name and date of birth, please?"),
-      M("Yes dear, this is Arthur Greene, I'm seventy-eight, date of birth March 28th, 1948. I got a bill and I just don't understand it. I thought Medicare paid for everything."),
-      A("Of course, Arthur, I'm happy to walk through it slowly with you. Bills can be confusing. Can you tell me the amount and the date on it?"),
+      A(
+        "Meridian Health Plan billing, this is Priya, the call is recorded. May I verify your name and date of birth, please?",
+      ),
+      M(
+        "Yes dear, this is Arthur Greene, I'm seventy-eight, date of birth March 28th, 1948. I got a bill and I just don't understand it. I thought Medicare paid for everything.",
+      ),
+      A(
+        "Of course, Arthur, I'm happy to walk through it slowly with you. Bills can be confusing. Can you tell me the amount and the date on it?",
+      ),
       M("It says I owe forty-two dollars from a doctor visit in May."),
-      A("Thank you. I see that visit. Medicare and your Medicare Advantage plan paid most of it. The forty-two dollars is your specialist copay, the small fixed amount your plan asks for when you see a specialist."),
+      A(
+        "Thank you. I see that visit. Medicare and your Medicare Advantage plan paid most of it. The forty-two dollars is your specialist copay, the small fixed amount your plan asks for when you see a specialist.",
+      ),
       M("Oh. So it's not a mistake? I really do owe it?"),
-      A("It's correct, but it's a normal small copay, not a sign anything went wrong. Your plan covered the rest. For your regular primary doctor, your copay is even lower, or zero for wellness visits."),
+      A(
+        "It's correct, but it's a normal small copay, not a sign anything went wrong. Your plan covered the rest. For your regular primary doctor, your copay is even lower, or zero for wellness visits.",
+      ),
       M("That makes me feel better. I was worried I'd done something wrong."),
-      A("Not at all, Arthur, you did everything right and it was a good question to ask. You can pay the forty-two dollars by mail or phone, and I can note your account that you'd like a plain-language summary with future bills."),
+      A(
+        "Not at all, Arthur, you did everything right and it was a good question to ask. You can pay the forty-two dollars by mail or phone, and I can note your account that you'd like a plain-language summary with future bills.",
+      ),
       M("Yes please, that would help me a lot. Thank you for being so patient."),
     ],
   },

@@ -29,13 +29,37 @@ export const RESOURCE_LABELSETS: LabelsetDef[] = [
     labels: [
       { label: "Claims", description: "Status, denial, payment, or submission of a medical/dental claim." },
       { label: "Billing & Payments", description: "Premiums, invoices, autopay, refunds, payment failures." },
-      { label: "Enrollment & Eligibility", description: "Signing up, adding/removing dependents, plan changes, effective dates, eligibility checks." },
-      { label: "Benefits & Coverage", description: "What is covered, copays, deductibles, out-of-pocket maximums, in/out of network coverage questions." },
-      { label: "Prior Authorization", description: "Pre-approval for procedures, imaging, surgery, or specialist referrals." },
-      { label: "Provider Network", description: "Finding in-network doctors, hospitals, or specialists; provider directory issues." },
-      { label: "Pharmacy & Rx", description: "Prescription drug coverage, formulary, pharmacy benefits, medication cost." },
-      { label: "Complaint", description: "Member is primarily calling to complain about service, denial, billing error, or experience." },
-      { label: "Cancellation & Retention", description: "Member wants to cancel, downgrade, or is shopping competitors." },
+      {
+        label: "Enrollment & Eligibility",
+        description:
+          "Signing up, adding/removing dependents, plan changes, effective dates, eligibility checks.",
+      },
+      {
+        label: "Benefits & Coverage",
+        description:
+          "What is covered, copays, deductibles, out-of-pocket maximums, in/out of network coverage questions.",
+      },
+      {
+        label: "Prior Authorization",
+        description: "Pre-approval for procedures, imaging, surgery, or specialist referrals.",
+      },
+      {
+        label: "Provider Network",
+        description: "Finding in-network doctors, hospitals, or specialists; provider directory issues.",
+      },
+      {
+        label: "Pharmacy & Rx",
+        description: "Prescription drug coverage, formulary, pharmacy benefits, medication cost.",
+      },
+      {
+        label: "Complaint",
+        description:
+          "Member is primarily calling to complain about service, denial, billing error, or experience.",
+      },
+      {
+        label: "Cancellation & Retention",
+        description: "Member wants to cancel, downgrade, or is shopping competitors.",
+      },
       { label: "Portal & Tech Support", description: "Login, app, ID card, website, or technical issues." },
     ],
   },
@@ -47,7 +71,10 @@ export const RESOURCE_LABELSETS: LabelsetDef[] = [
     kind: "RESOURCES",
     labels: [
       { label: "Resolved", description: "Member's issue was fully resolved on this call." },
-      { label: "Follow-up Required", description: "Resolution pending a callback, document, or future action." },
+      {
+        label: "Follow-up Required",
+        description: "Resolution pending a callback, document, or future action.",
+      },
       { label: "Escalated", description: "Routed to a supervisor, specialist team, or grievance process." },
       { label: "Transferred", description: "Handed to another department without resolution." },
       { label: "Unresolved", description: "Call ended without resolving the member's issue." },
@@ -78,7 +105,10 @@ export const RESOURCE_LABELSETS: LabelsetDef[] = [
       { label: "Medicaid", description: "Medicaid / state-sponsored plans." },
       { label: "Employer Group", description: "Coverage through an employer group plan." },
       { label: "Dental & Vision", description: "Standalone dental or vision plan." },
-      { label: "Supplemental", description: "Supplemental/ancillary products (accident, critical illness, hospital indemnity)." },
+      {
+        label: "Supplemental",
+        description: "Supplemental/ancillary products (accident, critical illness, hospital indemnity).",
+      },
     ],
   },
   {
@@ -92,10 +122,19 @@ export const RESOURCE_LABELSETS: LabelsetDef[] = [
       { label: "Cross-sell Offered", description: "The agent offered an additional product or plan." },
       { label: "Cross-sell Accepted", description: "The member agreed to an additional product or plan." },
       { label: "Retention Save", description: "A member who wanted to cancel was retained." },
-      { label: "Compliance Risk", description: "Possible compliance issue: missing disclosure, PHI mishandling, unverified identity." },
+      {
+        label: "Compliance Risk",
+        description: "Possible compliance issue: missing disclosure, PHI mishandling, unverified identity.",
+      },
       { label: "Coverage Denied", description: "A claim, service, or authorization was denied." },
-      { label: "First-Call Resolution", description: "Issue resolved on the first contact with no follow-up." },
-      { label: "Vulnerable Member", description: "Member appears elderly, distressed, or in a sensitive health situation." },
+      {
+        label: "First-Call Resolution",
+        description: "Issue resolved on the first contact with no follow-up.",
+      },
+      {
+        label: "Vulnerable Member",
+        description: "Member appears elderly, distressed, or in a sensitive health situation.",
+      },
     ],
   },
 ];
@@ -113,12 +152,21 @@ export const PARAGRAPH_LABELSET: LabelsetDef = {
     { label: "Complaint", description: "The member expresses dissatisfaction, frustration, or a grievance." },
     { label: "Cross-sell Pitch", description: "The agent pitches an additional product, plan, or upgrade." },
     { label: "Objection", description: "The member pushes back, hesitates, or declines an offer." },
-    { label: "Resolution", description: "The agent resolves the issue or states the resolution/next steps for the problem." },
-    { label: "Compliance Disclosure", description: "Required disclosure, recording notice, terms, or regulatory script." },
+    {
+      label: "Resolution",
+      description: "The agent resolves the issue or states the resolution/next steps for the problem.",
+    },
+    {
+      label: "Compliance Disclosure",
+      description: "Required disclosure, recording notice, terms, or regulatory script.",
+    },
     { label: "Escalation", description: "The call is escalated to a supervisor or specialist." },
     { label: "Empathy Statement", description: "The agent acknowledges feelings or expresses empathy." },
     { label: "Next Steps", description: "Wrap-up, summary of actions, and what happens next." },
-    { label: "Sensitive / PII", description: "Personal, health, or payment information is shared (SSN, DOB, diagnosis, card number)." },
+    {
+      label: "Sensitive / PII",
+      description: "Personal, health, or payment information is shared (SSN, DOB, diagnosis, card number).",
+    },
   ],
 };
 
@@ -133,7 +181,11 @@ function labelOps(sets: LabelsetDef[]) {
       ident: ls.id,
       description: `Classify the call by ${ls.title}. ${ls.multiple ? "Apply all that genuinely apply." : "Choose the single best label."}`,
       multiple: ls.multiple,
-      labels: ls.labels.map((l) => ({ label: l.label, description: l.description, examples: l.examples ?? [] })),
+      labels: ls.labels.map((l) => ({
+        label: l.label,
+        description: l.description,
+        examples: l.examples ?? [],
+      })),
     },
   }));
 }
@@ -189,13 +241,15 @@ const RAW_AGENTS: AgentDef[] = [
   {
     key: "resource-labeler",
     type: "labeler",
-    description: "Classifies each whole call into reason, outcome, sentiment, line of business and disposition flags.",
+    description:
+      "Classifies each whole call into reason, outcome, sentiment, line of business and disposition flags.",
     parameters: { name: "resource-labeler", on: 1, operations: labelOps(RESOURCE_LABELSETS) },
   },
   {
     key: "paragraph-labeler",
     type: "labeler",
-    description: "Tags individual transcript blocks with call moments (complaint, cross-sell pitch, resolution, …).",
+    description:
+      "Tags individual transcript blocks with call moments (complaint, cross-sell pitch, resolution, …).",
     parameters: { name: "paragraph-labeler", on: 0, operations: labelOps([PARAGRAPH_LABELSET]) },
   },
   {
@@ -203,7 +257,8 @@ const RAW_AGENTS: AgentDef[] = [
     // running task per operation type (two separate `ask` tasks => 422).
     key: "call-insights",
     type: "ask",
-    description: "Writes the structured call_analysis and call_metrics fields used by the detail page and the dashboard.",
+    description:
+      "Writes the structured call_analysis and call_metrics fields used by the detail page and the dashboard.",
     parameters: {
       name: "call-insights",
       on: 1,

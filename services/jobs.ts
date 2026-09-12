@@ -3,9 +3,10 @@
  * provisioning (labelsets + agents, sequentially). Both are observable at
  * `/api/v1/jobs/{id}` and streamed at `/api/v1/jobs/{id}/events`.
  */
-import type { Job } from "@/vendor/arag-platform/src/index.ts";
+
+import { AGENTS, ALL_LABELSETS } from "@/lib/domain/taxonomy";
 import type { Runtime } from "@/lib/runtime";
-import { ALL_LABELSETS, AGENTS } from "@/lib/domain/taxonomy";
+import type { Job } from "@/vendor/arag-platform/src/index.ts";
 import { deleteAllTasks, startAgent } from "./agents";
 import { invalidateCall } from "./calls";
 import { provisionLabelsets } from "./labelsets";

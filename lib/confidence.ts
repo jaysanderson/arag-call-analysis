@@ -70,7 +70,11 @@ export function deriveConfidence(answerLength: number, ranges: [number, number][
   return { level: "low", label: "Low confidence", citationCount, coveragePct };
 }
 
-export type RemiQuality = { answerRelevance: number | null; groundedness: number | null; contextRelevance: number | null };
+export type RemiQuality = {
+  answerRelevance: number | null;
+  groundedness: number | null;
+  contextRelevance: number | null;
+};
 
 /**
  * Qualitative bucket from a real REMi score (0-5 scale on both fields).
@@ -86,8 +90,16 @@ export type RemiQuality = { answerRelevance: number | null; groundedness: number
 export function deriveConfidenceFromRemi(q: RemiQuality, citationCount: number): ConfidenceResult | null {
   if (q.answerRelevance == null && q.groundedness == null) return null;
   const score = Math.max(q.answerRelevance ?? 0, q.groundedness ?? 0) / 5;
-  if (score >= 0.7) return { level: "high", label: "High confidence", citationCount, coveragePct: Math.round(score * 100) };
-  if (score >= 0.4) return { level: "moderate", label: "Moderate confidence", citationCount, coveragePct: Math.round(score * 100) };
-  if (score > 0) return { level: "low", label: "Low confidence", citationCount, coveragePct: Math.round(score * 100) };
+  if (score >= 0.7)
+    return { level: "high", label: "High confidence", citationCount, coveragePct: Math.round(score * 100) };
+  if (score >= 0.4)
+    return {
+      level: "moderate",
+      label: "Moderate confidence",
+      citationCount,
+      coveragePct: Math.round(score * 100),
+    };
+  if (score > 0)
+    return { level: "low", label: "Low confidence", citationCount, coveragePct: Math.round(score * 100) };
   return { level: "none", label: "No grounded citations", citationCount: 0, coveragePct: 0 };
 }
