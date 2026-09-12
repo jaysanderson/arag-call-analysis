@@ -10,7 +10,7 @@ import { parseDetail, parseSummary } from "@/lib/parse";
 import type { Runtime } from "@/lib/runtime";
 import type { CallDetail, CallSummary } from "@/lib/types";
 import type { Resource } from "@/vendor/arag-platform/src/arag/types.ts";
-import { AragError, notFound, withRetry } from "@/vendor/arag-platform/src/index.ts";
+import { AragError, badRequest, HttpError, notFound, withRetry } from "@/vendor/arag-platform/src/index.ts";
 import { cacheKeys } from "./cache";
 
 /**
@@ -177,12 +177,16 @@ function slugify(s: string): string {
 
 /** Create a call resource from a transcript or a recording. Returns the ARAG resource id. */
 export async function createCall(rt: Runtime, input: CreateCallInput): Promise<string> {
-  if (!input.transcript && !input.recording) {
-    throw new Error("Either a transcript or a recording is required");
-  }
-  if (input.recording && !AUDIO_VIDEO_RE.test(input.recording.contentType)) {
-    throw new Error(`Unsupported recording content type ${input.recording.contentType}`);
-  }
+  // Route handlers validate first; these are the service-layer invariants, as problem documents
+  // rather than 500s, so any caller of the service (a script, a test) gets the same contract.
+  if (!input.transcript && !input.recording)
+    throw badRequest("Either a transcript or a recording is required");
+  if (input.recording && !AUDIO_VIDEO_RE.test(input.recording.contentType))
+    throw new HttpError(
+      415,
+      "Unsupported media type",
+      `recording content type ${input.recording.contentType} is not audio or video`,
+    );
   const createdISO = input.createdISO ?? new Date().toISOString();
   const mediaType = mediaTypeFor(input);
   const icon = input.recording?.contentType ?? "text/plain";
@@ -257,9 +261,8 @@ export async function mediaStream(
   range: string | null,
   signal?: AbortSignal,
 ): Promise<Response> {
-  if (!(MEDIA_FIELD_ALLOWLIST as readonly string[]).includes(field)) {
-    throw new Error(`field must be one of ${MEDIA_FIELD_ALLOWLIST.join(", ")}`);
-  }
+  if (!(MEDIA_FIELD_ALLOWLIST as readonly string[]).includes(field))
+    throw badRequest(`field must be one of ${MEDIA_FIELD_ALLOWLIST.join(", ")}`);
   try {
     return await rt.arag.downloadFileField(id, field, { range, signal });
   } catch (err) {

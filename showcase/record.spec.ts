@@ -27,7 +27,7 @@ test("showcase walkthrough", async ({ page }) => {
   const total = page.locator("a", { has: page.getByText("Total calls") }).first();
   await expect(total).toBeVisible();
   await expect(total).not.toContainText("NaN");
-  await pause(2000);
+  await pause(12_000);
   await shot("01-dashboard");
 
   // --- 0:12 the charts: reason / sentiment / cross-sell, all AI-labeled ------------------
@@ -35,7 +35,7 @@ test("showcase walkthrough", async ({ page }) => {
   await expect(page.getByText("Sentiment mix")).toBeVisible();
   await expect(page.getByText("Cross-sell funnel")).toBeVisible();
   await page.getByText("Cross-sell funnel").scrollIntoViewIfNeeded();
-  await pause(1800);
+  await pause(13_000);
   await shot("02-charts");
 
   // --- 0:25 drill into a KPI: complaint rate -> filtered calls list ----------------------
@@ -44,7 +44,7 @@ test("showcase walkthrough", async ({ page }) => {
   await expect(page).toHaveURL(/label=disposition_flags/);
   await expect(page.getByRole("heading", { name: "Calls", exact: true })).toBeVisible();
   await expect(page.locator('a[href^="/calls/"]').first()).toBeVisible({ timeout: 20_000 });
-  await pause(1800);
+  await pause(15_000);
   await shot("03-drilldown");
 
   // --- 0:40 facet filter on the full calls list ------------------------------------------

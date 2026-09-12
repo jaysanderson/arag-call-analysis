@@ -9,7 +9,8 @@ make dev
 
 Open **http://localhost:3000**. Everything below works immediately — the mock ARAG server has
 already been seeded with real transcripts and run through the same labeling and analysis agents a
-live Knowledge Box would use, so nothing on screen is a static mockup.
+live Knowledge Box would use, so nothing on screen is a static mockup. (Step 5 below, "How this works," explains exactly which
+ARAG mechanism drives each screen.)
 
 ## 1. Dashboard (`/`)
 
@@ -20,8 +21,7 @@ pre-filtered to that segment (click "Complaint rate," land on every complaint-fl
 Below the tiles, charts break the same data down by call reason, sentiment, outcome, line of
 business and complaint category, plus a cross-sell funnel. At the bottom, a strip of the most
 recent calls as cards. Every number here is a live aggregation of each call's own
-AI-generated `call_metrics` field — nothing is hand-entered (see
-[How this works](#how-this-works-every-page) below).
+AI-generated `call_metrics` field — nothing is hand-entered (see "How this works," step 5 below).
 
 ## 2. Calls (`/calls`)
 

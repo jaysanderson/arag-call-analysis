@@ -26,3 +26,7 @@ working days.
 - Rate limiting and the response cache are per process and in memory; a multi-machine deployment
   limits per machine.
 - Job state and the log ring buffer live in `DATA_DIR` / memory, not in an audited store.
+- `GET /api/v1/calls/{id}/media` is deliberately exempt from the rate limiter: a media player issues
+  many `Range` requests while scrubbing, and a 5 rps bucket would break playback. It is still
+  bounded by the allowlisted `field`, by the size of the upstream object, and by `API_KEYS` when
+  that is configured. Put a CDN or a reverse-proxy limit in front of it for a public deployment.
