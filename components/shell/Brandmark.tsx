@@ -34,20 +34,19 @@ export function Wordmark({
 }
 
 /**
- * The identity block in the sidebar: partner logo if configured, otherwise the Progress wordmark,
- * with the product name and tagline beneath it either way.
+ * The identity block at the top of the sidebar: **the product's** identity, not the platform's.
+ *
+ * The Progress Agentic RAG wordmark belongs to the band above and the footer credit below, and is
+ * deliberately absent here — showing it in both places put the same mark twice in the top-left
+ * corner and made the platform, rather than the product, read as the thing you are using. What
+ * belongs here is the partner's logo when one is configured, and the product name and tagline.
  */
 export function ProductIdent({ branding, compact }: { branding: Branding; compact?: boolean }) {
-  // The Progress wordmark is a Progress-owned surface. `BRAND_POWERED_BY=0` removes the band, the
-  // footer credit AND this mark together, so a white-labelled deployment carries no Progress
-  // identity at all — not even as a placeholder where a partner has supplied no logo of their own.
-  const mark = branding.logoUrl ? "partner" : branding.poweredBy ? "progress" : "none";
   return (
     <>
-      {mark === "partner" && (
+      {branding.logoUrl && (
         <img src={branding.logoUrl} alt={branding.productName} style={{ height: 20, width: "auto" }} />
       )}
-      {mark === "progress" && <Wordmark height={compact ? 16 : 20} />}
       {!compact && (
         <>
           <span className="name">{branding.productName}</span>
@@ -56,4 +55,9 @@ export function ProductIdent({ branding, compact }: { branding: Branding; compac
       )}
     </>
   );
+}
+
+/** True when the sidebar identity block would render nothing at all (collapsed, no partner logo). */
+export function hasIdent(branding: Branding, compact?: boolean): boolean {
+  return Boolean(branding.logoUrl) || !compact;
 }

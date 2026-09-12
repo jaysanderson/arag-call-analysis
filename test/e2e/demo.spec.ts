@@ -17,6 +17,13 @@ test.describe("the workspace", () => {
       await expect(sidebar.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
 
+    // The Progress wordmark belongs to the band and the footer credit, and appears nowhere else:
+    // showing it in the sidebar too put the same mark twice in the top-left corner and made the
+    // platform, rather than the product, read as the thing you are using.
+    await expect(sidebar.getByAltText("Progress Agentic RAG")).toHaveCount(0);
+    await expect(sidebar.getByText("Call Analysis")).toBeVisible();
+    await expect(sidebar.getByText("Contact centre intelligence")).toBeVisible();
+
     // Navigation is real routing, and the active item follows the route.
     await sidebar.getByRole("link", { name: "Calls", exact: true }).click();
     await expect(page).toHaveURL(/\/calls/);

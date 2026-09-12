@@ -18,7 +18,7 @@ import {
   IconUpload,
 } from "@/components/icons";
 import type { Branding } from "@/lib/branding";
-import { ProductIdent, Wordmark } from "./Brandmark";
+import { hasIdent, ProductIdent, Wordmark } from "./Brandmark";
 
 /**
  * The standing application shell: Progress band, left sidebar, page area, footer.
@@ -151,9 +151,13 @@ export function AppShell({ branding, children }: { branding: Branding; children:
 
   const sidebar = (rail: boolean, onNavigate?: () => void) => (
     <>
-      <Link href="/" className="ident" onClick={onNavigate}>
-        <ProductIdent branding={branding} compact={rail} />
-      </Link>
+      {/* Collapsed to the rail with no partner logo there is nothing to show, so the block is
+          omitted rather than left as empty padding above the nav. */}
+      {hasIdent(branding, rail) && (
+        <Link href="/" className="ident" onClick={onNavigate}>
+          <ProductIdent branding={branding} compact={rail} />
+        </Link>
+      )}
       <NavList items={PRODUCT_NAV} pathname={pathname} rail={rail} onNavigate={onNavigate} />
       {!rail && <div className="group">Operations</div>}
       <NavList items={OPERATIONS_NAV} pathname={pathname} rail={rail} onNavigate={onNavigate} />
