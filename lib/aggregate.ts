@@ -8,6 +8,22 @@ import type { CallMetrics, CallSummary } from "./types";
 
 export type Datum = { name: string; value: number };
 
+/**
+ * Per-agent / per-queue roll-up — the "who is driving this" answer a supervisor comes to the
+ * dashboard for. Rates are computed over the calls in that group that actually carry metrics, so a
+ * group with three analysed calls out of five is not reported as 40 % worse than it is.
+ */
+export interface Rollup {
+  name: string;
+  calls: number;
+  analysed: number;
+  fcrRate: number;
+  complaintRate: number;
+  escalationRate: number;
+  avgCsat: number;
+  avgCompliance: number;
+}
+
 export interface Dashboard {
   total: number;
   withMetrics: number;
@@ -24,7 +40,44 @@ export interface Dashboard {
   byLob: Datum[];
   complaintsByCategory: Datum[];
   crossSell: { offered: number; accepted: number };
+  byAgent: Rollup[];
+  byQueue: Rollup[];
   recent: CallSummary[];
+}
+
+/** Group calls by an attribute and compute the roll-up metrics for each group. */
+export function rollup(calls: CallSummary[], by: (c: CallSummary) => string | undefined): Rollup[] {
+  const groups = new Map<string, CallSummary[]>();
+  for (const c of calls) {
+    const key = by(c);
+    if (!key) continue;
+    const arr = groups.get(key);
+    if (arr) arr.push(c);
+    else groups.set(key, [c]);
+  }
+  return [...groups.entries()]
+    .map(([name, group]) => {
+      const metrics = group.map((c) => c.metrics).filter((m): m is CallMetrics => !!m);
+      // Divide by the analysed count, never the group size: an unanalysed call is not a "no".
+      const n = metrics.length || 1;
+      const rate = (pred: (m: CallMetrics) => boolean | undefined) =>
+        metrics.filter((m) => pred(m)).length / n;
+      const mean = (sel: (m: CallMetrics) => number | undefined) => {
+        const vals = metrics.map(sel).filter((v): v is number => typeof v === "number");
+        return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : 0;
+      };
+      return {
+        name,
+        calls: group.length,
+        analysed: metrics.length,
+        fcrRate: rate((m) => m.first_call_resolution),
+        complaintRate: rate((m) => m.complaint),
+        escalationRate: rate((m) => m.escalated),
+        avgCsat: mean((m) => m.csat_estimate),
+        avgCompliance: mean((m) => m.compliance_score),
+      };
+    })
+    .sort((a, b) => b.calls - a.calls || a.name.localeCompare(b.name));
 }
 
 export function tally(items: (string | undefined | null)[]): Datum[] {
@@ -68,6 +121,8 @@ export function aggregate(calls: CallSummary[], recentLimit = 8): Dashboard {
       offered: count((m) => m.cross_sell_offered),
       accepted: count((m) => m.cross_sell_accepted),
     },
+    byAgent: rollup(calls, (c) => c.agentName),
+    byQueue: rollup(calls, (c) => c.queue),
     recent: byCreated.slice(0, recentLimit),
   };
 }

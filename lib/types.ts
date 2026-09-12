@@ -1,3 +1,5 @@
+import type { CallLifecycle } from "@/lib/lifecycle";
+
 export type ResourceLabel = { labelset: string; label: string };
 
 export type CallParagraph = {
@@ -59,6 +61,8 @@ export type CallSummary = {
   momentTrack?: string[];
   /** ARAG processing status: PENDING while a freshly uploaded recording is being transcribed. */
   status?: string;
+  /** Derived pipeline state (see lib/lifecycle.ts). Always present on API responses. */
+  lifecycle?: CallLifecycle;
 };
 
 export type CallDetail = CallSummary & {

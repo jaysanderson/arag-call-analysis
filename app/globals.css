@@ -2,6 +2,9 @@
 /* Shared ARAG UI kit: design tokens + components, identical across every ARAG product.
    Vendored at vendor/arag-platform/ui/arag-ui.css — never edited here. */
 @import "../vendor/arag-platform/ui/arag-ui.css";
+/* Product-experience additions authored in kit style (D-28). Candidates for the platform kit;
+   also served at /ui-ext.css so the Head can lift the file across unchanged. */
+@import "../public/ui-ext.css";
 
 /* ==========================================================================
    Progress Agentic RAG brand tokens, mapped into Tailwind v4's CSS-first theme

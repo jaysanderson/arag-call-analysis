@@ -6,6 +6,7 @@
  * summaries, TTL from `CALLS_CACHE_TTL_MS`, default 60 s) and every write invalidates.
  */
 
+import { type CallLifecycle, deriveLifecycle } from "@/lib/lifecycle";
 import { parseDetail, parseSummary } from "@/lib/parse";
 import type { Runtime } from "@/lib/runtime";
 import type { CallDetail, CallSummary } from "@/lib/types";
@@ -25,11 +26,44 @@ export const DETAIL_SHOW = ["basic", "values", "extracted", "origin", "extra"];
 export const MEDIA_FIELD_ALLOWLIST = ["media", "transcript"] as const;
 export type MediaField = (typeof MEDIA_FIELD_ALLOWLIST)[number];
 
+/**
+ * Sortable columns of the calls data table. Every one of them is a field the product already
+ * derives from ARAG (resource origin, `extra.metadata`, or the `call_metrics` the ask agent
+ * writes) — nothing here is computed for sorting alone.
+ */
+export const CALL_SORTS = [
+  "created",
+  "title",
+  "duration",
+  "agent",
+  "queue",
+  "sentiment",
+  "compliance",
+  "csat",
+] as const;
+export type CallSort = (typeof CALL_SORTS)[number];
+
 export interface ListOptions {
   q?: string;
   labels?: string[];
   page?: number;
   pageSize?: number;
+  sort?: CallSort;
+  order?: "asc" | "desc";
+  /** Restrict to an explicit id set (used by bulk export of a table selection). */
+  ids?: string[];
+  agent?: string;
+  queue?: string;
+  mediaType?: "audio" | "video" | "transcript";
+  /** Inclusive ISO-8601 date bounds on the call time. */
+  from?: string;
+  to?: string;
+  minDuration?: number;
+  maxDuration?: number;
+  complaint?: boolean;
+  fcr?: boolean;
+  escalated?: boolean;
+  lifecycle?: CallLifecycle;
 }
 
 export interface Page<T> {
@@ -38,6 +72,20 @@ export interface Page<T> {
   page_size: number;
   total: number;
   next_page: boolean;
+}
+
+export interface FacetCount {
+  labelset: string;
+  label: string;
+  count: number;
+}
+
+export interface CallPage extends Page<CallSummary> {
+  /** Label tallies across the whole filtered set, so the filter bar can show live counts. */
+  facets: FacetCount[];
+  /** Distinct agents and queues in the filtered set, for the filter bar's selects. */
+  agents: string[];
+  queues: string[];
 }
 
 /** Every resource id in the KB (cached; one catalog page walk). */
@@ -91,15 +139,106 @@ export function filterByLabels(calls: CallSummary[], labels: string[]): CallSumm
   );
 }
 
-/** Paginated, filtered call list. */
-export async function listCalls(rt: Runtime, opts: ListOptions = {}): Promise<Page<CallSummary>> {
+/**
+ * Structured (non-label) filters: the attributes that live on the resource itself or in the flat
+ * `call_metrics` record. Kept separate from `filterByLabels` so both are unit-testable on their
+ * own and so the facet tallies can be computed over the structurally-filtered set.
+ */
+export function filterByAttributes(calls: CallSummary[], opts: ListOptions): CallSummary[] {
+  const idSet = opts.ids?.length ? new Set(opts.ids) : null;
+  return calls.filter((c) => {
+    if (idSet && !idSet.has(c.id)) return false;
+    if (opts.agent && c.agentName !== opts.agent) return false;
+    if (opts.queue && c.queue !== opts.queue) return false;
+    if (opts.mediaType && c.mediaType !== opts.mediaType) return false;
+    // Compared as ISO strings: both sides are ISO-8601 UTC, so lexicographic order is
+    // chronological order and no Date objects need constructing per row.
+    if (opts.from && (c.createdISO ?? "") < opts.from) return false;
+    if (opts.to && (c.createdISO ?? "") > opts.to) return false;
+    if (opts.minDuration !== undefined && (c.durationSec ?? 0) < opts.minDuration) return false;
+    if (opts.maxDuration !== undefined && (c.durationSec ?? 0) > opts.maxDuration) return false;
+    if (opts.complaint !== undefined && Boolean(c.metrics?.complaint) !== opts.complaint) return false;
+    if (opts.fcr !== undefined && Boolean(c.metrics?.first_call_resolution) !== opts.fcr) return false;
+    if (opts.escalated !== undefined && Boolean(c.metrics?.escalated) !== opts.escalated) return false;
+    if (opts.lifecycle && (c.lifecycle ?? deriveLifecycle(c)) !== opts.lifecycle) return false;
+    return true;
+  });
+}
+
+/** Sentiment is ordinal in the table, not alphabetical: worst first when ascending. */
+const SENTIMENT_RANK: Record<string, number> = { Negative: 0, Mixed: 1, Neutral: 2, Positive: 3 };
+
+function sortKey(c: CallSummary, sort: CallSort): string | number {
+  switch (sort) {
+    case "title":
+      return c.title.toLowerCase();
+    case "duration":
+      return c.durationSec ?? 0;
+    case "agent":
+      return (c.agentName ?? "").toLowerCase();
+    case "queue":
+      return (c.queue ?? "").toLowerCase();
+    case "sentiment":
+      return SENTIMENT_RANK[c.metrics?.sentiment ?? ""] ?? -1;
+    case "compliance":
+      return c.metrics?.compliance_score ?? -1;
+    case "csat":
+      return c.metrics?.csat_estimate ?? -1;
+    default:
+      return c.createdISO ?? "";
+  }
+}
+
+/** Stable sort by any table column; ties break on call time so paging never reshuffles rows. */
+export function sortCalls(calls: CallSummary[], sort: CallSort = "created", order: "asc" | "desc" = "desc") {
+  const dir = order === "asc" ? 1 : -1;
+  return [...calls].sort((a, b) => {
+    const ka = sortKey(a, sort);
+    const kb = sortKey(b, sort);
+    const cmp =
+      typeof ka === "number" && typeof kb === "number"
+        ? ka - kb
+        : String(ka).localeCompare(String(kb), undefined, { numeric: true });
+    if (cmp !== 0) return cmp * dir;
+    return (b.createdISO ?? "").localeCompare(a.createdISO ?? "");
+  });
+}
+
+/** Label tallies across a set of calls, ordered by labelset then by descending count. */
+export function facetsFor(calls: CallSummary[]): FacetCount[] {
+  const tally = new Map<string, FacetCount>();
+  for (const c of calls) {
+    for (const l of c.labels) {
+      const key = `${l.labelset}/${l.label}`;
+      const hit = tally.get(key);
+      if (hit) hit.count++;
+      else tally.set(key, { labelset: l.labelset, label: l.label, count: 1 });
+    }
+  }
+  return [...tally.values()].sort(
+    (a, b) => a.labelset.localeCompare(b.labelset) || b.count - a.count || a.label.localeCompare(b.label),
+  );
+}
+
+function distinct(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((v): v is string => Boolean(v)))].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Paginated, filtered, sorted call list plus the facet tallies the filter bar renders.
+ *
+ * Facets are counted over the set that survives the structural filters but *before* the label
+ * filter is applied, which is what makes a facet list usable: selecting "Complaint" must not
+ * collapse every other facet to zero.
+ */
+export async function listCalls(rt: Runtime, opts: ListOptions = {}): Promise<CallPage> {
   const page = Math.max(1, opts.page ?? 1);
   const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 50));
   const q = opts.q?.trim();
   const ids = q ? await searchIds(rt, q) : await catalogIds(rt);
-  let calls = await summariesFor(rt, ids);
-  calls = filterByLabels(calls, opts.labels ?? []);
-  calls.sort((a, b) => (b.createdISO ?? "").localeCompare(a.createdISO ?? ""));
+  const all = await summariesFor(rt, ids);
+  const structural = filterByAttributes(all, opts);
+  const calls = sortCalls(filterByLabels(structural, opts.labels ?? []), opts.sort, opts.order);
   const total = calls.length;
   const start = (page - 1) * pageSize;
   return {
@@ -108,7 +247,18 @@ export async function listCalls(rt: Runtime, opts: ListOptions = {}): Promise<Pa
     page_size: pageSize,
     total,
     next_page: start + pageSize < total,
+    facets: facetsFor(structural),
+    agents: distinct(structural.map((c) => c.agentName)),
+    queues: distinct(structural.map((c) => c.queue)),
   };
+}
+
+/** Every call matching the filters, unpaginated — the export and bulk-selection code path. */
+export async function matchingCalls(rt: Runtime, opts: ListOptions = {}): Promise<CallSummary[]> {
+  const q = opts.q?.trim();
+  const ids = q ? await searchIds(rt, q) : await catalogIds(rt);
+  const all = await summariesFor(rt, ids);
+  return sortCalls(filterByLabels(filterByAttributes(all, opts), opts.labels ?? []), opts.sort, opts.order);
 }
 
 /** All summaries (dashboard aggregation, rails). */

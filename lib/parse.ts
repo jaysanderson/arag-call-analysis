@@ -5,6 +5,7 @@
  * can be missing, wrapped in a code fence, or contain a refusal sentence where an enum value was
  * asked for — none of which may ever reach a chart or a badge.
  */
+import { deriveLifecycle } from "@/lib/lifecycle";
 import type { ParagraphMeta, Resource } from "@/vendor/arag-platform/src/arag/types.ts";
 import type {
   CallAnalysis,
@@ -224,7 +225,8 @@ function baseSummary(res: Resource): CallSummary {
 }
 
 export function parseSummary(res: Resource): CallSummary {
-  return baseSummary(res);
+  const summary = baseSummary(res);
+  return { ...summary, lifecycle: deriveLifecycle(summary) };
 }
 
 export function parseDetail(res: Resource): CallDetail {
@@ -236,6 +238,7 @@ export function parseDetail(res: Resource): CallDetail {
   const analysis = readJsonField<CallAnalysis>(res, "call_analysis");
   return {
     ...summary,
+    lifecycle: deriveLifecycle({ ...summary, analysis }),
     fieldId: content?.id ?? "media",
     fieldType: content?.group ?? "files",
     transcriptText,

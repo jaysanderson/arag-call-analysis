@@ -13,7 +13,12 @@ export BASE=http://localhost:3000
 ## List / search / filter calls
 
 `GET /api/v1/calls` — `q` runs ARAG semantic + keyword search across every transcript; `label`
-filters by `labelset/label` (repeatable, ANDed); `page` / `page_size` (max 200) paginate.
+filters by `labelset/label` (repeatable, ANDed); `agent`, `queue`, `media_type`, `from`/`to`,
+`min_duration`/`max_duration`, `complaint`, `fcr`, `escalated` and `lifecycle` filter by the
+call's structured attributes; `sort` (`created`, `title`, `duration`, `agent`, `sentiment`,
+`compliance`, `csat`) and `order` (`asc`/`desc`) control ordering; `page` / `page_size` (max 200)
+paginate. The response carries `facets` (label tallies over the filtered set), `agents` and
+`queues` — everything the Calls table's filter bar needs in one request.
 
 ```bash
 curl -s "$BASE/api/v1/calls?page_size=3" | jq
@@ -34,6 +39,7 @@ curl -s "$BASE/api/v1/calls?page_size=3" | jq
       "memberId": "IFP-558201",
       "queue": "Billing",
       "status": "PROCESSED",
+      "lifecycle": "analysed",
       "labels": [
         { "labelset": "call_reason", "label": "Billing & Payments" },
         { "labelset": "sentiment", "label": "Negative" }
@@ -45,9 +51,16 @@ curl -s "$BASE/api/v1/calls?page_size=3" | jq
   "page": 1,
   "page_size": 3,
   "total": 13,
-  "next_page": true
+  "next_page": true,
+  "facets": [{ "labelset": "sentiment", "label": "Negative", "count": 5 }],
+  "agents": ["Maria Gonzales", "Dana Kim"],
+  "queues": ["Billing", "Claims"]
 }
 ```
+
+`lifecycle` is one of `queued`, `transcribing`, `labelling`, `partial`, `analysed`, `failed` —
+derived from the resource's processing status, the labels actually applied and whether the
+generated metrics have arrived; see [`lib/lifecycle.ts`](../../lib/lifecycle.ts).
 
 Full-text search:
 

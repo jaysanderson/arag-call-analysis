@@ -16,6 +16,43 @@ All notable changes to this project are documented here. The format follows
 - `/branding/*` serves partner logos from `DATA_DIR/branding/` — image types only, path-traversal
   safe, `nosniff` and a restrictive CSP on the response.
 - `docs/developer/white-label.md` and `docs/developer/build-your-own.md`.
+- **New application shell and information architecture.** A persistent left sidebar (Dashboard,
+  Calls, Upload, Agents & Taxonomy, Settings, and an Operations group holding Admin) replaces the
+  previous per-page chrome, collapsible to a 64px rail and dropping into a drawer under 1024px.
+- **`/welcome`** — first-run onboarding: four steps computed live from the system, plus "Try with
+  sample calls" (a real seeding job) and "Upload my own." An empty dashboard now redirects here
+  instead of rendering empty.
+- **Calls table.** `/calls` gained a Table mode alongside the existing Browse rails: search,
+  facet dropdowns with live counts, sortable columns, a lifecycle status chip per call, row
+  selection with a bulk bar (export, re-run analysis, delete), and pagination. Every filter lives
+  in the URL.
+- **Call lifecycle.** Every call now carries a derived lifecycle state — queued, transcribing,
+  labelling, partly analysed, analysed, failed — shown as a chip everywhere a call is listed
+  (`lib/lifecycle.ts`).
+- **Call workspace.** `/calls/[id]` gained a moments track under the media scrub bar, a
+  three-tab inspector (Analysis, Ask, Details), and header actions for Share, Export and a kebab
+  (re-run analysis, export transcript/captions, copy call id, copy API URL, delete).
+- **Share links.** `GET|POST /api/v1/calls/{id}/shares` and `GET|DELETE /api/v1/shares/{token}`
+  issue and revoke expiring, read-only links, served at `/s/[token]`.
+- **`/upload`** — a dropzone/paste-transcript flow with a metadata form and a live progress
+  stepper driven by the ingest job's own SSE stage stream. **`/upload/history`** lists every
+  ingest, sample load, re-analysis and provisioning run.
+- **`/taxonomy`** (Agents & Taxonomy) — labelsets with their level, label count, calls carrying
+  each label and Knowledge Box provisioning state, the three agents with their live task state,
+  and a re-provision action.
+- **`/settings`** — Connection, Branding (a live white-label preview plus the exact `BRAND_*`
+  block to copy), Usage, API keys and About.
+- New endpoints: `GET /api/v1/calls/export`, `POST /api/v1/calls/bulk`,
+  `POST /api/v1/calls/{id}/reanalyze`, `GET /api/v1/calls/{id}/export`,
+  `GET|POST /api/v1/calls/{id}/shares`, `GET|DELETE /api/v1/shares/{token}`,
+  `GET /api/v1/settings`, `GET /api/v1/taxonomy`, `GET /api/v1/onboarding` and
+  `POST /api/v1/samples`. `GET /api/v1/calls` gained `sort`, `order`, `agent`, `queue`,
+  `media_type`, `from`, `to`, `min_duration`, `max_duration`, `complaint`, `fcr`, `escalated` and
+  `lifecycle`, and its response gained `facets`, `agents` and `queues`. `GET /api/v1/dashboard`
+  gained `byAgent` and `byQueue` roll-ups.
+- The official Progress Agentic RAG wordmark (`public/brand/arag-logo.svg`,
+  `arag-logo-alt.svg`) is now the default identity in the band and the sidebar, replacing the
+  previous placeholder mark.
 
 ### Changed
 
@@ -33,6 +70,17 @@ All notable changes to this project are documented here. The format follows
   newer than the last build (DECISIONS D-CA-17).
 - The admin config view reports the Knowledge Box the client is actually using rather than the raw
   environment variable, which is empty in mock mode.
+- **Admin restructured into eight sections**: Overview, Connection, Taxonomy & Agents, Jobs, Logs,
+  Usage, Branding, Security. `/admin/health` and `/admin/config` redirect to `/admin/connection`
+  (`/admin/config` opens directly on its Configuration view), `/admin/agents` to `/admin/taxonomy`,
+  and `/admin/cache` to `/admin/usage`. Overview gained a stat strip plus recent-jobs and
+  recent-errors panels. Security is new: the auth posture, rate limits and cross-origin policy,
+  with nothing secret on the page.
+- `CallSummary` and `CallDetail` gained `lifecycle`.
+
+### Removed
+
+- `components/AppChrome.tsx`, replaced by `components/shell/AppShell.tsx`.
 
 ## [0.1.0] — 2026-09-12
 

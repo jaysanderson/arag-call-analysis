@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AppChrome } from "@/components/AppChrome";
+import { AppShell } from "@/components/shell/AppShell";
 import { brandingCss } from "@/lib/branding";
 import { getRuntime } from "@/lib/runtime";
 
@@ -24,16 +24,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { branding } = await getRuntime();
   return (
     <html lang="en">
-      <body>
+      <body className="arag">
         {/*
           Brand colours as CSS custom properties. `app/globals.css` maps every Tailwind theme token
           to an `--arag-*` token, so overriding these re-colours the utilities and the shared
           `.arag-*` components together. Rendered after the stylesheet so it wins on document
           order; the values are validated in `lib/branding.ts` before they reach this string.
+          `--pg-green` is deliberately NOT emitted here: Progress green is not a themeable colour,
+          it belongs to the wordmark and the Progress band, both of which BRAND_POWERED_BY removes.
         */}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: colours are validated by safeColor() */}
         <style dangerouslySetInnerHTML={{ __html: brandingCss(branding) }} />
-        <AppChrome branding={branding}>{children}</AppChrome>
+        <AppShell branding={branding}>{children}</AppShell>
       </body>
     </html>
   );

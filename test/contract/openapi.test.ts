@@ -128,12 +128,43 @@ describe("spec ↔ implementation", () => {
     }
   });
 
-  it("marks writes as write-authenticated and admin routes as admin-authenticated", () => {
-    const writes = API_ROUTES.filter((r) => r.path === "/api/v1/calls" && r.method === "post").concat(
-      API_ROUTES.filter((r) => r.method === "delete"),
+  it("marks every Knowledge Box mutation as write-authenticated", () => {
+    // Anything that creates, changes or destroys a Knowledge Box resource needs the admin token or
+    // an API key — never the freely issued browser session. Share links are the one deliberate
+    // exception: they write application state only, and grant no access the open read API does not
+    // already give (see the operation description in lib/openapi.ts).
+    const mutations = API_ROUTES.filter(
+      (r) =>
+        (r.method === "post" || r.method === "delete") &&
+        !r.path.startsWith("/api/v1/admin/") &&
+        !r.path.includes("/shares") &&
+        r.path !== "/api/v1/session" &&
+        r.path !== "/api/v1/calls/{id}/ask",
     );
-    expect(writes.length).toBeGreaterThan(0);
-    for (const r of writes) expect(r.auth, `${r.method} ${r.path}`).toBe("write");
+    expect(mutations.map((r) => `${r.method} ${r.path}`).sort()).toEqual(
+      [
+        "post /api/v1/calls",
+        "post /api/v1/calls/bulk",
+        "post /api/v1/calls/{id}/reanalyze",
+        "post /api/v1/samples",
+        "delete /api/v1/calls/{id}",
+      ].sort(),
+    );
+    for (const r of mutations) expect(r.auth, `${r.method} ${r.path}`).toBe("write");
+  });
+
+  it("keeps share links at read-level auth and says why in the spec", () => {
+    const shares = API_ROUTES.filter((r) => r.path.includes("/shares"));
+    expect(shares.length).toBe(4);
+    for (const r of shares) {
+      // Resolving a token is public (the token is the credential); the rest need whatever a read
+      // needs on this deployment.
+      expect(["none", "api"], `${r.method} ${r.path}`).toContain(r.auth);
+    }
+    const op = (openapi.paths as Record<string, Record<string, { description?: string }>>)[
+      "/api/v1/calls/{id}/shares"
+    ]?.post;
+    expect(op?.description).toMatch(/grant no access the read API does not already give/);
   });
 
   it("marks the admin routes as admin-authenticated", () => {
@@ -161,6 +192,145 @@ describe("response validation (checkResponse)", () => {
     const list = await api.get<{ items: Array<{ id: string }> }>("/api/v1/calls?page_size=1");
     const res = await api.get(`/api/v1/calls/${list.json.items[0]!.id}`);
     expect(checkResponse(openapi, "/api/v1/calls/{id}", "get", 200, res.json)).toEqual([]);
+  });
+
+  it("GET /api/v1/calls with the table's filter and sort parameters", async () => {
+    const res = await api.get(
+      "/api/v1/calls?sort=duration&order=asc&media_type=transcript&page_size=5&min_duration=0",
+    );
+    expect(res.status).toBe(200);
+    expect(checkResponse(openapi, "/api/v1/calls", "get", 200, res.json)).toEqual([]);
+    const page = res.json as { items: Array<{ mediaType: string; durationSec?: number }>; facets: unknown[] };
+    expect(Array.isArray(page.facets)).toBe(true);
+    for (const c of page.items) expect(c.mediaType).toBe("transcript");
+    const durations = page.items.map((c) => c.durationSec ?? 0);
+    expect([...durations].sort((a, b) => a - b)).toEqual(durations);
+  });
+
+  it("GET /api/v1/calls/export serves CSV and JSON attachments", async () => {
+    const csv = await api.request("GET", "/api/v1/calls/export?format=csv&limit=5", {});
+    expect(csv.status).toBe(200);
+    expect(csv.headers.get("content-type")).toContain("text/csv");
+    expect(csv.headers.get("content-disposition")).toContain("attachment");
+    expect(csv.text.split("\n")[0]).toContain("id,title,created");
+
+    const json = await api.request("GET", "/api/v1/calls/export?format=json&limit=5", {});
+    expect(json.status).toBe(200);
+    const parsed = JSON.parse(json.text) as { count: number; calls: unknown[] };
+    expect(parsed.calls.length).toBe(parsed.count);
+  });
+
+  it("POST /api/v1/calls/bulk reports per-id outcomes", async () => {
+    const form = new FormData();
+    form.set("title", "Bulk contract test call");
+    form.set("transcript", "Agent: Hello. Member: I want to check a claim.");
+    const created = await api.request<{ call: { id: string } }>("POST", "/api/v1/calls", {
+      body: form,
+      admin: true,
+    });
+    const id = created.json.call.id;
+
+    const res = await api.post(
+      "/api/v1/calls/bulk",
+      { action: "delete", ids: [id, "definitely-not-a-call"] },
+      { admin: true },
+    );
+    expect(res.status).toBe(200);
+    expect(checkResponse(openapi, "/api/v1/calls/bulk", "post", 200, res.json)).toEqual([]);
+    const body = res.json as { requested: number; succeeded: number; failed: Array<{ id: string }> };
+    expect(body.requested).toBe(2);
+    expect(body.succeeded).toBe(1);
+    expect(body.failed.map((f) => f.id)).toEqual(["definitely-not-a-call"]);
+  });
+
+  it("POST /api/v1/calls/{id}/reanalyze queues a job", async () => {
+    const list = await api.get<{ items: Array<{ id: string }> }>("/api/v1/calls?page_size=1");
+    const id = list.json.items[0]!.id;
+    const res = await api.post(`/api/v1/calls/${id}/reanalyze`, undefined, { admin: true });
+    expect(res.status).toBe(202);
+    expect(checkResponse(openapi, "/api/v1/calls/{id}/reanalyze", "post", 202, res.json)).toEqual([]);
+  });
+
+  it("share links are created, resolved and revoked", async () => {
+    const list = await api.get<{ items: Array<{ id: string }> }>("/api/v1/calls?page_size=1");
+    const id = list.json.items[0]!.id;
+
+    const created = await api.post<{ token: string; url: string }>(
+      `/api/v1/calls/${id}/shares`,
+      { ttlDays: 1, note: "contract test" },
+      { admin: true },
+    );
+    expect(created.status).toBe(201);
+    expect(checkResponse(openapi, "/api/v1/calls/{id}/shares", "post", 201, created.json)).toEqual([]);
+    const token = created.json.token;
+    expect(created.json.url).toBe(`/s/${token}`);
+
+    // Resolution is public: the token is the only credential.
+    const resolved = await api.get(`/api/v1/shares/${token}`);
+    expect(resolved.status).toBe(200);
+    expect(checkResponse(openapi, "/api/v1/shares/{token}", "get", 200, resolved.json)).toEqual([]);
+
+    const listed = await api.get(`/api/v1/calls/${id}/shares`, { admin: true });
+    expect(checkResponse(openapi, "/api/v1/calls/{id}/shares", "get", 200, listed.json)).toEqual([]);
+
+    const revoked = await api.del(`/api/v1/shares/${token}`, { admin: true });
+    expect(revoked.status).toBe(200);
+    // A revoked token stops resolving, and says only "not found".
+    const after = await api.get(`/api/v1/shares/${token}`);
+    expect(after.status).toBe(404);
+  });
+
+  it("GET /api/v1/calls/{id}/export serves json, txt and vtt", async () => {
+    const list = await api.get<{ items: Array<{ id: string }> }>("/api/v1/calls?page_size=1");
+    const id = list.json.items[0]!.id;
+
+    const json = await api.request("GET", `/api/v1/calls/${id}/export?format=json`, {});
+    expect(json.status).toBe(200);
+    expect(json.headers.get("content-disposition")).toContain("attachment");
+    expect((JSON.parse(json.text) as { call: { id: string } }).call.id).toBe(id);
+
+    const txt = await api.request("GET", `/api/v1/calls/${id}/export?format=txt`, {});
+    expect(txt.headers.get("content-type")).toContain("text/plain");
+
+    const vtt = await api.request("GET", `/api/v1/calls/${id}/export?format=vtt`, {});
+    expect(vtt.headers.get("content-type")).toContain("text/vtt");
+    expect(vtt.text.startsWith("WEBVTT")).toBe(true);
+    // Cue timestamps must be HH:MM:SS.mmm or a player rejects the file.
+    expect(vtt.text).toMatch(/\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}/);
+  });
+
+  it("GET /api/v1/taxonomy reports labelsets, agents and provisioning state", async () => {
+    const res = await api.get("/api/v1/taxonomy");
+    expect(res.status).toBe(200);
+    expect(checkResponse(openapi, "/api/v1/taxonomy", "get", 200, res.json)).toEqual([]);
+    const body = res.json as {
+      labelsets: Array<{ shipped: boolean; provisioned: boolean }>;
+      provisioning: { state: string };
+    };
+    expect(body.labelsets.length).toBeGreaterThan(0);
+    expect(["provisioned", "partial", "absent", "running"]).toContain(body.provisioning.state);
+  });
+
+  it("GET /api/v1/onboarding computes four steps from the live system", async () => {
+    const res = await api.get("/api/v1/onboarding");
+    expect(res.status).toBe(200);
+    expect(checkResponse(openapi, "/api/v1/onboarding", "get", 200, res.json)).toEqual([]);
+    const body = res.json as { steps: Array<{ key: string }>; mode: string; callCount: number };
+    expect(body.steps.map((s) => s.key)).toEqual(["connect", "taxonomy", "calls", "analysis"]);
+    expect(body.mode).toBe("mock");
+    expect(body.callCount).toBeGreaterThan(0);
+  });
+
+  it("GET /api/v1/settings exposes no secrets", async () => {
+    const res = await api.get("/api/v1/settings");
+    expect(res.status).toBe(200);
+    expect(checkResponse(openapi, "/api/v1/settings", "get", 200, res.json)).toEqual([]);
+    const raw = JSON.stringify(res.json);
+    expect(raw).not.toContain("test-admin-token");
+    const body = res.json as { connection: { kbId: string }; apiKeys: { managed: boolean } };
+    // Truncated, never the whole Knowledge Box id.
+    expect(body.connection.kbId.length).toBeLessThanOrEqual(9);
+    expect(body.apiKeys.managed).toBe(false);
   });
 
   it("GET /api/v1/dashboard", async () => {

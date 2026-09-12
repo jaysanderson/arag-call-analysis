@@ -53,7 +53,16 @@ type Msg = {
   quality?: RemiQuality;
 };
 
-export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: (c: Citation) => void }) {
+export function ChatPanel({
+  callId,
+  onCitation,
+  bare,
+}: {
+  callId: string;
+  onCitation: (c: Citation) => void;
+  /** Drop the card frame when the panel sits inside a container that already has one. */
+  bare?: boolean;
+}) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -147,11 +156,17 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
 
   const suggestions = ["Summarize this call", "Was the member satisfied?", "What did the agent offer?"];
 
+  const Frame = bare
+    ? ({ children, className }: { children: React.ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+      )
+    : Card;
+
   return (
-    <Card className="flex flex-col">
-      <div className="border-b border-brand-100 p-3">
+    <Frame className="flex flex-col">
+      <div className={bare ? "pb-3" : "border-b border-brand-100 p-3"}>
         <h2 className="text-sm font-semibold text-ink-950">Ask this call</h2>
-        <p className="text-xs text-slate-400">Answers are grounded only in this call's own transcript.</p>
+        <p className="text-xs text-slate-500">Answers come only from this call\u2019s own transcript.</p>
       </div>
       <div ref={scrollRef} className="scroll-thin max-h-[420px] min-h-[140px] space-y-3 overflow-y-auto p-3">
         {messages.length === 0 && (
@@ -218,9 +233,9 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
                         key={c.key}
                         onClick={() => onCitation(c)}
                         className="rounded-md border border-brand-200 bg-white px-1.5 py-0.5 text-[11px] font-medium text-brand-700 hover:bg-brand-100"
-                        title="Jump to this moment in the transcript"
+                        title="Play this moment"
                       >
-                        [{c.n}] ⏱ source
+                        [{c.n}] source
                       </button>
                     ))}
                   </div>
@@ -238,7 +253,7 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
             setInput("");
           }
         }}
-        className="flex gap-2 border-t border-brand-100 p-3"
+        className={bare ? "flex gap-2 pt-3" : "flex gap-2 border-t border-brand-100 p-3"}
       >
         <input
           value={input}
@@ -255,6 +270,6 @@ export function ChatPanel({ callId, onCitation }: { callId: string; onCitation: 
           {busy ? "…" : "Ask"}
         </button>
       </form>
-    </Card>
+    </Frame>
   );
 }

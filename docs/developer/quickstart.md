@@ -23,11 +23,17 @@ rails, filters, transcript moment labels and the chat all render real, non-empty
 
 Open:
 
-- **http://localhost:3000** — the dashboard (KPIs and charts aggregated from generated call
-  metrics).
-- **http://localhost:3000/calls** — category rails, search and label filters.
-- **http://localhost:3000/calls/{id}** — pick any call: media player, synced transcript, AI
-  analysis panel, and "Ask this call" chat.
+- **http://localhost:3000** — the dashboard (a stat strip, charts and a sortable agent/queue
+  breakdown, all aggregated from generated call metrics).
+- **http://localhost:3000/calls** — a searchable, filterable, sortable table by default (facet
+  dropdowns, bulk export/re-analyse/delete), with the previous category-rail browse kept as a
+  second mode.
+- **http://localhost:3000/calls/{id}** — pick any call: media player with a moments track, synced
+  transcript, and an inspector with Analysis, Ask and Details tabs.
+- **http://localhost:3000/upload** — drop a recording or paste a transcript and watch the ingest
+  job's own progress stream.
+- **http://localhost:3000/taxonomy** — the labelsets and the three data-augmentation agents, with
+  their live provisioning state.
 - **http://localhost:3000/admin** — sign in with the dev admin token. `make dev` sets
   `ADMIN_TOKEN=dev-admin-token` automatically when it falls back to mock mode (override with
   `ADMIN_TOKEN=... make dev`).

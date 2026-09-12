@@ -4,15 +4,18 @@
  * `/api/v1/jobs/{id}` and streamed at `/api/v1/jobs/{id}/events`.
  */
 
+import { estimatedDurationSec, SCENARIOS, transcriptOf } from "@/lib/domain/scenarios";
 import { AGENTS, ALL_LABELSETS } from "@/lib/domain/taxonomy";
 import type { Runtime } from "@/lib/runtime";
 import type { Job } from "@/vendor/arag-platform/src/index.ts";
 import { deleteAllTasks, startAgent } from "./agents";
-import { invalidateCall } from "./calls";
+import { allSummaries, createCall, getCall, invalidateCall } from "./calls";
 import { provisionLabelsets } from "./labelsets";
 
 export const JOB_INGEST = "ingest-call";
 export const JOB_PROVISION = "provision";
+export const JOB_REANALYSE = "reanalyse-call";
+export const JOB_SEED_SAMPLES = "seed-samples";
 
 export interface IngestJobInput {
   /** Resource id created by the request handler; the job only waits for ARAG to finish with it. */
@@ -49,6 +52,33 @@ export interface ProvisionJobResult {
   deletedTasks: number;
 }
 
+export interface SeedSamplesInput {
+  /** How many of the shipped scenarios to load. Default: all of them. */
+  count?: number;
+  /** Provision the labelsets and agents first. Default true. */
+  provision?: boolean;
+}
+
+export interface SeedSamplesResult {
+  created: string[];
+  skipped: string[];
+  failed: Array<{ slug: string; error: string }>;
+  provisioned: boolean;
+}
+
+export interface ReanalyseJobInput {
+  callId: string;
+  title?: string;
+}
+
+export interface ReanalyseJobResult {
+  callId: string;
+  status: string;
+  /** True when the `call_analysis` / `call_metrics` fields are present after the refresh. */
+  analysed: boolean;
+  labels: number;
+}
+
 /** Register every job runner on the shared JobManager. Called once from the runtime builder. */
 export function registerJobs(rt: Runtime): void {
   rt.jobs.register<IngestJobInput, IngestJobResult>(JOB_INGEST, async (ctx) => {
@@ -81,6 +111,119 @@ export function registerJobs(rt: Runtime): void {
     invalidateCall(rt, callId);
     ctx.emit("ready", "ok", { message: "Call is available", progress: 1, data: { callId } });
     return { callId, status, searchable };
+  });
+
+  /**
+   * Re-run the analysis for one call.
+   *
+   * ARAG's data-augmentation agents are Knowledge-Box-wide tasks, not per-resource invocations, so
+   * this job does the honest per-call equivalent: it drops every cached derivative of the call,
+   * waits for the Knowledge Box to report the resource fully processed, then re-reads it so any
+   * labels or generated fields the agents have written since are picked up. The job reports
+   * whether the analysis fields are actually present afterwards rather than claiming success
+   * regardless. To re-run the agents themselves across the whole Knowledge Box, an operator uses
+   * Agents & Taxonomy → Re-provision.
+   */
+  rt.jobs.register<ReanalyseJobInput, ReanalyseJobResult>(JOB_REANALYSE, async (ctx) => {
+    const { callId } = ctx.job.input;
+    invalidateCall(rt, callId);
+    ctx.emit("invalidate", "ok", { message: "Cleared the cached analysis", progress: 0.2 });
+
+    const status =
+      ((await ctx.stage(
+        "process",
+        "Waiting for the Knowledge Box to finish processing",
+        () => rt.arag.waitProcessed(callId, { timeoutMs: 5 * 60_000, signal: ctx.signal }),
+        { soft: true, progress: 0.6 },
+      )) as string | undefined) ?? "PENDING";
+
+    invalidateCall(rt, callId);
+    const call = await ctx.stage("reread", "Re-reading the call", () => getCall(rt, callId), {
+      progress: 0.95,
+    });
+    const detail = call as Awaited<ReturnType<typeof getCall>>;
+    const analysed = Boolean(detail.analysis?.executive_summary || detail.metrics?.call_reason);
+    ctx.emit("ready", "ok", {
+      message: analysed ? "Analysis refreshed" : "Refreshed; the agents have not written an analysis yet",
+      progress: 1,
+      data: { callId },
+    });
+    return { callId, status, analysed, labels: detail.labels.length };
+  });
+
+  /**
+   * Load the sample dataset — the "Try with sample calls" path, and the only way a fresh live
+   * Knowledge Box gets something to look at without anyone hunting for recordings.
+   *
+   * The taxonomy is provisioned first so the agents are running *before* the calls land: a call
+   * uploaded ahead of its labeler is classified late or not at all, which is exactly the confusing
+   * half-finished state onboarding is supposed to avoid. Uploads are then sequential rather than
+   * parallel, to stay well inside the Knowledge Box's ingest rate.
+   */
+  rt.jobs.register<SeedSamplesInput, SeedSamplesResult>(JOB_SEED_SAMPLES, async (ctx) => {
+    const count = Math.min(SCENARIOS.length, Math.max(1, ctx.job.input?.count ?? SCENARIOS.length));
+    const wanted = SCENARIOS.slice(0, count);
+    const result: SeedSamplesResult = { created: [], skipped: [], failed: [], provisioned: false };
+
+    if (ctx.job.input?.provision !== false) {
+      await ctx.stage(
+        "provision",
+        "Creating labelsets and starting the agents",
+        async () => {
+          await provisionLabelsets(rt);
+          for (const def of AGENTS) {
+            try {
+              await startAgent(rt, def);
+              await rt.arag.waitTasksIdle({ graceMs: 1_000, timeoutMs: 4 * 60_000, signal: ctx.signal });
+            } catch (err) {
+              // A taxonomy that is already provisioned rejects a duplicate task; that is not a
+              // reason to abandon the seed.
+              ctx.emit("provision", "skip", { message: (err as Error).message });
+            }
+          }
+          result.provisioned = true;
+        },
+        { soft: true, progress: 0.15 },
+      );
+    }
+
+    // Slugs already present are skipped rather than duplicated, so the action is safely repeatable.
+    const existing = new Set((await allSummaries(rt).catch(() => [])).map((c) => c.slug));
+
+    let done = 0;
+    for (const sc of wanted) {
+      done++;
+      const progress = 0.15 + (0.8 * done) / wanted.length;
+      if (existing.has(sc.slug)) {
+        result.skipped.push(sc.slug);
+        ctx.emit(`skip:${sc.slug}`, "skip", { message: `${sc.title} is already here`, progress });
+        continue;
+      }
+      try {
+        const id = await createCall(rt, {
+          title: sc.title,
+          slug: sc.slug,
+          transcript: transcriptOf(sc),
+          agentName: sc.agentName,
+          memberId: sc.memberId,
+          queue: sc.queue,
+          createdISO: sc.createdISO,
+          durationSec: estimatedDurationSec(sc),
+        });
+        result.created.push(id);
+        ctx.emit(`upload:${sc.slug}`, "ok", { message: `Added ${sc.title}`, progress });
+      } catch (err) {
+        result.failed.push({ slug: sc.slug, error: (err as Error).message });
+        ctx.emit(`upload:${sc.slug}`, "error", { message: (err as Error).message, progress });
+      }
+    }
+
+    rt.cache.clear();
+    ctx.emit("done", "ok", {
+      message: `${result.created.length} sample call${result.created.length === 1 ? "" : "s"} added`,
+      progress: 1,
+    });
+    return result;
   });
 
   rt.jobs.register<ProvisionJobInput, ProvisionJobResult>(JOB_PROVISION, async (ctx) => {

@@ -32,8 +32,13 @@ review:
   that jumps the audio/video player to the exact moment the answer came from, and an honest
   confidence signal rather than a made-up-sounding answer.
 - **An aggregated view across every call** — a dashboard of first-call-resolution rate, complaint
-  rate, cross-sell acceptance, average compliance and CSAT, and breakdowns by reason, sentiment,
-  line of business and outcome, refreshed as new calls come in.
+  rate, cross-sell acceptance, average compliance and CSAT, breakdowns by reason, sentiment, line
+  of business and outcome, and a sortable breakdown by agent or by queue, refreshed as new calls
+  come in. Every tile and row drills through into the underlying calls, filtered to match.
+- **A searchable, filterable table of every call** — search, facet filters with live counts,
+  sortable columns and a lifecycle status (queued, transcribing, labelling, partly analysed,
+  analysed, failed) for every call, with every filter kept in the page's address so a view can be
+  shared or bookmarked.
 
 ## What it is not
 

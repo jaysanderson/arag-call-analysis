@@ -1,106 +1,160 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CallCard } from "@/components/CallCard";
 import { DashboardCharts } from "@/components/DashboardCharts";
-import { Button, Card, Kpi, SectionTitle } from "@/components/ui";
+import { RollupTable } from "@/components/dashboard/RollupTable";
+import { ErrorState } from "@/components/kit";
+import { ApiMeta, PageHeader } from "@/components/shell/AppShell";
 import { pct } from "@/lib/format";
 import { getRuntime } from "@/lib/runtime";
 import { dashboard } from "@/services/dashboard";
+import { onboarding } from "@/services/onboarding";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+/** Drill-down link into the filtered calls table. */
+function lc(labelset: string, label: string) {
+  return `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}`;
+}
+
+export default async function DashboardPage() {
+  const rt = await getRuntime();
+
   let d: Awaited<ReturnType<typeof dashboard>>;
   try {
     // Server components call the same service layer the API does — no duplicated ARAG logic.
-    d = await dashboard(await getRuntime());
-  } catch {
+    d = await dashboard(rt);
+  } catch (err) {
     return (
-      <Card className="p-6">
-        <h1 className="font-display text-lg font-semibold text-ink-950">Dashboard unavailable</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          Could not reach the Knowledge Box right now. Open{" "}
-          <Link href="/admin/health" className="text-brand-600 underline">
-            admin health
-          </Link>{" "}
-          for the connection test.
-        </p>
-      </Card>
+      <>
+        <PageHeader title="Dashboard" breadcrumb={[{ label: "Home" }]} />
+        <div className="arag-pagebody">
+          <ErrorState
+            title="The dashboard could not be built."
+            detail={`The Knowledge Box did not answer. ${(err as Error).message}`}
+            action={
+              <Link href="/settings/connection" className="arag-btn secondary sm">
+                Check the connection
+              </Link>
+            }
+          />
+        </div>
+      </>
     );
   }
 
+  // First run: an empty Knowledge Box has nothing to aggregate, so the useful screen is the one
+  // that gets calls into it. Onboarding is a route, not a modal, so it is linkable and resumable.
+  if (d.total === 0) {
+    const state = await onboarding(rt).catch(() => null);
+    if (!state?.complete) redirect("/welcome");
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="font-display text-2xl font-semibold text-ink-950">Call Analytics</h1>
-          <p className="text-sm text-slate-500">
-            Aggregated across {d.total} analyzed call{d.total === 1 ? "" : "s"}
-            {d.withMetrics < d.total ? ` (${d.withMetrics} with AI metrics)` : ""}.
-          </p>
-        </div>
-        <Button href="/calls">Browse calls →</Button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <Kpi label="Total calls" value={String(d.total)} href="/calls" />
-        <Kpi
-          label="First-call resolution"
-          value={pct(d.fcrRate)}
-          accent="text-accent-fg-light"
-          href={lc("disposition_flags", "First-Call Resolution")}
-        />
-        <Kpi
-          label="Complaint rate"
-          value={pct(d.complaintRate)}
-          accent="text-danger-fg"
-          href={lc("disposition_flags", "Complaint Raised")}
-        />
-        <Kpi
-          label="Cross-sell accept"
-          value={pct(d.crossSellAcceptRate)}
-          sub={`${pct(d.crossSellOfferRate)} offered`}
-          accent="text-brand-600"
-          href={lc("disposition_flags", "Cross-sell Accepted")}
-        />
-        <Kpi label="Avg compliance" value={String(d.avgCompliance)} sub="0–100" href="/calls" />
-        <Kpi label="Avg CSAT" value={d.avgCsat ? `${d.avgCsat}/5` : "n/a"} href="/calls" />
-      </div>
-
-      <DashboardCharts
-        byReason={d.byReason}
-        bySentiment={d.bySentiment}
-        byOutcome={d.byOutcome}
-        byLob={d.byLob}
-        complaintsByCategory={d.complaintsByCategory}
-        crossSell={d.crossSell}
+    <>
+      <PageHeader
+        title="Dashboard"
+        description={`Aggregated across ${d.total} call${d.total === 1 ? "" : "s"}${
+          d.withMetrics < d.total ? `, ${d.withMetrics} of them fully analysed` : ""
+        }.`}
+        breadcrumb={[{ label: "Home" }]}
+        actions={
+          <>
+            <a
+              href="/api/v1/calls/export?format=csv"
+              className="arag-btn secondary sm"
+              download
+              data-testid="dashboard-export"
+            >
+              Export
+            </a>
+            <Link href="/calls" className="arag-btn sm">
+              Browse calls
+            </Link>
+          </>
+        }
       />
 
-      <div>
-        <SectionTitle
-          count={d.recent.length}
-          right={
-            <Link href="/calls" className="text-xs font-medium text-brand-600 hover:underline">
+      <div className="arag-pagebody">
+        <div className="arag-stat-strip" data-testid="stat-strip">
+          <Stat label="Calls" value={String(d.total)} sub={`${d.withMetrics} analysed`} href="/calls" />
+          <Stat
+            label="First-call resolution"
+            value={pct(d.fcrRate)}
+            sub="of analysed calls"
+            href={lc("disposition_flags", "First-Call Resolution")}
+          />
+          <Stat
+            label="Complaint rate"
+            value={pct(d.complaintRate)}
+            sub="of analysed calls"
+            href={lc("disposition_flags", "Complaint Raised")}
+          />
+          <Stat
+            label="Cross-sell accepted"
+            value={pct(d.crossSellAcceptRate)}
+            sub={`${pct(d.crossSellOfferRate)} offered`}
+            href={lc("disposition_flags", "Cross-sell Accepted")}
+          />
+          <Stat
+            label="Avg compliance"
+            value={String(d.avgCompliance)}
+            sub="out of 100"
+            href="/calls?sort=compliance&order=asc"
+          />
+          <Stat
+            label="Avg CSAT"
+            value={d.avgCsat ? `${d.avgCsat}` : "n/a"}
+            sub={d.avgCsat ? "out of 5" : "no estimate yet"}
+            href="/calls?sort=csat&order=asc"
+          />
+        </div>
+
+        <div style={{ marginTop: 24 }}>
+          <DashboardCharts
+            byReason={d.byReason}
+            bySentiment={d.bySentiment}
+            byOutcome={d.byOutcome}
+            byLob={d.byLob}
+            complaintsByCategory={d.complaintsByCategory}
+            crossSell={d.crossSell}
+          />
+        </div>
+
+        <div style={{ marginTop: 24 }}>
+          <RollupTable byAgent={d.byAgent} byQueue={d.byQueue} />
+        </div>
+
+        <section style={{ marginTop: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 650, color: "var(--arag-ink-950)" }}>
+              Recent calls
+            </h2>
+            <Link href="/calls" className="small" style={{ marginLeft: "auto" }}>
               View all
             </Link>
-          }
-        >
-          Recent calls
-        </SectionTitle>
-        {d.recent.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-slate-400">No calls yet.</Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          </div>
+          <div className="arag-grid cols-4">
             {d.recent.map((c) => (
               <CallCard key={c.id} call={c} compact />
             ))}
           </div>
-        )}
+        </section>
+
+        <ApiMeta>
+          <code>GET /api/v1/dashboard</code>
+        </ApiMeta>
       </div>
-    </div>
+    </>
   );
 }
 
-// Drill-down link into the filtered calls list.
-function lc(labelset: string, label: string) {
-  return `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}`;
+function Stat({ label, value, sub, href }: { label: string; value: string; sub?: string; href: string }) {
+  return (
+    <Link href={href}>
+      <div className="label">{label}</div>
+      <div className="value">{value}</div>
+      {sub && <div className="sub">{sub}</div>}
+    </Link>
+  );
 }

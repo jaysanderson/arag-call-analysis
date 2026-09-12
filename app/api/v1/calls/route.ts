@@ -1,4 +1,5 @@
 import { jsonResponse, preflight, route } from "@/lib/api";
+import { listOptionsFrom } from "@/lib/query";
 import { createCall, listCalls } from "@/services/calls";
 import { JOB_INGEST, jobView } from "@/services/jobs";
 import { badRequest, HttpError } from "@/vendor/arag-platform/src/index.ts";
@@ -6,16 +7,13 @@ import { badRequest, HttpError } from "@/vendor/arag-platform/src/index.ts";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const GET = route({ path: "/api/v1/calls", method: "get" }, async (ctx) => {
-  const q = ctx.query.q as string | undefined;
-  const label = (ctx.query.label as string[] | undefined) ?? [];
-  return listCalls(ctx.rt, {
-    q,
-    labels: label,
+export const GET = route({ path: "/api/v1/calls", method: "get" }, async (ctx) =>
+  listCalls(ctx.rt, {
+    ...listOptionsFrom(ctx.query),
     page: (ctx.query.page as number | undefined) ?? 1,
     pageSize: (ctx.query.page_size as number | undefined) ?? 50,
-  });
-});
+  }),
+);
 
 const ALLOWED_RECORDING_TYPES = [
   "audio/mpeg",

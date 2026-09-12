@@ -4,10 +4,27 @@ Contact-centre call intelligence built entirely on **Progress Agentic RAG (ARAG)
 
 Upload a call recording. ARAG transcribes it into timestamped paragraphs, data-augmentation agents
 classify the whole call and every individual moment in it, and a second agent writes a structured
-analysis and a flat set of metrics. The app aggregates those metrics into a live dashboard, lets you
-search every transcript semantically, and lets you ask one call a question whose answer is grounded
-only in that call — with citations you can click to scrub the recording to the exact second the
-answer came from.
+analysis and a flat set of metrics. The app is a single shell around that pipeline:
+
+- **Dashboard** (`/`) — a stat strip, charts and a sortable breakdown by agent or by queue, every
+  tile and row drilling through into the filtered calls underneath it.
+- **Calls** (`/calls`) — a searchable, filterable, sortable table with bulk export/re-analyse/
+  delete, plus a category-rail browse mode for discovery; every call carries a lifecycle status
+  (queued, transcribing, labelling, partly analysed, analysed, failed).
+- **A call workspace** (`/calls/[id]`) — a media player with a moments track under the scrub bar,
+  a synced transcript, and an inspector with Analysis, Ask and Details tabs. Ask answers a
+  question only from that call's own transcript, with citations you can click to scrub the
+  recording to the exact second the answer came from, and it can be shared as a revocable,
+  expiring read-only link.
+- **Upload** (`/upload`) — drop a recording or paste a transcript and watch the ingest job's own
+  progress stream; an ingest history lists every run this deployment has made.
+- **Agents & Taxonomy** (`/taxonomy`) — the labelsets and the three data-augmentation agents, with
+  their live provisioning state and a one-click re-provision.
+- **Settings** (`/settings`) — connection, white-label branding, usage, API keys and about.
+- **Admin** (`/admin`) — the same live-read operator console, in the same shell.
+
+First run lands on **Get started** (`/welcome`) instead of an empty dashboard, with a real sample
+dataset one click away.
 
 Everything the UI does, it does through the public API. There is no private back channel.
 

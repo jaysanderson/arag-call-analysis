@@ -1,20 +1,33 @@
+import Link from "next/link";
 import { Suspense } from "react";
-import { CallsExplorer } from "@/components/CallsExplorer";
+import { CallsWorkspace } from "@/components/calls/CallsWorkspace";
+import { TableSkeleton } from "@/components/kit";
+import { ApiMeta, PageHeader } from "@/components/shell/AppShell";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "Calls" };
+
 export default function CallsPage() {
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-ink-950">Calls</h1>
-        <p className="text-sm text-slate-500">
-          Browse, search, and filter every analyzed call by its automatic classification.
-        </p>
+    <>
+      <PageHeader
+        title="Calls"
+        breadcrumb={[{ label: "Home", href: "/" }, { label: "Calls" }]}
+        actions={
+          <Link href="/upload" className="arag-btn sm">
+            Upload a call
+          </Link>
+        }
+      />
+      <div className="arag-pagebody">
+        <Suspense fallback={<TableSkeleton rows={8} cols={8} />}>
+          <CallsWorkspace />
+        </Suspense>
+        <ApiMeta>
+          <code>GET /api/v1/calls</code> and <code>GET /api/v1/labelsets</code>
+        </ApiMeta>
       </div>
-      <Suspense fallback={<div className="text-sm text-slate-400">Loading…</div>}>
-        <CallsExplorer />
-      </Suspense>
-    </div>
+    </>
   );
 }

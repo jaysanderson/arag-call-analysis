@@ -16,7 +16,7 @@ Generated from `openapi.json` — do not edit by hand. Interactive docs: `/api/v
 
 ### `GET /api/v1/calls`
 
-**List analysed calls** — Full-text/semantic search across transcripts when `q` is set, otherwise the whole catalog, filtered by ARAG-assigned labels.
+**List analysed calls** — Full-text/semantic search across transcripts when `q` is set, otherwise the whole catalog, filtered by ARAG-assigned labels and by the structured attributes of the call. The response carries the facet tallies, agents and queues the filter bar renders, so a table view needs one request rather than four.
 
 Parameters:
 
@@ -24,6 +24,19 @@ Parameters:
 |---|---|---|---|---|
 | `q` | query | string |  | Search query across transcripts. |
 | `label` | query | array of string |  | Facet filter as `labelset/label`; repeat for AND across facets. |
+| `agent` | query | string |  | Exact agent name. |
+| `queue` | query | string |  | Exact queue name. |
+| `media_type` | query | string |  |  |
+| `from` | query | string |  | Inclusive lower bound on the call time (ISO-8601). |
+| `to` | query | string |  | Inclusive upper bound on the call time (ISO-8601). |
+| `min_duration` | query | integer |  |  |
+| `max_duration` | query | integer |  |  |
+| `complaint` | query | boolean |  | Only calls with/without a complaint. |
+| `fcr` | query | boolean |  | Only calls resolved first time (or not). |
+| `escalated` | query | boolean |  |  |
+| `lifecycle` | query | string |  | Only calls in this pipeline state. |
+| `sort` | query | string |  | Table column to sort by. |
+| `order` | query | string |  |  |
 | `page` | query | integer |  |  |
 | `page_size` | query | integer |  |  |
 
@@ -66,6 +79,66 @@ Responses:
 - `404` Not found — `application/problem+json` [Problem](#problem)
 - `413` Recording too large — `application/problem+json` [Problem](#problem)
 - `415` Unsupported media type — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
+### `GET /api/v1/calls/export`
+
+**Export the filtered call list** — Renders the same set `GET /api/v1/calls` would return — same filters, same sort — as a CSV or JSON download. Pass `ids` to export an explicit table selection instead of a filter. Spreadsheet formula characters are escaped in CSV output.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `q` | query | string |  | Search query across transcripts. |
+| `label` | query | array of string |  | Facet filter as `labelset/label`; repeat for AND across facets. |
+| `agent` | query | string |  | Exact agent name. |
+| `queue` | query | string |  | Exact queue name. |
+| `media_type` | query | string |  |  |
+| `from` | query | string |  | Inclusive lower bound on the call time (ISO-8601). |
+| `to` | query | string |  | Inclusive upper bound on the call time (ISO-8601). |
+| `min_duration` | query | integer |  |  |
+| `max_duration` | query | integer |  |  |
+| `complaint` | query | boolean |  | Only calls with/without a complaint. |
+| `fcr` | query | boolean |  | Only calls resolved first time (or not). |
+| `escalated` | query | boolean |  |  |
+| `lifecycle` | query | string |  | Only calls in this pipeline state. |
+| `sort` | query | string |  | Table column to sort by. |
+| `order` | query | string |  |  |
+| `format` | query | string |  |  |
+| `ids` | query | array of string |  | Explicit call ids (a table selection). Repeat the parameter. |
+| `limit` | query | integer |  |  |
+
+Responses:
+
+- `200` The export, as an attachment — `text/csv` string
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `POST /api/v1/calls/bulk`
+
+**Apply an action to several calls at once** — The table's bulk actions. Partial success is the normal case and is reported per id rather than failing the whole batch.
+
+Request body (`application/json`): [BulkActionRequest](#bulkactionrequest)
+
+
+Responses:
+
+- `200` Per-id outcome — `application/json` [BulkActionResult](#bulkactionresult)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
@@ -168,6 +241,167 @@ Responses:
 
 Auth: public
 
+
+### `POST /api/v1/calls/{id}/reanalyze`
+
+**Re-run the analysis for one call** — Drops every cached derivative of the call, waits for the Knowledge Box to report the resource processed, and re-reads it so labels and generated fields written since are picked up. ARAG's data-augmentation agents are Knowledge-Box-wide tasks, so this refreshes one call's analysis rather than re-invoking a model for it; the job result says whether an analysis is actually present afterwards. To re-run the agents themselves, use `POST /api/v1/admin/provision`.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Responses:
+
+- `202` Refresh job accepted — `application/json` [Job](#job)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
+### `GET /api/v1/calls/{id}/export`
+
+**Export one call's record** — `json` is the whole record (transcript, moments, analysis, metrics). `txt` is the transcript with `[mm:ss] Speaker:` prefixes. `vtt` is WebVTT cues built from the paragraph timings, so the transcript drops straight into a media player.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+| `format` | query | string |  |  |
+
+Responses:
+
+- `200` The call, as an attachment — `application/json` string
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+## Shares
+
+### `GET /api/v1/calls/{id}/shares`
+
+**Every share link ever created for a call** — Includes revoked and expired links, so the history of who was given a pointer survives.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Responses:
+
+- `200` Share links — `application/json` [ShareList](#sharelist)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `POST /api/v1/calls/{id}/shares`
+
+**Create a revocable, expiring link to one call** — Share links are application state, not a Knowledge Box mutation, and they grant no access the read API does not already give — so they need only the same credentials a read does. Revoking one is the control that matters, and it is available to every caller who can create one.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Request body (`application/json`): [ShareCreateRequest](#sharecreaterequest)
+
+
+Responses:
+
+- `201` The link — `application/json` [ShareLink](#sharelink)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `GET /api/v1/shares/{token}`
+
+**Resolve a share token to the call it points at** — 404 for an unknown, revoked or expired token — the three are indistinguishable to the caller by design.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `token` | path | string | yes |  |
+
+Responses:
+
+- `200` The link — `application/json` [ShareLink](#sharelink)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `DELETE /api/v1/shares/{token}`
+
+**Revoke a share link**
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `token` | path | string | yes |  |
+
+Responses:
+
+- `200` The revoked link — `application/json` [ShareLink](#sharelink)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+## Settings
+
+### `GET /api/v1/settings`
+
+**Non-sensitive deployment settings for the in-product Settings area** — Branding, connection mode, limits, which features this deployment allows, and how many API keys are configured. Contains no secrets and no key material; the operator view with the full effective environment is `GET /api/v1/admin/config`.
+
+Responses:
+
+- `200` Settings — `application/json` [SettingsView](#settingsview)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
 ## Analytics
 
 ### `GET /api/v1/dashboard`
@@ -177,6 +411,23 @@ Auth: public
 Responses:
 
 - `200` Dashboard aggregation — `application/json` [Dashboard](#dashboard)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `GET /api/v1/taxonomy`
+
+**Labelsets, agent definitions and provisioning state in one read** — The Agents & Taxonomy screen asks one question — is my taxonomy live? — and answering it needs the shipped definitions, the labelsets the Knowledge Box really holds, and the agent task state compared against each other. That comparison is made here rather than in the browser.
+
+Responses:
+
+- `200` Taxonomy — `application/json` [TaxonomyView](#taxonomyview)
 - `400` Validation failed — `application/problem+json` [Problem](#problem)
 - `401` Authentication required — `application/problem+json` [Problem](#problem)
 - `403` Forbidden — `application/problem+json` [Problem](#problem)
@@ -220,6 +471,45 @@ Responses:
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
 Auth: public
+
+## Onboarding
+
+### `GET /api/v1/onboarding`
+
+**First-run state: what still has to happen before this deployment is useful**
+
+Responses:
+
+- `200` Onboarding state — `application/json` [OnboardingState](#onboardingstate)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `POST /api/v1/samples`
+
+**Load the sample dataset** — Provisions the taxonomy, then uploads the shipped synthetic scenarios. Repeatable: calls whose slug is already present are skipped rather than duplicated. Runs as a job so the first-run screen can show real progress.
+
+Request body (`application/json`): [SeedSamplesRequest](#seedsamplesrequest)
+
+
+Responses:
+
+- `202` Seeding job accepted — `application/json` [Job](#job)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `409` A seeding job is already running — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
 
 ## Jobs
 
@@ -619,6 +909,7 @@ Narrative analysis written by the `call-insights` agent.
 | `memberId` | string |  |  |
 | `queue` | string |  |  |
 | `status` | string |  | ARAG processing status (PENDING while transcribing). |
+| `lifecycle` | string (`queued`, `transcribing`, `labelling`, `partial`, `analysed`, `failed`) |  | Derived pipeline state: where this call has got to, in one word. ARAG reports a processing status, a label set and generated fields independently; this collapses the three into the state a reviewer acts on. |
 | `labels` | array of object | yes |  |
 | `metrics` | object |  | Flat metrics written by the `call-insights` data-augmentation agent. Values that fail the taxonomy enum check are dropped rather than rendered. |
 | `momentTrack` | array of string |  | Dominant moment label per transcript paragraph (empty string = none). |
@@ -648,6 +939,21 @@ _object_
 | `name` | string | yes |  |
 | `value` | number | yes |  |
 
+### Rollup
+
+Per-agent or per-queue roll-up. Rates are computed over the calls in the group that carry metrics (`analysed`), never over the group size, so a partly-analysed group is not misreported.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes |  |
+| `calls` | integer | yes |  |
+| `analysed` | integer | yes |  |
+| `fcrRate` | number |  |  |
+| `complaintRate` | number |  |  |
+| `escalationRate` | number |  |  |
+| `avgCsat` | number |  |  |
+| `avgCompliance` | number |  |  |
+
 ### Dashboard
 
 | Field | Type | Required | Description |
@@ -667,6 +973,8 @@ _object_
 | `byLob` | array of object |  |  |
 | `complaintsByCategory` | array of object |  |  |
 | `crossSell` | object |  |  |
+| `byAgent` | array of [Rollup](#rollup) |  |  |
+| `byQueue` | array of [Rollup](#rollup) |  |  |
 | `recent` | array of [CallSummary](#callsummary) | yes |  |
 
 ### LabelsetView
@@ -703,6 +1011,14 @@ _object_
 | `ttlMs` | integer | yes |  |
 | `byNamespace` | object |  |  |
 
+### FacetCount
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `labelset` | string | yes |  |
+| `label` | string | yes |  |
+| `count` | integer | yes |  |
+
 ### CallPage
 
 | Field | Type | Required | Description |
@@ -712,6 +1028,100 @@ _object_
 | `page_size` | integer | yes |  |
 | `total` | integer | yes |  |
 | `next_page` | boolean |  |  |
+| `facets` | array of [FacetCount](#facetcount) | yes |  |
+| `agents` | array of string |  |  |
+| `queues` | array of string |  |  |
+
+### BulkActionRequest
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string (`delete`, `reanalyze`) | yes | `delete` removes the calls and their Knowledge Box resources; `reanalyze` queues a refresh job per call. |
+| `ids` | array of string | yes | Call ids, as selected in the table. |
+
+### BulkActionResult
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `action` | string | yes |  |
+| `requested` | integer | yes |  |
+| `succeeded` | integer | yes |  |
+| `failed` | array of object | yes |  |
+| `jobs` | array of [Job](#job) |  | One job per call, for actions that run asynchronously. |
+
+### ShareLink
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | yes | Opaque 256-bit token; the only secret in the link. |
+| `callId` | string | yes |  |
+| `callTitle` | string |  |  |
+| `url` | string | yes | Path to the read-only call view, e.g. `/s/<token>`. |
+| `createdISO` | string | yes |  |
+| `expiresISO` | string | yes |  |
+| `revoked` | boolean | yes |  |
+| `expired` | boolean | yes |  |
+| `note` | string |  |  |
+
+### ShareCreateRequest
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `ttlDays` | integer |  |  |
+| `note` | string |  | Why the link was created; shown in the list. |
+
+### ShareList
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `items` | array of [ShareLink](#sharelink) | yes |  |
+
+### LabelsetDetail
+
+_object_
+
+### TaxonomyView
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `labelsets` | array of [LabelsetDetail](#labelsetdetail) | yes |  |
+| `agents` | array of [AgentStatus](#agentstatus) | yes |  |
+| `provisioning` | object | yes |  |
+
+### OnboardingState
+
+Computed live on every read rather than stored, so a Knowledge Box that is emptied, or one provisioned outside the product, reports the truth instead of a stale checklist.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `complete` | boolean | yes |  |
+| `mode` | string (`mock`, `live`) | yes |  |
+| `callCount` | integer | yes |  |
+| `analysedCount` | integer |  |  |
+| `steps` | array of object | yes |  |
+| `sample` | object | yes |  |
+
+### SeedSamplesRequest
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `count` | integer |  |  |
+| `provision` | boolean |  | Provision the taxonomy first. |
+
+### SettingsView
+
+Non-sensitive deployment settings for the in-product Settings area. Contains no secrets: the Knowledge Box id is truncated and no key material is ever included.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `version` | string | yes |  |
+| `platformVersion` | string |  |  |
+| `branding` | [Branding](#branding) | yes |  |
+| `connection` | object | yes |  |
+| `limits` | object | yes |  |
+| `features` | object | yes | What this deployment allows: uploads, deletes, admin panel, API-key auth. |
+| `apiKeys` | object |  |  |
+| `taxonomy` | object |  |  |
 
 ### CallCreateAccepted
 

@@ -135,6 +135,12 @@ const CallSummary = {
     memberId: { type: "string" },
     queue: { type: "string" },
     status: { type: "string", description: "ARAG processing status (PENDING while transcribing)." },
+    lifecycle: {
+      type: "string",
+      enum: ["queued", "transcribing", "labelling", "partial", "analysed", "failed"],
+      description:
+        "Derived pipeline state: where this call has got to, in one word. ARAG reports a processing status, a label set and generated fields independently; this collapses the three into the state a reviewer acts on.",
+    },
     labels: { type: "array", items: ResourceLabel },
     metrics: CallMetrics,
     momentTrack: {
@@ -209,7 +215,26 @@ const Dashboard = {
       type: "object",
       properties: { offered: { type: "integer" }, accepted: { type: "integer" } },
     },
+    byAgent: { type: "array", items: ref("Rollup") },
+    byQueue: { type: "array", items: ref("Rollup") },
     recent: { type: "array", items: ref("CallSummary") },
+  },
+};
+
+const Rollup = {
+  type: "object",
+  required: ["name", "calls", "analysed"],
+  description:
+    "Per-agent or per-queue roll-up. Rates are computed over the calls in the group that carry metrics (`analysed`), never over the group size, so a partly-analysed group is not misreported.",
+  properties: {
+    name: { type: "string" },
+    calls: { type: "integer" },
+    analysed: { type: "integer" },
+    fcrRate: { type: "number" },
+    complaintRate: { type: "number" },
+    escalationRate: { type: "number" },
+    avgCsat: { type: "number" },
+    avgCompliance: { type: "number" },
   },
 };
 
@@ -283,11 +308,242 @@ const schemas: Record<string, unknown> = {
   CallParagraph,
   CallDetail,
   Datum,
+  Rollup,
   Dashboard,
   LabelsetView,
   AgentStatus,
   CacheStats,
-  CallPage: pageSchema("#/components/schemas/CallSummary"),
+  FacetCount: {
+    type: "object",
+    required: ["labelset", "label", "count"],
+    properties: {
+      labelset: { type: "string" },
+      label: { type: "string" },
+      count: { type: "integer" },
+    },
+  },
+  /**
+   * The shared page envelope plus the aggregates the data table's filter bar needs. Facets are
+   * counted over the set that survives the structural filters but *before* the label filter, so
+   * selecting one facet does not collapse the others to zero.
+   */
+  CallPage: (() => {
+    const base = pageSchema("#/components/schemas/CallSummary") as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+    return {
+      ...base,
+      required: [...base.required, "facets"],
+      properties: {
+        ...base.properties,
+        facets: { type: "array", items: ref("FacetCount") },
+        agents: { type: "array", items: { type: "string" } },
+        queues: { type: "array", items: { type: "string" } },
+      },
+    };
+  })(),
+  BulkActionRequest: {
+    type: "object",
+    required: ["action", "ids"],
+    additionalProperties: false,
+    properties: {
+      action: {
+        type: "string",
+        enum: ["delete", "reanalyze"],
+        description:
+          "`delete` removes the calls and their Knowledge Box resources; `reanalyze` queues a refresh job per call.",
+      },
+      ids: {
+        type: "array",
+        items: { type: "string", maxLength: 64 },
+        minItems: 1,
+        maxItems: 200,
+        description: "Call ids, as selected in the table.",
+      },
+    },
+  },
+  BulkActionResult: {
+    type: "object",
+    required: ["action", "requested", "succeeded", "failed"],
+    properties: {
+      action: { type: "string" },
+      requested: { type: "integer" },
+      succeeded: { type: "integer" },
+      failed: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["id", "error"],
+          properties: { id: { type: "string" }, error: { type: "string" } },
+        },
+      },
+      jobs: {
+        type: "array",
+        items: ref("Job"),
+        description: "One job per call, for actions that run asynchronously.",
+      },
+    },
+  },
+  ShareLink: {
+    type: "object",
+    required: ["token", "callId", "url", "createdISO", "expiresISO", "revoked", "expired"],
+    properties: {
+      token: { type: "string", description: "Opaque 256-bit token; the only secret in the link." },
+      callId: { type: "string" },
+      callTitle: { type: "string" },
+      url: { type: "string", description: "Path to the read-only call view, e.g. `/s/<token>`." },
+      createdISO: { type: "string" },
+      expiresISO: { type: "string" },
+      revoked: { type: "boolean" },
+      expired: { type: "boolean" },
+      note: { type: "string" },
+    },
+  },
+  ShareCreateRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      ttlDays: { type: "integer", minimum: 1, maximum: 90, default: 7 },
+      note: { type: "string", maxLength: 200, description: "Why the link was created; shown in the list." },
+    },
+  },
+  ShareList: {
+    type: "object",
+    required: ["items"],
+    properties: { items: { type: "array", items: ref("ShareLink") } },
+  },
+  LabelsetDetail: {
+    allOf: [
+      ref("LabelsetView"),
+      {
+        type: "object",
+        required: ["shipped", "provisioned", "definitions"],
+        properties: {
+          shipped: { type: "boolean", description: "Part of the taxonomy this product ships." },
+          provisioned: { type: "boolean", description: "The Knowledge Box actually holds it." },
+          definitions: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["label", "present"],
+              properties: {
+                label: { type: "string" },
+                description: { type: "string" },
+                present: { type: "boolean" },
+                calls: { type: "integer", description: "Calls currently carrying this label." },
+              },
+            },
+          },
+        },
+      },
+    ],
+  },
+  TaxonomyView: {
+    type: "object",
+    required: ["labelsets", "agents", "provisioning"],
+    properties: {
+      labelsets: { type: "array", items: ref("LabelsetDetail") },
+      agents: { type: "array", items: ref("AgentStatus") },
+      provisioning: {
+        type: "object",
+        required: ["state", "missingLabelsets", "missingAgents"],
+        properties: {
+          state: { type: "string", enum: ["provisioned", "partial", "absent", "running"] },
+          missingLabelsets: { type: "array", items: { type: "string" } },
+          missingAgents: { type: "array", items: { type: "string" } },
+          lastJobId: { type: "string" },
+          lastRunISO: { type: "string" },
+        },
+      },
+    },
+  },
+  OnboardingState: {
+    type: "object",
+    required: ["complete", "mode", "callCount", "steps", "sample"],
+    description:
+      "Computed live on every read rather than stored, so a Knowledge Box that is emptied, or one provisioned outside the product, reports the truth instead of a stale checklist.",
+    properties: {
+      complete: { type: "boolean" },
+      mode: { type: "string", enum: ["mock", "live"] },
+      callCount: { type: "integer" },
+      analysedCount: { type: "integer" },
+      steps: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["key", "title", "detail", "state"],
+          properties: {
+            key: { type: "string", enum: ["connect", "taxonomy", "calls", "analysis"] },
+            title: { type: "string" },
+            detail: { type: "string" },
+            state: { type: "string", enum: ["done", "current", "blocked", "pending"] },
+            actionLabel: { type: "string" },
+            actionHref: { type: "string" },
+          },
+        },
+      },
+      sample: {
+        type: "object",
+        required: ["available", "count", "seeded"],
+        properties: {
+          available: { type: "boolean" },
+          count: { type: "integer" },
+          seeded: { type: "boolean" },
+          jobId: { type: "string" },
+        },
+      },
+    },
+  },
+  SeedSamplesRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      count: { type: "integer", minimum: 1, maximum: 24 },
+      provision: { type: "boolean", default: true, description: "Provision the taxonomy first." },
+    },
+  },
+  SettingsView: {
+    type: "object",
+    required: ["version", "branding", "connection", "limits", "features"],
+    description:
+      "Non-sensitive deployment settings for the in-product Settings area. Contains no secrets: the Knowledge Box id is truncated and no key material is ever included.",
+    properties: {
+      version: { type: "string" },
+      platformVersion: { type: "string" },
+      branding: ref("Branding"),
+      connection: {
+        type: "object",
+        required: ["mode"],
+        properties: {
+          mode: { type: "string", enum: ["mock", "live"] },
+          kbId: { type: "string", description: "Truncated." },
+          region: { type: "string" },
+          baseUrl: { type: "string" },
+          seededCalls: { type: "integer", description: "Calls in the sample dataset (mock mode only)." },
+        },
+      },
+      limits: { type: "object", additionalProperties: true },
+      features: {
+        type: "object",
+        additionalProperties: true,
+        description: "What this deployment allows: uploads, deletes, admin panel, API-key auth.",
+      },
+      apiKeys: {
+        type: "object",
+        required: ["configured", "managed"],
+        properties: {
+          configured: { type: "integer", description: "How many keys `API_KEYS` declares. Never the keys." },
+          managed: {
+            type: "boolean",
+            description:
+              "False: keys are configured by environment; in-product key management is not implemented yet.",
+          },
+        },
+      },
+      taxonomy: { type: "object", additionalProperties: true },
+    },
+  },
   CallCreateAccepted: {
     type: "object",
     required: ["job", "call"],
@@ -433,6 +689,89 @@ const schemas: Record<string, unknown> = {
 
 const problemResponses = { ...err };
 
+/**
+ * The filter/sort query surface shared by `GET /api/v1/calls` and `GET /api/v1/calls/export`, so
+ * an export is provably the same set the table was showing.
+ */
+const CALL_FILTER_PARAMS = [
+  {
+    name: "q",
+    in: "query",
+    description: "Search query across transcripts.",
+    schema: { type: "string", maxLength: 200 },
+  },
+  {
+    name: "label",
+    in: "query",
+    description: "Facet filter as `labelset/label`; repeat for AND across facets.",
+    schema: { type: "array", items: { type: "string", maxLength: 120 }, maxItems: 20 },
+  },
+  {
+    name: "agent",
+    in: "query",
+    description: "Exact agent name.",
+    schema: { type: "string", maxLength: 120 },
+  },
+  {
+    name: "queue",
+    in: "query",
+    description: "Exact queue name.",
+    schema: { type: "string", maxLength: 120 },
+  },
+  {
+    name: "media_type",
+    in: "query",
+    schema: { type: "string", enum: ["audio", "video", "transcript"] },
+  },
+  {
+    name: "from",
+    in: "query",
+    description: "Inclusive lower bound on the call time (ISO-8601).",
+    schema: { type: "string", maxLength: 40 },
+  },
+  {
+    name: "to",
+    in: "query",
+    description: "Inclusive upper bound on the call time (ISO-8601).",
+    schema: { type: "string", maxLength: 40 },
+  },
+  { name: "min_duration", in: "query", schema: { type: "integer", minimum: 0, maximum: 86_400 } },
+  { name: "max_duration", in: "query", schema: { type: "integer", minimum: 0, maximum: 86_400 } },
+  {
+    name: "complaint",
+    in: "query",
+    description: "Only calls with/without a complaint.",
+    schema: { type: "boolean" },
+  },
+  {
+    name: "fcr",
+    in: "query",
+    description: "Only calls resolved first time (or not).",
+    schema: { type: "boolean" },
+  },
+  { name: "escalated", in: "query", schema: { type: "boolean" } },
+  {
+    name: "lifecycle",
+    in: "query",
+    description: "Only calls in this pipeline state.",
+    schema: {
+      type: "string",
+      enum: ["queued", "transcribing", "labelling", "partial", "analysed", "failed"],
+    },
+  },
+  {
+    name: "sort",
+    in: "query",
+    description: "Table column to sort by.",
+    schema: {
+      type: "string",
+      enum: ["created", "title", "duration", "agent", "queue", "sentiment", "compliance", "csat"],
+      default: "created",
+    },
+  },
+  { name: "order", in: "query", schema: { type: "string", enum: ["asc", "desc"], default: "desc" } },
+];
+
 const paths: Record<string, Record<string, unknown>> = {
   "/api/v1/calls": {
     get: {
@@ -440,23 +779,8 @@ const paths: Record<string, Record<string, unknown>> = {
       tags: ["Calls"],
       summary: "List analysed calls",
       description:
-        "Full-text/semantic search across transcripts when `q` is set, otherwise the whole catalog, filtered by ARAG-assigned labels.",
-      parameters: [
-        {
-          name: "q",
-          in: "query",
-          description: "Search query across transcripts.",
-          schema: { type: "string", maxLength: 200 },
-        },
-        {
-          name: "label",
-          in: "query",
-          description: "Facet filter as `labelset/label`; repeat for AND across facets.",
-          schema: { type: "array", items: { type: "string", maxLength: 120 }, maxItems: 20 },
-        },
-        PageQuery.page,
-        PageQuery.pageSize,
-      ],
+        "Full-text/semantic search across transcripts when `q` is set, otherwise the whole catalog, filtered by ARAG-assigned labels and by the structured attributes of the call. The response carries the facet tallies, agents and queues the filter bar renders, so a table view needs one request rather than four.",
+      parameters: [...CALL_FILTER_PARAMS, PageQuery.page, PageQuery.pageSize],
       responses: { 200: jsonResponse(ref("CallPage"), "A page of calls"), ...problemResponses },
     },
     post: {
@@ -498,6 +822,59 @@ const paths: Record<string, Record<string, unknown>> = {
           description: "Unsupported media type",
           content: { "application/problem+json": { schema: ref("Problem") } },
         },
+      },
+    },
+  },
+  "/api/v1/calls/export": {
+    get: {
+      operationId: "exportCalls",
+      tags: ["Calls"],
+      summary: "Export the filtered call list",
+      description:
+        "Renders the same set `GET /api/v1/calls` would return — same filters, same sort — as a CSV or JSON download. Pass `ids` to export an explicit table selection instead of a filter. Spreadsheet formula characters are escaped in CSV output.",
+      parameters: [
+        ...CALL_FILTER_PARAMS,
+        {
+          name: "format",
+          in: "query",
+          schema: { type: "string", enum: ["csv", "json"], default: "csv" },
+        },
+        {
+          name: "ids",
+          in: "query",
+          description: "Explicit call ids (a table selection). Repeat the parameter.",
+          schema: { type: "array", items: { type: "string", maxLength: 64 }, maxItems: 500 },
+        },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", minimum: 1, maximum: 5000, default: 1000 },
+        },
+      ],
+      responses: {
+        200: {
+          description: "The export, as an attachment",
+          content: {
+            "text/csv": { schema: { type: "string" } },
+            "application/json": { schema: { type: "string" } },
+          },
+        },
+        ...problemResponses,
+      },
+    },
+  },
+  "/api/v1/calls/bulk": {
+    post: {
+      operationId: "bulkCallAction",
+      tags: ["Calls"],
+      summary: "Apply an action to several calls at once",
+      description:
+        "The table's bulk actions. Partial success is the normal case and is reported per id rather than failing the whole batch.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      requestBody: jsonBody(ref("BulkActionRequest")),
+      responses: {
+        200: jsonResponse(ref("BulkActionResult"), "Per-id outcome"),
+        ...problemResponses,
       },
     },
   },
@@ -565,6 +942,97 @@ const paths: Record<string, Record<string, unknown>> = {
       },
     },
   },
+  "/api/v1/calls/{id}/reanalyze": {
+    post: {
+      operationId: "reanalyzeCall",
+      tags: ["Calls"],
+      summary: "Re-run the analysis for one call",
+      description:
+        "Drops every cached derivative of the call, waits for the Knowledge Box to report the resource processed, and re-reads it so labels and generated fields written since are picked up. ARAG's data-augmentation agents are Knowledge-Box-wide tasks, so this refreshes one call's analysis rather than re-invoking a model for it; the job result says whether an analysis is actually present afterwards. To re-run the agents themselves, use `POST /api/v1/admin/provision`.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: {
+        202: jsonResponse(ref("Job"), "Refresh job accepted"),
+        ...problemResponses,
+      },
+    },
+  },
+  "/api/v1/calls/{id}/export": {
+    get: {
+      operationId: "exportCall",
+      tags: ["Calls"],
+      summary: "Export one call's record",
+      description:
+        "`json` is the whole record (transcript, moments, analysis, metrics). `txt` is the transcript with `[mm:ss] Speaker:` prefixes. `vtt` is WebVTT cues built from the paragraph timings, so the transcript drops straight into a media player.",
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } },
+        {
+          name: "format",
+          in: "query",
+          schema: { type: "string", enum: ["json", "txt", "vtt"], default: "json" },
+        },
+      ],
+      responses: {
+        200: {
+          description: "The call, as an attachment",
+          content: {
+            "application/json": { schema: { type: "string" } },
+            "text/plain": { schema: { type: "string" } },
+            "text/vtt": { schema: { type: "string" } },
+          },
+        },
+        ...problemResponses,
+      },
+    },
+  },
+  "/api/v1/calls/{id}/shares": {
+    get: {
+      operationId: "listCallShares",
+      tags: ["Shares"],
+      summary: "Every share link ever created for a call",
+      description: "Includes revoked and expired links, so the history of who was given a pointer survives.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: { 200: jsonResponse(ref("ShareList"), "Share links"), ...problemResponses },
+    },
+    post: {
+      operationId: "createCallShare",
+      tags: ["Shares"],
+      summary: "Create a revocable, expiring link to one call",
+      description:
+        "Share links are application state, not a Knowledge Box mutation, and they grant no access the read API does not already give — so they need only the same credentials a read does. Revoking one is the control that matters, and it is available to every caller who can create one.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      requestBody: jsonBody(ref("ShareCreateRequest"), false),
+      responses: { 201: jsonResponse(ref("ShareLink"), "The link"), ...problemResponses },
+    },
+  },
+  "/api/v1/shares/{token}": {
+    get: {
+      operationId: "resolveShare",
+      tags: ["Shares"],
+      summary: "Resolve a share token to the call it points at",
+      description:
+        "404 for an unknown, revoked or expired token — the three are indistinguishable to the caller by design.",
+      parameters: [{ name: "token", in: "path", required: true, schema: { type: "string", maxLength: 128 } }],
+      responses: { 200: jsonResponse(ref("ShareLink"), "The link"), ...problemResponses },
+    },
+    delete: {
+      operationId: "revokeShare",
+      tags: ["Shares"],
+      summary: "Revoke a share link",
+      parameters: [{ name: "token", in: "path", required: true, schema: { type: "string", maxLength: 128 } }],
+      responses: { 200: jsonResponse(ref("ShareLink"), "The revoked link"), ...problemResponses },
+    },
+  },
+  "/api/v1/settings": {
+    get: {
+      operationId: "getSettings",
+      tags: ["Settings"],
+      summary: "Non-sensitive deployment settings for the in-product Settings area",
+      description:
+        "Branding, connection mode, limits, which features this deployment allows, and how many API keys are configured. Contains no secrets and no key material; the operator view with the full effective environment is `GET /api/v1/admin/config`.",
+      responses: { 200: jsonResponse(ref("SettingsView"), "Settings"), ...problemResponses },
+    },
+  },
   "/api/v1/dashboard": {
     get: {
       operationId: "getDashboard",
@@ -581,6 +1049,43 @@ const paths: Record<string, Record<string, unknown>> = {
       description:
         "Product name, wordmark or logo, colours, the powered-by toggle and the footer/docs/support links. Read by the demo UI, the admin console and any partner front-end.",
       responses: { 200: jsonResponse(ref("Branding"), "Branding"), ...problemResponses },
+    },
+  },
+  "/api/v1/taxonomy": {
+    get: {
+      operationId: "getTaxonomy",
+      tags: ["Analytics"],
+      summary: "Labelsets, agent definitions and provisioning state in one read",
+      description:
+        "The Agents & Taxonomy screen asks one question — is my taxonomy live? — and answering it needs the shipped definitions, the labelsets the Knowledge Box really holds, and the agent task state compared against each other. That comparison is made here rather than in the browser.",
+      responses: { 200: jsonResponse(ref("TaxonomyView"), "Taxonomy"), ...problemResponses },
+    },
+  },
+  "/api/v1/onboarding": {
+    get: {
+      operationId: "getOnboarding",
+      tags: ["Onboarding"],
+      summary: "First-run state: what still has to happen before this deployment is useful",
+      responses: { 200: jsonResponse(ref("OnboardingState"), "Onboarding state"), ...problemResponses },
+    },
+  },
+  "/api/v1/samples": {
+    post: {
+      operationId: "seedSampleCalls",
+      tags: ["Onboarding"],
+      summary: "Load the sample dataset",
+      description:
+        "Provisions the taxonomy, then uploads the shipped synthetic scenarios. Repeatable: calls whose slug is already present are skipped rather than duplicated. Runs as a job so the first-run screen can show real progress.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      requestBody: jsonBody(ref("SeedSamplesRequest"), false),
+      responses: {
+        202: jsonResponse(ref("Job"), "Seeding job accepted"),
+        409: {
+          description: "A seeding job is already running",
+          content: { "application/problem+json": { schema: ref("Problem") } },
+        },
+        ...problemResponses,
+      },
     },
   },
   "/api/v1/labelsets": {
@@ -758,6 +1263,9 @@ export const openapi: Record<string, unknown> = buildOpenApi({
   tags: [
     { name: "Calls", description: "Upload, browse, stream and question analysed calls." },
     { name: "Analytics", description: "Aggregated metrics and the label taxonomy." },
+    { name: "Shares", description: "Revocable, expiring links to a single call's read-only view." },
+    { name: "Onboarding", description: "First-run state and the sample dataset." },
+    { name: "Settings", description: "Non-sensitive deployment settings shown in the product." },
     { name: "Branding", description: "White-label identity for this deployment." },
     { name: "Jobs", description: "Background ingestion and provisioning work." },
     { name: "Auth", description: "Demo session issuance." },
@@ -775,6 +1283,8 @@ export const openapi: Record<string, unknown> = buildOpenApi({
 export const API_ROUTES: RouteDef[] = [
   { method: "get", path: "/api/v1/calls", auth: "none", file: "app/api/v1/calls/route.ts" },
   { method: "post", path: "/api/v1/calls", auth: "write", file: "app/api/v1/calls/route.ts" },
+  { method: "get", path: "/api/v1/calls/export", auth: "none", file: "app/api/v1/calls/export/route.ts" },
+  { method: "post", path: "/api/v1/calls/bulk", auth: "write", file: "app/api/v1/calls/bulk/route.ts" },
   { method: "get", path: "/api/v1/calls/{id}", auth: "none", file: "app/api/v1/calls/[id]/route.ts" },
   { method: "delete", path: "/api/v1/calls/{id}", auth: "write", file: "app/api/v1/calls/[id]/route.ts" },
   {
@@ -789,6 +1299,41 @@ export const API_ROUTES: RouteDef[] = [
     auth: "none",
     file: "app/api/v1/calls/[id]/ask/route.ts",
   },
+  {
+    method: "post",
+    path: "/api/v1/calls/{id}/reanalyze",
+    auth: "write",
+    file: "app/api/v1/calls/[id]/reanalyze/route.ts",
+  },
+  {
+    method: "get",
+    path: "/api/v1/calls/{id}/shares",
+    auth: "api",
+    file: "app/api/v1/calls/[id]/shares/route.ts",
+  },
+  {
+    method: "post",
+    path: "/api/v1/calls/{id}/shares",
+    auth: "api",
+    file: "app/api/v1/calls/[id]/shares/route.ts",
+  },
+  { method: "get", path: "/api/v1/shares/{token}", auth: "none", file: "app/api/v1/shares/[token]/route.ts" },
+  {
+    method: "delete",
+    path: "/api/v1/shares/{token}",
+    auth: "api",
+    file: "app/api/v1/shares/[token]/route.ts",
+  },
+  {
+    method: "get",
+    path: "/api/v1/calls/{id}/export",
+    auth: "none",
+    file: "app/api/v1/calls/[id]/export/route.ts",
+  },
+  { method: "get", path: "/api/v1/settings", auth: "none", file: "app/api/v1/settings/route.ts" },
+  { method: "get", path: "/api/v1/taxonomy", auth: "none", file: "app/api/v1/taxonomy/route.ts" },
+  { method: "get", path: "/api/v1/onboarding", auth: "none", file: "app/api/v1/onboarding/route.ts" },
+  { method: "post", path: "/api/v1/samples", auth: "write", file: "app/api/v1/samples/route.ts" },
   { method: "get", path: "/api/v1/dashboard", auth: "none", file: "app/api/v1/dashboard/route.ts" },
   { method: "get", path: "/api/v1/branding", auth: "none", file: "app/api/v1/branding/route.ts" },
   { method: "get", path: "/api/v1/labelsets", auth: "none", file: "app/api/v1/labelsets/route.ts" },

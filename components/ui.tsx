@@ -255,7 +255,9 @@ export function SectionTitle({
 }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+      {/* The design system's `t-label` step: 12px, 600, 0.06em. A section eyebrow is a label, not
+          a heading set in display type. */}
+      <h2 className="flex items-center gap-2 font-text text-xs font-semibold uppercase tracking-[0.06em] text-slate-500">
         {children}
         {typeof count === "number" && (
           <span className="rounded-md bg-brand-50 px-1.5 py-0.5 text-[11px] font-semibold text-brand-700">

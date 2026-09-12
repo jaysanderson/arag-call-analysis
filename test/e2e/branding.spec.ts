@@ -98,17 +98,19 @@ test.describe("white label", () => {
   test("renders the partner name, tagline, colour and footer, with no Progress credit", async ({ page }) => {
     await page.goto(`${baseUrl}/`);
 
-    // Name and tagline in the header (the wordmark is an SVG labelled with the product name).
-    await expect(page.getByRole("img", { name: BRAND.BRAND_PRODUCT_NAME })).toBeVisible();
+    // Name and tagline in the sidebar identity block.
+    await expect(page.getByTestId("app-sidebar").getByText(BRAND.BRAND_PRODUCT_NAME)).toBeVisible();
     await expect(page.getByText(BRAND.BRAND_TAGLINE)).toBeVisible();
 
     // The browser tab follows the branding too.
     await expect(page).toHaveTitle(BRAND.BRAND_PRODUCT_NAME);
 
-    // The powered-by band and footer credit are both gone.
+    // The powered-by band and footer credit are both gone, and with them every trace of the
+    // Progress wordmark and of Progress green.
     await expect(page.getByTestId("powered-by-band")).toHaveCount(0);
     await expect(page.getByTestId("powered-by-credit")).toHaveCount(0);
     await expect(page.getByText("Built on Progress Agentic RAG")).toHaveCount(0);
+    await expect(page.getByAltText("Progress Agentic RAG")).toHaveCount(0);
 
     // Footer text and support link come from configuration.
     await expect(page.getByText(BRAND.BRAND_FOOTER_TEXT)).toBeVisible();
@@ -131,10 +133,12 @@ test.describe("white label", () => {
     await page.goto(`${baseUrl}/admin/login`);
     await page.getByLabel("Admin token").fill("brand-admin-token");
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("heading", { name: "Operations" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible({
+      timeout: 20_000,
+    });
 
-    await page.getByTestId("admin-nav").getByRole("link", { name: "Config", exact: true }).click();
-    await expect(page.getByText("Branding (white label)")).toBeVisible();
+    await page.getByTestId("admin-nav").getByRole("tab", { name: "Branding" }).click();
+    await expect(page.getByRole("heading", { name: "In effect" })).toBeVisible();
     await expect(page.getByText(BRAND.BRAND_PRODUCT_NAME).first()).toBeVisible();
     await expect(page.getByText("hidden")).toBeVisible();
   });

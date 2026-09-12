@@ -21,19 +21,42 @@ function Score({ label, value }: { label: string; value?: number }) {
   );
 }
 
-export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; metrics?: CallMetrics }) {
+/**
+ * The written analysis the `call-insights` agent produced.
+ *
+ * `bare` drops the card frame so the panel can sit inside the workspace inspector, which already
+ * supplies one — a card inside a card is the visual noise this product is trying to remove.
+ */
+export function AnalysisPanel({
+  analysis,
+  metrics,
+  bare,
+}: {
+  analysis?: CallAnalysis;
+  metrics?: CallMetrics;
+  bare?: boolean;
+}) {
+  const Frame = bare
+    ? ({ children, className }: { children: React.ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+      )
+    : Card;
+
   if (!analysis && !metrics) {
     return (
-      <Card className="p-4">
-        <h2 className="text-sm font-semibold text-ink-950">AI Analysis</h2>
-        <p className="mt-2 text-sm text-slate-400">Analysis is still being generated for this call.</p>
-      </Card>
+      <Frame className={bare ? "" : "p-4"}>
+        <h2 className="text-sm font-semibold text-ink-950">Analysis</h2>
+        <p className="mt-2 text-sm text-slate-500">
+          The call-insights agent has not written an analysis for this call yet. Labels and metrics arrive
+          first; the narrative follows.
+        </p>
+      </Frame>
     );
   }
   const a = analysis ?? {};
   return (
-    <Card className="p-4 space-y-4">
-      <h2 className="text-sm font-semibold text-ink-950">AI Analysis</h2>
+    <Frame className={bare ? "space-y-4" : "p-4 space-y-4"}>
+      {!bare && <h2 className="text-sm font-semibold text-ink-950">Analysis</h2>}
 
       {a.executive_summary && <Markdown text={a.executive_summary} className="text-sm text-slate-700" />}
 
@@ -112,6 +135,6 @@ export function AnalysisPanel({ analysis, metrics }: { analysis?: CallAnalysis; 
           ))}
         </div>
       )}
-    </Card>
+    </Frame>
   );
 }
