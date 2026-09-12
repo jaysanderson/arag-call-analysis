@@ -148,7 +148,7 @@ export function TaxonomyScreen({ canProvision }: { canProvision: boolean }) {
             {provisioning.state === "running" ? (
               "Provisioning is running. Labelsets and agents will be live when it finishes."
             ) : provisioning.state === "absent" ? (
-              "Nothing is provisioned yet. The Knowledge Box has none of this product\u2019s labelsets and none of its agents, so nothing will be classified."
+              "Nothing is provisioned yet. The Knowledge Box has none of this product’s labelsets and none of its agents, so nothing will be classified."
             ) : (
               <>
                 {provisioning.missingLabelsets.length > 0 &&

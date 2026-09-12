@@ -166,7 +166,7 @@ export function ChatPanel({
     <Frame className="flex flex-col">
       <div className={bare ? "pb-3" : "border-b border-brand-100 p-3"}>
         <h2 className="text-sm font-semibold text-ink-950">Ask this call</h2>
-        <p className="text-xs text-slate-500">Answers come only from this call\u2019s own transcript.</p>
+        <p className="text-xs text-slate-500">Answers come only from this call&rsquo;s own transcript.</p>
       </div>
       <div ref={scrollRef} className="scroll-thin max-h-[420px] min-h-[140px] space-y-3 overflow-y-auto p-3">
         {messages.length === 0 && (
