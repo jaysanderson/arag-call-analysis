@@ -55,6 +55,8 @@ honest version of this list.
 
 ## Product name options
 
+> **Shipped name: Call Analysis.** The options below are the naming analysis kept for the record; the programme ships the product under its descriptive name, and a partner white-labels it under their own (DECISIONS D-30, D-31 in the workspace).
+
 ### Option 1 — AfterCall
 
 **Rationale.** "After-call work" is an established contact-centre term (the QA and wrap-up
