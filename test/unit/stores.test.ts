@@ -17,6 +17,7 @@ import {
   activeApiKeys,
   apiKeysEnforced,
   createApiKey,
+  deleteApiKey,
   listApiKeys,
   renameApiKey,
   revokeApiKey,
@@ -62,6 +63,10 @@ const ENV_DEFAULTS: EnvDefaults = {
   generativeModel: "",
   reranker: "predict",
   timeoutMs: 60_000,
+  kbId: "kb",
+  apiKey: "k",
+  region: "r",
+  baseUrl: "",
 };
 
 let dir: string;
@@ -303,12 +308,27 @@ describe("the API-key store", () => {
     expect(listApiKeys(rt).find((k) => k.id === id)?.revoked).toBe(true);
   });
 
-  it("reports whether the API is closed", () => {
+  it("keeps enforcement on after the last key is revoked", () => {
+    // The incident this prevents: revoking a compromised key would otherwise turn the API *open*,
+    // because `enforceAuth` reads this to decide whether an anonymous read is allowed — and there
+    // is no way back, since the API_KEYS seed is idempotent by digest and brings the same row back
+    // still revoked. Reopening has to be a deliberate act.
     expect(apiKeysEnforced(rt)).toBe(false);
     const { key } = createApiKey(rt, "Reporting");
     expect(apiKeysEnforced(rt)).toBe(true);
     revokeApiKey(rt, key.id);
+    expect(apiKeysEnforced(rt)).toBe(true);
+    deleteApiKey(rt, key.id);
     expect(apiKeysEnforced(rt)).toBe(false);
+    expect(() => deleteApiKey(rt, key.id)).toThrow();
+  });
+
+  it("previews a seeded key by its digest, never by the operator's own secret prefix", () => {
+    rt.env.apiKeys = ["short"];
+    seedApiKeys(rt);
+    const preview = listApiKeys(rt)[0]?.preview ?? "";
+    expect(preview).not.toContain("short");
+    expect(preview).toMatch(/^ca_live_[0-9a-f]{8}…$/);
   });
 });
 

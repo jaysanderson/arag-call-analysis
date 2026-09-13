@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
  * from the call each one points at — "which links are live?" is a question about the deployment,
  * not about one call.
  */
-export const GET = route({ path: "/api/v1/shares", method: "get" }, (ctx) => {
+export const GET = route({ path: "/api/v1/shares", method: "get", auth: "api" }, (ctx) => {
   const state = (ctx.query.state as string | undefined) ?? "all";
   const items = listShares(ctx.rt, ctx.query.call_id as string | undefined).filter((s) => {
     if (state === "active") return !s.revoked && !s.expired;

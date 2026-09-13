@@ -200,6 +200,12 @@ export function registerJobs(rt: Runtime): void {
 
     let done = 0;
     for (const sc of wanted) {
+      // The uploads are emitted rather than staged, so nothing else in this loop consults the
+      // abort signal: without this, Cancel marked the job cancelled and the remaining twenty-odd
+      // resources were still created in the Knowledge Box. Against the in-process mock the job
+      // finishes in under a second and it never showed; on a live Knowledge Box it takes minutes,
+      // which is exactly when someone presses Cancel.
+      ctx.check();
       done++;
       const progress = 0.15 + (0.8 * done) / wanted.length;
       if (existing.has(sc.slug)) {

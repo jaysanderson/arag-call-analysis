@@ -4,7 +4,7 @@ import { createView, listViews } from "@/services/views";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export const GET = route({ path: "/api/v1/views", method: "get" }, (ctx) => ({
+export const GET = route({ path: "/api/v1/views", method: "get", auth: "api" }, (ctx) => ({
   items: listViews(ctx.rt),
 }));
 

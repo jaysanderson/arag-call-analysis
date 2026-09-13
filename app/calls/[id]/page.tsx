@@ -4,8 +4,8 @@ import { CallWorkspace } from "@/components/calls/CallWorkspace";
 import { ErrorState } from "@/components/kit";
 import { PageHeader } from "@/components/shell/AppShell";
 import { getRuntime } from "@/lib/runtime";
+import { canWrite } from "@/lib/session";
 import { tryGetCall } from "@/services/calls";
-import { settings } from "@/services/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,8 @@ export default async function CallPage({ params }: { params: Promise<{ id: strin
   const rt = await getRuntime();
   const call = await tryGetCall(rt, id);
   if (!call) notFound();
-  const { features } = settings(rt);
+  // Per viewer, not per deployment — see lib/session.ts.
+  const writable = await canWrite();
 
   // A call that has arrived but has not been transcribed yet has no transcript to show. Say so,
   // rather than rendering an empty workspace that looks broken.
@@ -50,5 +51,5 @@ export default async function CallPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  return <CallWorkspace call={call} canWrite={features.deletes} />;
+  return <CallWorkspace call={call} canWrite={writable} />;
 }

@@ -48,6 +48,16 @@ export interface EnvDefaults {
   generativeModel: string;
   reranker: string;
   timeoutMs: number;
+  /**
+   * The Knowledge Box the environment points at. Captured because `applyToRuntime` mutates
+   * `rt.env.arag` in place, so without a copy taken before the first override there is nothing
+   * left to reset *to* — and the section where that matters most is the one that decides which
+   * Knowledge Box the deployment is talking to.
+   */
+  kbId: string;
+  apiKey: string;
+  region: string;
+  baseUrl: string;
 }
 
 export interface Runtime {
@@ -222,6 +232,10 @@ async function buildRuntime(): Promise<Runtime> {
       generativeModel: env.arag.generativeModel,
       reranker: env.arag.reranker,
       timeoutMs: env.arag.timeoutMs,
+      kbId: env.arag.kbId,
+      apiKey: env.arag.apiKey,
+      region: env.arag.region,
+      baseUrl: env.arag.baseUrl,
     },
     log,
     arag,

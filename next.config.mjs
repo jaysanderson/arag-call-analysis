@@ -40,6 +40,29 @@ const nextConfig = {
           { key: "Content-Security-Policy", value: csp },
         ],
       },
+      {
+        /**
+         * Partner branding assets, served from the data volume by `app/branding/[...path]`.
+         *
+         * This entry must come AFTER the catch-all: Next applies every matching rule in order and
+         * the last value for a header key wins. It exists because config-level headers REPLACE
+         * anything a route handler sets, so the catch-all was overwriting the sandboxing policy
+         * `app/branding/[...path]` emits — and an uploaded SVG, which is a document that can carry
+         * script, then executed with this origin's cookies. An operator uploading their own logo
+         * would have handed that logo script access to their own session.
+         */
+        source: "/branding/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), geolocation=(), microphone=()" },
+          {
+            key: "Content-Security-Policy",
+            value: "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox",
+          },
+        ],
+      },
     ];
   },
 };

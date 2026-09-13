@@ -57,7 +57,10 @@ export function safeColor(value: string | undefined, fallback: string): string {
 export function safeLogoUrl(value: string | undefined): string {
   const v = (value ?? "").trim();
   if (!v) return "";
-  if (v.startsWith("//")) return "";
+  // A protocol-relative URL is another origin wearing a path. `//host` is the familiar form;
+  // `/\host` is the one people forget, and WHATWG resolves it identically — so the test is on the
+  // second character, not on a literal prefix.
+  if (v.startsWith("/") && (v[1] === "/" || v[1] === "\\")) return "";
   if (v.startsWith("/")) return v;
   return /^https?:\/\//i.test(v) ? v : "";
 }

@@ -48,9 +48,22 @@ export interface PurgeResult {
   failed: Array<{ id: string; error: string }>;
   sharesRevoked: number;
   dryRun: boolean;
+  /** Calls this run was asked to delete: the policy's candidates, narrowed by `ids` if given. */
+  scoped: number;
+  /**
+   * Of those, how many are still outstanding afterwards — the per-run cap, plus anything that
+   * failed. Non-zero means "run again"; reporting a capped run as finished is the failure this
+   * field exists to prevent.
+   */
+  remaining: number;
 }
 
-const MAX_PURGE_PER_CALL = 200;
+/**
+ * One run deletes at most this many calls, so a purge is a bounded request rather than an
+ * open-ended job holding a connection for minutes. `remaining` reports the rest, because telling
+ * an operator an irreversible job has finished when it has not is the worse failure.
+ */
+export const MAX_PURGE_PER_RUN = 200;
 
 export function ageDays(call: CallSummary, now = Date.now()): number {
   const t = call.createdISO ? Date.parse(call.createdISO) : Number.NaN;
@@ -105,7 +118,7 @@ export async function runPurge(
   const scope = opts.ids?.length
     ? preview.candidates.filter((c) => opts.ids?.includes(c.id))
     : preview.candidates;
-  const batch = scope.slice(0, MAX_PURGE_PER_CALL);
+  const batch = scope.slice(0, MAX_PURGE_PER_RUN);
 
   const result: PurgeResult = {
     days: preview.days,
@@ -114,25 +127,33 @@ export async function runPurge(
     failed: [],
     sharesRevoked: 0,
     dryRun: Boolean(opts.dryRun),
+    scoped: scope.length,
+    remaining: scope.length,
   };
   if (opts.dryRun) {
     result.deleted = batch.map((c) => c.id);
+    result.remaining = scope.length - batch.length;
     return result;
   }
 
   for (const c of batch) {
     try {
       await deleteCall(rt, c.id);
-      result.deleted.push(c.id);
-      for (const share of listShares(rt, c.id)) {
-        if (share.revoked) continue;
-        revokeShare(rt, share.token);
-        result.sharesRevoked++;
-      }
     } catch (err) {
       result.failed.push({ id: c.id, error: (err as Error).message });
+      continue;
+    }
+    // Recorded as deleted before the share sweep, and the sweep is outside the try: the call is
+    // gone either way, and a failure to revoke a link must not report the same id as both deleted
+    // and failed.
+    result.deleted.push(c.id);
+    for (const share of listShares(rt, c.id)) {
+      if (share.revoked) continue;
+      revokeShare(rt, share.token);
+      result.sharesRevoked++;
     }
   }
+  result.remaining = scope.length - result.deleted.length;
   if (result.deleted.length) rt.cache.clear();
   return result;
 }

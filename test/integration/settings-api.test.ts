@@ -15,8 +15,20 @@ let server: TestServer;
 let api: TestClient;
 
 interface SettingsView {
-  branding: { productName: string; tagline: string; primaryColor: string; poweredBy: boolean };
-  connection: { mode: string; generativeModel: string; apiKeySet: boolean; timeoutMs: number };
+  branding: {
+    productName: string;
+    tagline: string;
+    primaryColor: string;
+    poweredBy: boolean;
+    logoUrl: string;
+  };
+  connection: {
+    mode: string;
+    generativeModel: string;
+    apiKeySet: boolean;
+    apiKeyOverridden: boolean;
+    timeoutMs: number;
+  };
   limits: { maxQuestionChars: number; rateLimitRps: number; maxUploadBytes: number };
   retention: { days: number; enabled: boolean };
   apiKeys: { configured: number; active: number; managed: boolean };
@@ -138,9 +150,30 @@ describe("settings: environment is a default, the store is the authority", () =>
   });
 
   it("never returns the service-account credential, only whether one is set", async () => {
+    // Written first, so the assertion is about a secret that actually exists. Asserting the
+    // absence of a value nothing has stored proves nothing at all.
+    const canary = "sk-canary-do-not-leak-9f3c";
+    await api.put("/api/v1/settings/connection", { apiKey: canary }, { admin: true });
+
+    for (const path of [
+      "/api/v1/settings",
+      "/api/v1/branding",
+      "/api/v1/taxonomy",
+      "/api/v1/onboarding",
+      "/api/v1/agents",
+    ]) {
+      const res = await api.get(path);
+      expect(res.text, `${path} leaks the credential`).not.toContain(canary);
+    }
+    const cfg = await api.get("/api/v1/admin/config", { admin: true });
+    expect(cfg.text).not.toContain(canary);
+    const audit = await api.get("/api/v1/admin/audit?limit=100", { admin: true });
+    expect(audit.text).not.toContain(canary);
+
     const res = await api.get<SettingsView>("/api/v1/settings");
     expect(res.text).not.toMatch(/"apiKey"\s*:/);
-    expect(typeof res.json.connection.apiKeySet).toBe("boolean");
+    expect(res.json.connection.apiKeySet).toBe(true);
+    expect(res.json.connection.apiKeyOverridden).toBe(true);
   });
 
   it("rejects an unknown settings section", async () => {
@@ -386,10 +419,11 @@ describe("saved views", () => {
   let viewId = "";
 
   it("saves the current filters under a name, normalised", async () => {
-    const res = await api.post<{ id: string; query: string; href: string }>("/api/v1/views", {
-      name: "Escalated complaints",
-      query: "?label=sentiment%2FNegative&q=refund&utm_source=email",
-    });
+    const res = await api.post<{ id: string; query: string; href: string }>(
+      "/api/v1/views",
+      { name: "Escalated complaints", query: "?label=sentiment%2FNegative&q=refund&utm_source=email" },
+      { admin: true },
+    );
     expect(res.status).toBe(201);
     viewId = res.json.id;
     expect(res.json.query).not.toContain("utm_source");
@@ -397,20 +431,29 @@ describe("saved views", () => {
   });
 
   it("refuses a view with no filters and a duplicate name", async () => {
-    expect((await api.post<Problem>("/api/v1/views", { name: "Everything", query: "" })).status).toBe(400);
     expect(
-      (await api.post<Problem>("/api/v1/views", { name: "escalated complaints", query: "q=x" })).status,
+      (await api.post<Problem>("/api/v1/views", { name: "Everything", query: "" }, { admin: true })).status,
+    ).toBe(400);
+    expect(
+      (
+        await api.post<Problem>(
+          "/api/v1/views",
+          { name: "escalated complaints", query: "q=x" },
+          { admin: true },
+        )
+      ).status,
     ).toBe(400);
   });
 
   it("renames a view and deletes it", async () => {
-    const renamed = await api.put<{ name: string }>(`/api/v1/views/${viewId}`, {
-      name: "Escalations",
-      query: "q=refund",
-    });
+    const renamed = await api.put<{ name: string }>(
+      `/api/v1/views/${viewId}`,
+      { name: "Escalations", query: "q=refund" },
+      { admin: true },
+    );
     expect(renamed.json.name).toBe("Escalations");
-    expect((await api.del(`/api/v1/views/${viewId}`)).status).toBe(204);
-    expect((await api.del(`/api/v1/views/${viewId}`)).status).toBe(404);
+    expect((await api.del(`/api/v1/views/${viewId}`, { admin: true })).status).toBe(204);
+    expect((await api.del(`/api/v1/views/${viewId}`, { admin: true })).status).toBe(404);
   });
 });
 
@@ -418,16 +461,30 @@ describe("the share register", () => {
   it("lists every link across every call, filterable by state", async () => {
     const calls = await api.get<{ items: Array<{ id: string }> }>("/api/v1/calls?page_size=1");
     const id = calls.json.items[0]?.id as string;
-    const created = await api.post<{ token: string }>(`/api/v1/calls/${id}/shares`, { ttlDays: 3 });
+    const created = await api.post<{ token: string }>(
+      `/api/v1/calls/${id}/shares`,
+      { ttlDays: 3 },
+      { admin: true },
+    );
     expect(created.status).toBe(201);
 
-    const all = await api.get<{ items: Array<{ token: string; revoked: boolean }> }>("/api/v1/shares");
+    // The register carries the tokens, so it needs whatever a read needs on this deployment — it
+    // is not as public as the token resolver, which the token itself authenticates.
+    expect((await api.get("/api/v1/shares")).status).toBe(401);
+
+    const all = await api.get<{ items: Array<{ token: string; revoked: boolean }> }>("/api/v1/shares", {
+      admin: true,
+    });
     expect(all.json.items.some((s) => s.token === created.json.token)).toBe(true);
 
-    await api.del(`/api/v1/shares/${created.json.token}`);
-    const active = await api.get<{ items: Array<{ token: string }> }>("/api/v1/shares?state=active");
+    await api.del(`/api/v1/shares/${created.json.token}`, { admin: true });
+    const active = await api.get<{ items: Array<{ token: string }> }>("/api/v1/shares?state=active", {
+      admin: true,
+    });
     expect(active.json.items.some((s) => s.token === created.json.token)).toBe(false);
-    const revoked = await api.get<{ items: Array<{ token: string }> }>("/api/v1/shares?state=revoked");
+    const revoked = await api.get<{ items: Array<{ token: string }> }>("/api/v1/shares?state=revoked", {
+      admin: true,
+    });
     expect(revoked.json.items.some((s) => s.token === created.json.token)).toBe(true);
   });
 });
@@ -497,6 +554,112 @@ describe("job cancellation", () => {
   });
 });
 
+describe("the auth split is real, not just declared", () => {
+  // The contract test compares `API_ROUTES` with the spec. Nothing exercised the split with an
+  // actual credential, so every negative assertion was anonymous — where `admin` and `write` both
+  // answer 401 and the difference between them is invisible.
+  let secret = "";
+
+  beforeAll(async () => {
+    const res = await api.post<{ secret: string }>(
+      "/api/v1/api-keys",
+      { name: "auth-split probe" },
+      { admin: true },
+    );
+    secret = res.json.secret;
+  });
+
+  const withKey = () => ({ headers: { "X-API-Key": secret } });
+
+  it("lets an API key do product work", async () => {
+    expect((await api.get("/api/v1/calls", withKey())).status).toBe(200);
+    const created = await api.post<{ labelset: { id: string } }>(
+      "/api/v1/labelsets",
+      {
+        id: "key_scoped_set",
+        title: "Key scoped",
+        labels: [{ label: "A", description: "Created with an API key." }],
+      },
+      withKey(),
+    );
+    expect(created.status).toBe(201);
+    expect((await api.del("/api/v1/labelsets/key_scoped_set", withKey())).status).toBe(204);
+  });
+
+  it("refuses an API key everything that changes the deployment", async () => {
+    // A key is a credential for using the product's data. It must not be able to re-point the
+    // Knowledge Box, mint itself another key, or purge the corpus — those are the operator's job.
+    const refused: Array<[string, string, unknown]> = [
+      ["PUT", "/api/v1/settings/limits", { maxQuestionChars: 100 }],
+      ["DELETE", "/api/v1/settings/limits", undefined],
+      ["DELETE", "/api/v1/settings/logo", undefined],
+      ["GET", "/api/v1/api-keys", undefined],
+      ["POST", "/api/v1/api-keys", { name: "self-minted" }],
+      ["POST", "/api/v1/retention/purge", { days: 1, dryRun: true }],
+      ["GET", "/api/v1/admin/audit", undefined],
+      ["POST", "/api/v1/admin/provision", {}],
+    ];
+    for (const [method, path, json] of refused) {
+      const res = await api.request<Problem>(method, path, { ...withKey(), json });
+      expect(res.status, `${method} ${path} with an API key`).toBe(401);
+      expect(res.headers.get("content-type")).toContain("problem+json");
+    }
+  });
+
+  it("keeps enforcing keys after the last one is revoked", async () => {
+    // Revoking a compromised key must not open the API. Enforcement is sticky once a deployment
+    // has ever had a key; reopening means removing the rows, which is a deliberate act.
+    const keys = await api.get<{ items: Array<{ id: string; revoked: boolean }> }>("/api/v1/api-keys", {
+      admin: true,
+    });
+    for (const k of keys.json.items) await api.del(`/api/v1/api-keys/${k.id}`, { admin: true });
+    // `GET /api/v1/calls` is `auth: "none"` and stays open by design; the assertion has to be on a
+    // route that reads the enforcement flag.
+    expect((await api.get<Problem>("/api/v1/calls/does-not-matter/shares")).status).toBe(401);
+    expect((await api.get("/api/v1/calls/does-not-matter/shares", withKey())).status).toBe(401);
+  });
+});
+
+describe("branding assets are sandboxed", () => {
+  it("serves an uploaded logo with a policy that cannot run script", async () => {
+    // An SVG is a document. Without `sandbox` it executes on this origin, with the operator's
+    // cookie — which is how a logo upload becomes a session takeover. Next's config-level headers
+    // replace whatever a route handler sets, so the sandbox has to be declared there; this test is
+    // what stops the catch-all rule silently swallowing it again.
+    const form = new FormData();
+    form.set(
+      "logo",
+      new File(['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>'], "logo.svg", {
+        type: "image/svg+xml",
+      }),
+    );
+    const up = await api.request<SettingsView>("POST", "/api/v1/settings/logo", {
+      body: form,
+      admin: true,
+    });
+    expect(up.status).toBe(200);
+    expect(up.json.branding.logoUrl).toMatch(/^\/branding\/logo\.svg/);
+
+    const served = await fetch(`${server.baseUrl}/branding/logo.svg`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("content-type")).toBe("image/svg+xml");
+    expect(served.headers.get("content-security-policy")).toContain("sandbox");
+    expect(served.headers.get("content-security-policy")).not.toContain("script-src 'self'");
+    expect(served.headers.get("x-content-type-options")).toBe("nosniff");
+
+    const removed = await api.del<SettingsView>("/api/v1/settings/logo", { admin: true });
+    expect(removed.json.branding.logoUrl).toBe("");
+    expect((await fetch(`${server.baseUrl}/branding/logo.svg`)).status).toBe(404);
+  });
+
+  it("refuses a file type that is not an image", async () => {
+    const form = new FormData();
+    form.set("logo", new File(["<html>"], "logo.html", { type: "text/html" }));
+    const res = await api.request<Problem>("POST", "/api/v1/settings/logo", { body: form, admin: true });
+    expect(res.status).toBe(415);
+  });
+});
+
 describe("the audit trail", () => {
   it("records who changed what, and never the credential", async () => {
     await api.put("/api/v1/settings/branding", { tagline: "Audited" }, { admin: true });
@@ -516,5 +679,46 @@ describe("the audit trail", () => {
 
   it("keeps the audit trail behind the operator token", async () => {
     expect((await api.get("/api/v1/admin/audit")).status).toBe(401);
+  });
+});
+
+describe("a purge that really deletes", () => {
+  it("removes the call it previewed, revokes its links, and reports what is left", async () => {
+    // Driven from the preview rather than from a freshly uploaded call: the candidate set is what
+    // the product itself says the policy covers, so the test cannot disagree with the feature
+    // about scope — which is the whole reason preview and purge share one code path.
+    const preview = await api.get<{
+      total: number;
+      candidates: Array<{ id: string }>;
+    }>("/api/v1/retention/preview?days=1");
+    expect(preview.json.total).toBeGreaterThan(0);
+    const id = preview.json.candidates[0]?.id as string;
+
+    const share = await api.post<{ token: string }>(
+      `/api/v1/calls/${id}/shares`,
+      { ttlDays: 1 },
+      { admin: true },
+    );
+    expect(share.status).toBe(201);
+
+    const res = await api.post<{
+      deleted: string[];
+      failed: unknown[];
+      sharesRevoked: number;
+      remaining: number;
+      scoped: number;
+    }>("/api/v1/retention/purge", { days: 1, ids: [id] }, { admin: true });
+    expect(res.status).toBe(200);
+    expect(res.json.deleted).toEqual([id]);
+    expect(res.json.failed).toEqual([]);
+    expect(res.json.sharesRevoked).toBe(1);
+    // `scoped` is what this run was asked to delete — the candidates narrowed by `ids` — and
+    // `remaining` is what it did not get to. A complete run leaves nothing outstanding.
+    expect(res.json.scoped).toBe(1);
+    expect(res.json.remaining).toBe(0);
+
+    expect((await api.get(`/api/v1/calls/${id}`)).status).toBe(404);
+    // No live URL is left resolving to nothing.
+    expect((await api.get(`/api/v1/shares/${share.json.token}`)).status).toBe(404);
   });
 });

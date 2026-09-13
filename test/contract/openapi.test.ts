@@ -166,14 +166,39 @@ describe("spec ↔ implementation", () => {
     const shares = API_ROUTES.filter((r) => r.path.includes("/shares"));
     expect(shares.length).toBe(5);
     for (const r of shares) {
-      // Resolving a token is public (the token is the credential); the rest need whatever a read
+      // Resolving a token is public — the token IS the credential, and the URL is the whole point.
+      // Everything else, including the register that *lists* the tokens, needs whatever a read
       // needs on this deployment.
-      expect(["none", "api"], `${r.method} ${r.path}`).toContain(r.auth);
+      const expected = r.path === "/api/v1/shares/{token}" && r.method === "get" ? "none" : "api";
+      expect(r.auth, `${r.method} ${r.path}`).toBe(expected);
     }
     const op = (openapi.paths as Record<string, Record<string, { description?: string }>>)[
       "/api/v1/calls/{id}/shares"
     ]?.post;
     expect(op?.description).toMatch(/grant no access the read API does not already give/);
+  });
+
+  it("declares in the spec the credential each route actually requires", () => {
+    // `API_ROUTES[].auth` and the operation's `security` block are two independent statements of
+    // the same fact, and they drifted: six `api`-level operations declared no security at all, so
+    // Redoc, Swagger UI, every generated client and the in-product explorer described them as
+    // public and they 401'd undocumented on a key-configured deployment.
+    const paths = openapi.paths as Record<
+      string,
+      Record<string, { security?: Array<Record<string, unknown>> }>
+    >;
+    for (const r of API_ROUTES) {
+      const op = paths[r.path]?.[r.method];
+      expect(op, `${r.method} ${r.path} is in the spec`).toBeTruthy();
+      const schemes = (op?.security ?? []).flatMap((s) => Object.keys(s));
+      const where = `${r.method} ${r.path}`;
+      if (r.auth === "none") expect(schemes, where).toEqual([]);
+      else if (r.auth === "admin") expect(schemes, where).toContain("AdminToken");
+      else expect(schemes, where).toContain("ApiKey");
+      // Nothing below `admin` may be documented as needing only the admin token, and nothing at
+      // `admin` may be documented as reachable with an API key.
+      if (r.auth === "admin") expect(schemes, where).not.toContain("ApiKey");
+    }
   });
 
   it("marks the admin routes as admin-authenticated", () => {

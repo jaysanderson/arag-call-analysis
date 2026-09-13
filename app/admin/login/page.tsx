@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { adminFetch } from "@/components/admin/AdminShell";
 import { Button, Card } from "@/components/ui";
 
@@ -9,8 +9,22 @@ import { Button, Card } from "@/components/ui";
  * Exchanges the admin token for an HttpOnly cookie via POST /api/v1/admin/login. The token is
  * never stored in localStorage and never read back by client JavaScript.
  */
-export default function AdminLoginPage() {
+/**
+ * Where to go after signing in.
+ *
+ * Only a same-origin path under `/admin` or the product's own screens is honoured, and never a
+ * value starting `//` or `/\`, which a browser resolves to another host. A sign-in page that
+ * follows an arbitrary `?next=` is an open redirect wearing a credential prompt.
+ */
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith("/")) return "/admin";
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return "/admin";
+  return raw;
+}
+
+function AdminLoginForm() {
   const router = useRouter();
+  const next = safeNext(useSearchParams()?.get("next") ?? null);
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -25,7 +39,7 @@ export default function AdminLoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
       });
-      router.push("/admin");
+      router.push(next);
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -73,5 +87,14 @@ export default function AdminLoginPage() {
         </form>
       </Card>
     </div>
+  );
+}
+
+/** `useSearchParams()` suspends, so the form is wrapped rather than the whole route going dynamic. */
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminLoginForm />
+    </Suspense>
   );
 }

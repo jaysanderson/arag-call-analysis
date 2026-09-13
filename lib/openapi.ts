@@ -815,6 +815,16 @@ const schemas: Record<string, unknown> = {
       },
       sharesRevoked: { type: "integer" },
       dryRun: { type: "boolean" },
+      scoped: {
+        type: "integer",
+        description:
+          "Calls this run was asked to delete: the policy's candidates, narrowed by `ids` if given.",
+      },
+      remaining: {
+        type: "integer",
+        description:
+          "Of those, how many are still outstanding — the per-run cap of 200, plus anything that failed. Non-zero means run again.",
+      },
     },
   },
   AuditPage: {
@@ -1283,6 +1293,7 @@ const paths: Record<string, Record<string, unknown>> = {
       operationId: "listCallShares",
       tags: ["Shares"],
       summary: "Every share link ever created for a call",
+      security: [{ ApiKey: [] }],
       description: "Includes revoked and expired links, so the history of who was given a pointer survives.",
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
       responses: { 200: jsonResponse(ref("ShareList"), "Share links"), ...problemResponses },
@@ -1291,6 +1302,7 @@ const paths: Record<string, Record<string, unknown>> = {
       operationId: "createCallShare",
       tags: ["Shares"],
       summary: "Create a revocable, expiring link to one call",
+      security: [{ ApiKey: [] }],
       description:
         "Share links are application state, not a Knowledge Box mutation, and they grant no access the read API does not already give — so they need only the same credentials a read does. Revoking one is the control that matters, and it is available to every caller who can create one.",
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
@@ -1312,6 +1324,7 @@ const paths: Record<string, Record<string, unknown>> = {
       operationId: "revokeShare",
       tags: ["Shares"],
       summary: "Revoke a share link",
+      security: [{ ApiKey: [] }],
       parameters: [{ name: "token", in: "path", required: true, schema: { type: "string", maxLength: 128 } }],
       responses: { 200: jsonResponse(ref("ShareLink"), "The revoked link"), ...problemResponses },
     },
@@ -1453,6 +1466,7 @@ const paths: Record<string, Record<string, unknown>> = {
       operationId: "listViews",
       tags: ["Views"],
       summary: "Saved views on the calls list",
+      security: [{ ApiKey: [] }],
       responses: { 200: jsonResponse(ref("SavedViewList"), "Saved views"), ...problemResponses },
     },
     post: {
@@ -1461,6 +1475,7 @@ const paths: Record<string, Record<string, unknown>> = {
       summary: "Save the current calls-list filters as a named view",
       description:
         "A view is a name for a query string. It is stored on the server rather than in one browser, because a rota of supervisors reviewing the same queue should be looking at the same definition of it. The query is re-parsed through an allowlist on save. Like a share link this writes application state only and grants no access the read API does not already give, so it sits at read-level auth rather than behind the write credential.",
+      security: [{ ApiKey: [] }],
       requestBody: jsonBody(ref("SavedViewRequest"), true),
       responses: { 201: jsonResponse(ref("SavedView"), "The saved view"), ...problemResponses },
     },
@@ -1470,6 +1485,7 @@ const paths: Record<string, Record<string, unknown>> = {
       operationId: "updateView",
       tags: ["Views"],
       summary: "Rename a saved view or update its filters",
+      security: [{ ApiKey: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
       requestBody: jsonBody(ref("SavedViewRequest"), true),
       responses: { 200: jsonResponse(ref("SavedView"), "The updated view"), ...problemResponses },
@@ -1478,6 +1494,7 @@ const paths: Record<string, Record<string, unknown>> = {
       operationId: "deleteView",
       tags: ["Views"],
       summary: "Delete a saved view",
+      security: [{ ApiKey: [] }],
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
       responses: { 204: { description: "Deleted" }, ...problemResponses },
     },
@@ -1488,7 +1505,8 @@ const paths: Record<string, Record<string, unknown>> = {
       tags: ["Shares"],
       summary: "Every share link this deployment has issued",
       description:
-        "The whole register, across every call, so links can be reviewed and revoked from one place rather than only from the call they point at.",
+        "The whole register, across every call, so links can be reviewed and revoked from one place rather than only from the call they point at. The rows carry the tokens, so this needs whatever a read needs on the deployment — it is the per-call list widened, not the public token resolver.",
+      security: [{ ApiKey: [] }],
       parameters: [
         { name: "call_id", in: "query", schema: { type: "string", maxLength: 128 } },
         {
@@ -1527,7 +1545,7 @@ const paths: Record<string, Record<string, unknown>> = {
       tags: ["Retention"],
       summary: "Delete the calls the retention policy covers",
       description:
-        "Irreversible: the Knowledge Box resource, its recording and every label and analysis derived from it are removed. Share links pointing at a purged call are revoked in the same pass, so no live URL is left resolving to nothing. `dryRun` returns the same shape without deleting.",
+        "Irreversible: the Knowledge Box resource, its recording and every label and analysis derived from it are removed. Share links pointing at a purged call are revoked in the same pass, so no live URL is left resolving to nothing. `dryRun` returns the same shape without deleting. One run is capped at 200 calls; `remaining` reports what the policy still covers afterwards.",
       security: [{ AdminToken: [] }],
       requestBody: jsonBody(ref("PurgeRequest"), false),
       responses: { 200: jsonResponse(ref("PurgeResult"), "What was removed"), ...problemResponses },
@@ -2036,11 +2054,11 @@ export const API_ROUTES: RouteDef[] = [
     auth: "admin",
     file: "app/api/v1/api-keys/[id]/route.ts",
   },
-  { method: "get", path: "/api/v1/views", auth: "none", file: "app/api/v1/views/route.ts" },
+  { method: "get", path: "/api/v1/views", auth: "api", file: "app/api/v1/views/route.ts" },
   { method: "post", path: "/api/v1/views", auth: "api", file: "app/api/v1/views/route.ts" },
   { method: "put", path: "/api/v1/views/{id}", auth: "api", file: "app/api/v1/views/[id]/route.ts" },
   { method: "delete", path: "/api/v1/views/{id}", auth: "api", file: "app/api/v1/views/[id]/route.ts" },
-  { method: "get", path: "/api/v1/shares", auth: "none", file: "app/api/v1/shares/route.ts" },
+  { method: "get", path: "/api/v1/shares", auth: "api", file: "app/api/v1/shares/route.ts" },
   {
     method: "get",
     path: "/api/v1/retention/preview",

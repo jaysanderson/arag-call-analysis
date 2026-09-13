@@ -65,7 +65,17 @@ export function generateKey(): string {
   return `${KEY_PREFIX}${randomBytes(24).toString("base64url")}`;
 }
 
-export function previewOf(key: string): string {
+/**
+ * The few characters shown so one key can be told from another in a list.
+ *
+ * Safe for a key this product generated — 192 bits of `randomBytes`, so eight characters reveal
+ * nothing useful. It is NOT safe for a value an operator chose and put in `API_KEYS`, which may be
+ * short, guessable, or reused: there the preview would be the literal start of the secret (and a
+ * key under nine characters would be shown whole). Seeded rows therefore preview their digest
+ * instead, which is already stored and reveals nothing.
+ */
+export function previewOf(key: string, fromEnv = false): string {
+  if (fromEnv) return hashKey(key).slice(0, 8);
   const body = key.startsWith(KEY_PREFIX) ? key.slice(KEY_PREFIX.length) : key;
   return body.slice(0, 8);
 }
@@ -181,7 +191,7 @@ export function seedApiKeys(rt: Runtime): number {
       id: randomUUID(),
       name: `Environment key ${i + 1}`,
       hash,
-      preview: previewOf(key),
+      preview: previewOf(key, true),
       fromEnv: true,
     });
     existing.add(hash);
@@ -191,7 +201,26 @@ export function seedApiKeys(rt: Runtime): number {
   return added;
 }
 
-/** True when at least one key can authenticate — i.e. the API is closed to anonymous writes. */
+/**
+ * True when this deployment authenticates its API with keys.
+ *
+ * Deliberately "has this deployment ever had a key?", not "does it have an active one?". The
+ * difference is a real incident: an operator revoking the last compromised key would otherwise
+ * turn the API *open*, because `enforceAuth` reads this to decide whether anonymous reads are
+ * allowed — the precise moment you least want that, with no way back through the product or
+ * through the environment (the `API_KEYS` seed is idempotent by digest, so restarting brings the
+ * same row back still revoked).
+ *
+ * So enforcement is sticky: once a deployment has issued or seeded a key, callers need one. An
+ * operator who wants to reopen the API removes every key row, which is a deliberate act rather
+ * than a side effect of revoking one.
+ */
 export function apiKeysEnforced(rt: Runtime): boolean {
-  return activeApiKeys(rt).length > 0;
+  return rt.env.apiKeys.length > 0 || collection(rt).list().length > 0;
+}
+
+/** Permanently remove a key row. The only way to undo `apiKeysEnforced`. */
+export function deleteApiKey(rt: Runtime, id: string): void {
+  if (!collection(rt).get(id)) throw notFound("API key");
+  collection(rt).delete(id);
 }

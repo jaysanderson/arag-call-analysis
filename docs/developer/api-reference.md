@@ -310,7 +310,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: public
+Auth: ApiKey
 
 
 ### `POST /api/v1/calls/{id}/shares`
@@ -336,7 +336,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: public
+Auth: ApiKey
 
 
 ### `GET /api/v1/shares/{token}`
@@ -382,12 +382,12 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: public
+Auth: ApiKey
 
 
 ### `GET /api/v1/shares`
 
-**Every share link this deployment has issued** — The whole register, across every call, so links can be reviewed and revoked from one place rather than only from the call they point at.
+**Every share link this deployment has issued** — The whole register, across every call, so links can be reviewed and revoked from one place rather than only from the call they point at. The rows carry the tokens, so this needs whatever a read needs on the deployment — it is the per-call list widened, not the public token resolver.
 
 Parameters:
 
@@ -406,7 +406,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: public
+Auth: ApiKey
 
 ## Settings
 
@@ -618,7 +618,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: public
+Auth: ApiKey
 
 
 ### `POST /api/v1/views`
@@ -638,7 +638,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: public
+Auth: ApiKey
 
 
 ### `PUT /api/v1/views/{id}`
@@ -664,7 +664,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: public
+Auth: ApiKey
 
 
 ### `DELETE /api/v1/views/{id}`
@@ -687,7 +687,7 @@ Responses:
 - `429` Rate limited — `application/problem+json` [Problem](#problem)
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
-Auth: public
+Auth: ApiKey
 
 ## Retention
 
@@ -716,7 +716,7 @@ Auth: public
 
 ### `POST /api/v1/retention/purge`
 
-**Delete the calls the retention policy covers** — Irreversible: the Knowledge Box resource, its recording and every label and analysis derived from it are removed. Share links pointing at a purged call are revoked in the same pass, so no live URL is left resolving to nothing. `dryRun` returns the same shape without deleting.
+**Delete the calls the retention policy covers** — Irreversible: the Knowledge Box resource, its recording and every label and analysis derived from it are removed. Share links pointing at a purged call are revoked in the same pass, so no live URL is left resolving to nothing. `dryRun` returns the same shape without deleting. One run is capped at 200 calls; `remaining` reports what the policy still covers afterwards.
 
 Request body (`application/json`): [PurgeRequest](#purgerequest)
 
@@ -1068,6 +1068,7 @@ Parameters:
 |---|---|---|---|---|
 | `kind` | query | string |  |  |
 | `status` | query | string |  |  |
+| `ref` | query | string |  | The object the job is about — a call id for an ingestion. |
 | `limit` | query | integer |  |  |
 
 Responses:
@@ -1892,6 +1893,8 @@ A labelset as the product defines it: the vocabulary the labeler agent is told t
 | `failed` | array of object | yes |  |
 | `sharesRevoked` | integer |  |  |
 | `dryRun` | boolean | yes |  |
+| `scoped` | integer |  | Calls this run was asked to delete: the policy's candidates, narrowed by `ids` if given. |
+| `remaining` | integer |  | Of those, how many are still outstanding — the per-run cap of 200, plus anything that failed. Non-zero means run again. |
 
 ### AuditPage
 

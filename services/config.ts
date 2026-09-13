@@ -19,6 +19,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { chmodSync } from "node:fs";
+import { resolve } from "node:path";
 import { BRANDING_DEFAULTS, type Branding, safeColor, safeLogoUrl } from "@/lib/branding";
 import type { Runtime } from "@/lib/runtime";
 import { TtlCache } from "@/services/cache";
@@ -106,6 +108,23 @@ export function listAudit(rt: Runtime, limit = 100, action?: string): AuditDoc[]
 }
 
 /** The raw stored overrides, or an empty document when nothing has ever been saved. */
+/**
+ * Keep `settings.json` readable only by the service user.
+ *
+ * STANDARDS §4 says secrets come from the environment and never from files, and this store is the
+ * one documented exception: rotating the Knowledge Box credential in the product has to write it
+ * somewhere that survives a restart. It is at least not left at the store's default 0644 on a
+ * shared volume. Recorded as a deviation in DECISIONS D-CA-45. Best-effort — a platform whose
+ * filesystem has no such notion must not make saving a setting fail.
+ */
+export function restrictSettingsFile(rt: Runtime): void {
+  try {
+    chmodSync(resolve(rt.env.dataDir, `${SETTINGS_COLLECTION}.json`), 0o600);
+  } catch {
+    /* the store may not have flushed yet, or the platform may not support modes */
+  }
+}
+
 export function readStored(rt: Runtime): SettingsDoc {
   return settingsCollection(rt).get(SETTINGS_DOC_ID) ?? ({ id: SETTINGS_DOC_ID } as SettingsDoc);
 }
@@ -388,6 +407,7 @@ export function updateSettings(
 
   const next = { ...(stored[section] ?? {}), ...applied } as Record<string, unknown>;
   const doc = settingsCollection(rt).put({ ...stored, id: SETTINGS_DOC_ID, [section]: next });
+  restrictSettingsFile(rt);
   applyToRuntime(rt, doc);
 
   // The audit entry records the *keys* that changed, plus non-secret values. `apiKey` is reduced
@@ -398,20 +418,50 @@ export function updateSettings(
   return effective(rt);
 }
 
-/** Restore a whole section to its environment defaults. */
+/**
+ * Restore a whole section to its environment defaults.
+ *
+ * Every overridable value is put back to the boot-time snapshot first and the remaining overrides
+ * are then re-applied on top, rather than only undoing the section named. That is deliberate:
+ * `applyToRuntime` mutates in place, so it cannot tell which of the current values came from which
+ * section, and restoring only some of them is how a reset ends up leaving the very setting it
+ * claimed to clear still in force.
+ */
 export function resetSettings(rt: Runtime, section: SettingsSection, actor: string): EffectiveSettings {
   const stored = readStored(rt);
   const doc = settingsCollection(rt).put({ ...stored, id: SETTINGS_DOC_ID, [section]: undefined });
-  // Branding and the client are rebuilt from the environment, then the (now smaller) overrides
-  // are re-applied over the top.
+  const d = rt.envDefaults;
   rt.branding = rt.envBranding;
-  rt.env.maxQuestionChars = rt.envDefaults.maxQuestionChars;
-  rt.env.maxUploadBytes = rt.envDefaults.maxUploadBytes;
-  rt.env.rateLimitRps = rt.envDefaults.rateLimitRps;
-  rt.env.rateLimitBurst = rt.envDefaults.rateLimitBurst;
-  rt.env.arag.generativeModel = rt.envDefaults.generativeModel;
-  rt.env.arag.reranker = rt.envDefaults.reranker;
-  rt.env.arag.timeoutMs = rt.envDefaults.timeoutMs;
+  rt.env.maxQuestionChars = d.maxQuestionChars;
+  rt.env.maxUploadBytes = d.maxUploadBytes;
+  rt.env.rateLimitRps = d.rateLimitRps;
+  rt.env.rateLimitBurst = d.rateLimitBurst;
+  if (rt.env.cacheTtlMs !== d.cacheTtlMs) {
+    rt.env.cacheTtlMs = d.cacheTtlMs;
+    rt.cache = new TtlCache(d.cacheTtlMs);
+  }
+  rt.env.arag.generativeModel = d.generativeModel;
+  rt.env.arag.reranker = d.reranker;
+  rt.env.arag.timeoutMs = d.timeoutMs;
+  if (!rt.env.arag.mock && section === "connection") {
+    // The client holds the Knowledge Box address, so putting the environment's values back in
+    // `rt.env` is not enough — it has to be rebuilt from them.
+    rt.env.arag.kbId = d.kbId;
+    rt.env.arag.apiKey = d.apiKey;
+    rt.env.arag.region = d.region;
+    rt.env.arag.baseUrl = d.baseUrl;
+    if (d.kbId && d.apiKey && (d.region || d.baseUrl)) {
+      rt.arag = new AragClient({
+        kbId: d.kbId,
+        apiKey: d.apiKey,
+        region: d.region || undefined,
+        baseUrl: d.baseUrl || undefined,
+        timeoutMs: d.timeoutMs,
+        onRequest: rt.aragOnRequest,
+      });
+      rt.cache.clear();
+    }
+  }
   applyToRuntime(rt, doc);
   audit(rt, `settings.${section}.reset`, actor);
   return effective(rt);

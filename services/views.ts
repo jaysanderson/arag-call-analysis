@@ -38,11 +38,23 @@ export const VIEW_PARAMS = [
 
 const MULTI = new Set(["label"]);
 
+/** Reduce `api-key:Reporting pipeline` to `api-key`; leave the other classes as they are. */
+export function coarseActor(actor?: string): string | undefined {
+  if (!actor) return undefined;
+  return actor.startsWith("api-key:") ? "api-key" : actor;
+}
+
 export interface ViewDoc extends StoredDoc {
   name: string;
   /** Normalised query string, without a leading `?`. */
   query: string;
   description?: string;
+  /**
+   * How the creator was identified — "operator", "session", "anonymous" or "api-key". Deliberately
+   * the *class* of caller rather than `actorOf`'s full string: that names the API key, which is a
+   * label an operator chose for a credential and has no business in a list every reader can see.
+   * The audit trail, which is operator-only, keeps the specific actor.
+   */
   createdBy?: string;
 }
 
@@ -117,7 +129,7 @@ export function createView(
       String(input.description ?? "")
         .trim()
         .slice(0, 200) || undefined,
-    createdBy: input.createdBy,
+    createdBy: coarseActor(input.createdBy),
   });
   return toViewView(doc);
 }

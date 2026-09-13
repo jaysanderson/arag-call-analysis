@@ -34,6 +34,18 @@ export class TtlCache {
   private stale = 0;
   private evictions = 0;
   private invalidations = 0;
+  /**
+   * Keys invalidated while a load for them was already in flight.
+   *
+   * `delete`/`invalidatePrefix`/`clear` can only remove what is already in the map, so a fetch that
+   * started before a write and resolved after it would quietly repopulate the value the write had
+   * just removed — a deleted or purged call reappearing in the list for a whole TTL window. A load
+   * whose key is in here discards its result instead of storing it.
+   *
+   * Per key rather than a global epoch, so invalidating one call's summary does not throw away an
+   * unrelated catalog fetch that happened to be in flight at the same moment.
+   */
+  private readonly dirty = new Set<string>();
 
   constructor(ttlMs = 60_000, max = 2_000) {
     this.ttlMs = ttlMs;
@@ -79,20 +91,36 @@ export class TtlCache {
    * cold dashboard render does not fan out N identical ARAG requests.
    */
   async getOrLoad<T>(key: string, load: () => Promise<T>, ttlMs = this.ttlMs): Promise<T> {
+    // A zero TTL means "do not cache", which has to mean it here too: storing with a zero lifetime
+    // would still leave an entry for the serve-stale path to hand out.
+    if (ttlMs <= 0) return load();
     const cached = this.get<T>(key);
     if (cached !== undefined) return cached;
     const pending = this.inflight.get(key) as Promise<T> | undefined;
     if (pending) return pending;
+    return this.load(key, load, ttlMs);
+  }
+
+  /** Start one load, store it if no write intervened, and de-duplicate concurrent callers. */
+  private load<T>(key: string, load: () => Promise<T>, ttlMs: number): Promise<T> {
+    this.dirty.delete(key);
     const p = load()
       .then((value) => {
-        this.set(key, value, ttlMs);
+        // The caller still gets the value it asked for; it simply is not admitted to the cache.
+        if (!this.dirty.has(key)) this.set(key, value, ttlMs);
         return value;
       })
       .finally(() => {
         this.inflight.delete(key);
+        this.dirty.delete(key);
       });
     this.inflight.set(key, p as Promise<unknown>);
     return p;
+  }
+
+  /** Mark a key's in-flight load, if any, as superseded by a write. */
+  private supersede(key: string): void {
+    if (this.inflight.has(key)) this.dirty.add(key);
   }
 
   /**
@@ -120,7 +148,8 @@ export class TtlCache {
     opts: { ttlMs?: number; graceMs?: number } = {},
   ): Promise<T> {
     const ttlMs = opts.ttlMs ?? this.ttlMs;
-    const graceMs = opts.graceMs ?? Math.max(ttlMs * 9, 5 * 60_000);
+    if (ttlMs <= 0) return load();
+    const graceMs = opts.graceMs ?? ttlMs * 9;
     const now = Date.now();
     const entry = this.map.get(key) as CacheEntry<T> | undefined;
 
@@ -131,8 +160,10 @@ export class TtlCache {
     if (entry && now - entry.expiresAt < graceMs) {
       this.hits++;
       this.stale++;
-      // Kick off exactly one refresh; readers in the meantime keep getting the stale value.
-      if (!this.inflight.has(key)) void this.getOrLoad(key, load, ttlMs).catch(() => {});
+      // Refresh through `load()` rather than `getOrLoad()`, which would call `get()` and evict the
+      // very entry the next reader is meant to be served. Getting that wrong made the mechanism
+      // serve stale exactly once and then block, which is the cliff it exists to remove.
+      if (!this.inflight.has(key)) void this.load(key, load, ttlMs).catch(() => {});
       return entry.value;
     }
     if (entry) {
@@ -144,6 +175,7 @@ export class TtlCache {
 
   /** Drop one key. */
   delete(key: string): boolean {
+    this.supersede(key);
     const ok = this.map.delete(key);
     if (ok) this.invalidations++;
     return ok;
@@ -151,6 +183,7 @@ export class TtlCache {
 
   /** Drop every key in a namespace (`"call:"` style prefix). Returns how many went. */
   invalidatePrefix(prefix: string): number {
+    for (const k of this.inflight.keys()) if (k.startsWith(prefix)) this.dirty.add(k);
     let n = 0;
     for (const k of [...this.map.keys()]) {
       if (k.startsWith(prefix)) {
@@ -164,6 +197,7 @@ export class TtlCache {
 
   /** Drop everything (upload, delete, provision). */
   clear(): number {
+    for (const k of this.inflight.keys()) this.dirty.add(k);
     const n = this.map.size;
     this.map.clear();
     this.invalidations += n;

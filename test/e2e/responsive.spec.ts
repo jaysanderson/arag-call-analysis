@@ -15,9 +15,7 @@ const SCREENS = ["/", "/calls", "/api", "/settings", "/taxonomy", "/upload", "/a
 async function horizontalOverflow(page: Page, path: string): Promise<number> {
   await page.goto(path);
   await page.waitForLoadState("networkidle").catch(() => {});
-  return page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
 test.describe("the shell at 1440 px", () => {
