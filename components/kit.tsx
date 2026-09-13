@@ -130,7 +130,10 @@ export function Segmented<T extends string>({
   label: string;
 }) {
   return (
-    <fieldset className="arag-segmented" aria-label={label}>
+    // The kit's `.arag-segmented` is an inline-flex row that never wraps, so a control with six
+    // options laid out at 570px and pushed the whole page sideways on a 390px screen. Wrapping
+    // costs nothing when the options fit on one line and is the only way the control can shrink.
+    <fieldset className="arag-segmented" aria-label={label} style={{ flexWrap: "wrap" }}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -299,11 +302,14 @@ export function SortableHeader<K extends string>({
   width?: number;
 }) {
   const active = sortKey && sort?.key === sortKey;
+  const sortable = Boolean(sortKey && onSort);
   return (
     <th
       scope="col"
       style={{ width, textAlign: align }}
-      aria-sort={active ? (sort.order === "asc" ? "ascending" : "descending") : undefined}
+      // Every sortable column carries `aria-sort`, not only the one currently sorted: omitting it
+      // on the others left a screen-reader user with no cue that they could be sorted at all.
+      aria-sort={active ? (sort.order === "asc" ? "ascending" : "descending") : sortable ? "none" : undefined}
     >
       {sortKey && onSort ? (
         <button type="button" onClick={() => onSort(sortKey)}>
@@ -379,7 +385,7 @@ export function Pagination({
  * document rather than on the control they pressed. The Escape handler lives here too so every
  * overlay dismisses the same way.
  */
-function useModalFocus(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
+export function useModalFocus(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
   // Every call site passes a fresh inline arrow, so listing `onClose` as a dependency would
   // re-run this effect on any unrelated parent re-render — yanking focus back to the first
   // control and discarding wherever the keyboard user had tabbed to.

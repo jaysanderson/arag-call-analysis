@@ -40,7 +40,7 @@ export function BrandingPanel({
   canEdit: boolean;
   adminOff: boolean;
 }) {
-  const { view, busy, toast, show, save, reset, run } = useSettingsWrites(initial);
+  const { view, busy, toast, fail, errorBanner, save, reset, run } = useSettingsWrites(initial);
   const [form, setForm] = useState<Branding>(() => formOf(initial));
   const [saved, setSaved] = useState<Branding>(() => formOf(initial));
   const [dragging, setDragging] = useState(false);
@@ -70,11 +70,11 @@ export function BrandingPanel({
 
   async function upload(file: File) {
     if (!LOGO_TYPES.includes(file.type)) {
-      show("A logo must be an SVG, PNG, JPEG or WebP image.", "error");
+      fail("A logo must be an SVG, PNG, JPEG or WebP image.");
       return;
     }
     if (file.size > MAX_LOGO_BYTES) {
-      show(`That file is ${Math.round(file.size / 1024)} KB; the limit is 512 KB.`, "error");
+      fail(`That file is ${Math.round(file.size / 1024)} KB; the limit is 512 KB.`);
       return;
     }
     const body = new FormData();
@@ -100,6 +100,7 @@ export function BrandingPanel({
 
   return (
     <section className="arag-stack">
+      {errorBanner}
       {!canEdit && <ReadOnlyNotice adminOff={adminOff} />}
 
       <div className="arag-card pad">
@@ -112,7 +113,10 @@ export function BrandingPanel({
           onReset={async () => adopt(await reset("branding"))}
         />
 
-        <div style={{ display: "grid", gap: 14 }}>
+        {/* A `display: grid` with no `gridTemplateColumns` gets one implicit `auto` column whose
+            minimum is its content's min-content width, so a single unbreakable value can size the
+            column past the viewport. `minmax(0, 1fr)` lets it shrink instead. */}
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
           <Field id="b-name" label="Product name" hint="Names the rail, the browser tab and every export.">
             <input
               id="b-name"

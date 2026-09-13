@@ -16,12 +16,10 @@ import { normaliseCallsQuery, type SavedView, viewState } from "./view-query";
  */
 export function SavedViews({
   query,
-  canEdit,
   onNotify,
 }: {
   /** The current calls URL as a normalised query string (no leading `?`). */
   query: string;
-  canEdit: boolean;
   onNotify: (message: string, tone?: "error") => void;
 }) {
   const router = useRouter();
@@ -280,84 +278,74 @@ export function SavedViews({
                           {v.name}
                         </span>
                       </button>
-                      {canEdit && (
-                        <>
-                          <button
-                            type="button"
-                            style={{ width: "auto", flex: "0 0 auto" }}
-                            aria-label={`Rename ${v.name}`}
-                            onClick={() => {
-                              setNaming(null);
-                              setFormError(null);
-                              setDraft(v.name);
-                              setRenaming(v.id);
-                            }}
-                          >
-                            <IconEdit size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            className="danger"
-                            style={{ width: "auto", flex: "0 0 auto" }}
-                            aria-label={`Delete ${v.name}`}
-                            onClick={() => setConfirmDelete(v)}
-                          >
-                            <IconTrash size={14} />
-                          </button>
-                        </>
-                      )}
+                      <button
+                        type="button"
+                        style={{ width: "auto", flex: "0 0 auto" }}
+                        aria-label={`Rename ${v.name}`}
+                        onClick={() => {
+                          setNaming(null);
+                          setFormError(null);
+                          setDraft(v.name);
+                          setRenaming(v.id);
+                        }}
+                      >
+                        <IconEdit size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="danger"
+                        style={{ width: "auto", flex: "0 0 auto" }}
+                        aria-label={`Delete ${v.name}`}
+                        onClick={() => setConfirmDelete(v)}
+                      >
+                        <IconTrash size={14} />
+                      </button>
                     </div>
                   ),
                 )}
               </div>
             )}
 
-            {canEdit && (
+            <div className="sep" />
+            {!query ? (
+              <p style={{ margin: 0, padding: "8px 9px", fontSize: 12, color: "var(--arag-text-subtle)" }}>
+                Filter or search the list to save it as a view.
+              </p>
+            ) : naming === "new" ? (
+              <NameForm
+                label="Name this view"
+                value={draft}
+                busy={busy}
+                error={formError}
+                confirmLabel="Save view"
+                onChange={setDraft}
+                onCancel={resetForms}
+                onSubmit={() => void save(close)}
+              />
+            ) : (
               <>
-                <div className="sep" />
-                {!query ? (
-                  <p
-                    style={{ margin: 0, padding: "8px 9px", fontSize: 12, color: "var(--arag-text-subtle)" }}
+                {modified && active && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    data-testid="update-view"
+                    onClick={() => void update(active, close)}
                   >
-                    Filter or search the list to save it as a view.
-                  </p>
-                ) : naming === "new" ? (
-                  <NameForm
-                    label="Name this view"
-                    value={draft}
-                    busy={busy}
-                    error={formError}
-                    confirmLabel="Save view"
-                    onChange={setDraft}
-                    onCancel={resetForms}
-                    onSubmit={() => void save(close)}
-                  />
-                ) : (
-                  <>
-                    {modified && active && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        data-testid="update-view"
-                        onClick={() => void update(active, close)}
-                      >
-                        Update this view
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      data-testid="save-view"
-                      onClick={() => {
-                        setRenaming(null);
-                        setFormError(null);
-                        setDraft("");
-                        setNaming("new");
-                      }}
-                    >
-                      {modified ? "Save as new view" : "Save this view"}
-                    </button>
-                  </>
+                    Update this view
+                  </button>
                 )}
+                <button
+                  type="button"
+                  data-testid="save-view"
+                  onClick={() => {
+                    setRenaming(null);
+                    setFormError(null);
+                    setDraft("");
+                    setNaming("new");
+                  }}
+                >
+                  {modified ? "Save as new view" : "Save this view"}
+                </button>
               </>
             )}
           </div>

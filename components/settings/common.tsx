@@ -60,6 +60,7 @@ export function useSettingsWrites(initial: SettingsView) {
   const router = useRouter();
   const [view, setView] = useState(initial);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast, show } = useToast();
 
   async function run(fn: () => Promise<SettingsView>, message: string): Promise<SettingsView | null> {
@@ -67,15 +68,23 @@ export function useSettingsWrites(initial: SettingsView) {
     try {
       const next = await fn();
       setView(next);
+      setError(null);
       show(message);
       router.refresh();
       return next;
     } catch (err) {
-      show((err as Error).message, "error");
+      // A failure needs an action — sign in again, shorten a value, raise a limit — and a 3.2s
+      // toast takes the sentence away before it can be read, let alone acted on. Successes keep
+      // the toast; failures stay in the panel until they are dismissed or the next write succeeds.
+      fail((err as Error).message);
       return null;
     } finally {
       setBusy(false);
     }
+  }
+
+  function fail(message: string) {
+    setError(message);
   }
 
   return {
@@ -83,6 +92,9 @@ export function useSettingsWrites(initial: SettingsView) {
     busy,
     toast,
     show,
+    /** Report a failure inline, where it persists. Never `show(…, "error")`. */
+    fail,
+    errorBanner: error ? <PanelError message={error} onDismiss={() => setError(null)} /> : null,
     save: (section: SettingsSection, patch: Record<string, unknown>) =>
       run(
         () => apiJson<SettingsView>(`/api/v1/settings/${section}`, { method: "PUT", body: patch }),
@@ -143,6 +155,39 @@ export function SourceLine({
         <span>Currently from the environment</span>
       )}
     </p>
+  );
+}
+
+/**
+ * A settings failure, shown where the values are and kept until it is dismissed or resolved.
+ *
+ * `<output>` rather than `role="alert"`: this is the live region a settings panel already used for
+ * the result of a save, and it is announced politely — a failure the reader caused by pressing Save
+ * does not need to interrupt whatever else is being read. What changed is that it no longer
+ * disappears after 3.2 seconds, because the sentence names an action (sign in again, shorten a
+ * value) that cannot be taken from a toast that has already gone.
+ */
+export function PanelError({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  return (
+    <output
+      className="arag-alert error"
+      data-testid="settings-error"
+      // `<output>` is inline by default, and `.arag-alert` expects a block box.
+      style={{ display: "block", marginBottom: 14 }}
+    >
+      <div style={{ display: "flex", gap: 8, alignItems: "baseline", width: "100%" }}>
+        <IconWarning size={15} />
+        <span style={{ minWidth: 0 }}>{message}</span>
+        <button
+          type="button"
+          className="arag-btn ghost sm"
+          onClick={onDismiss}
+          style={{ marginLeft: "auto", flex: "0 0 auto" }}
+        >
+          Dismiss
+        </button>
+      </div>
+    </output>
   );
 }
 

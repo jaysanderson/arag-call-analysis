@@ -27,7 +27,7 @@ const FILTERS: Array<{ value: StateFilter; label: string }> = [
 ];
 
 export function SharesPanel({ initial }: { initial: SettingsView }) {
-  const { toast, show } = useSettingsWrites(initial);
+  const { toast, show, fail, errorBanner } = useSettingsWrites(initial);
   const [state, setState] = useState<StateFilter>("all");
   const [items, setItems] = useState<ShareView[] | null>(null);
   const [error, setError] = useState("");
@@ -59,7 +59,7 @@ export function SharesPanel({ initial }: { initial: SettingsView }) {
       await load(state);
       show("The link no longer resolves.");
     } catch (err) {
-      show((err as Error).message, "error");
+      fail((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -67,6 +67,7 @@ export function SharesPanel({ initial }: { initial: SettingsView }) {
 
   return (
     <section className="arag-stack">
+      {errorBanner}
       <div className="arag-card pad">
         <CardHead
           title="Share links"

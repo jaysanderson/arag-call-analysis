@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   deriveConfidence,
   deriveConfidenceFromRemi,
@@ -53,6 +53,43 @@ type Msg = {
   quality?: RemiQuality;
 };
 
+/** RFC 9457: `detail` is the sentence the service wrote for a person. Never replace it. */
+async function problemDetail(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: string; title?: string };
+    return body.detail || body.title || `That question could not be answered (${res.status}).`;
+  } catch {
+    return `That question could not be answered (${res.status}).`;
+  }
+}
+
+/**
+ * The deployment's own question limit, so the input stops at the length the API will accept rather
+ * than letting a reviewer type 5,000 characters and only then be refused. The server stays the
+ * authority — this is a courtesy — so a failed read simply falls back to the shipped default.
+ */
+const DEFAULT_MAX_QUESTION_CHARS = 500;
+
+function useMaxQuestionChars(): number {
+  const [max, setMax] = useState(DEFAULT_MAX_QUESTION_CHARS);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/v1/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const n = d?.limits?.maxQuestionChars;
+        if (!cancelled && typeof n === "number" && n > 0) setMax(n);
+      })
+      .catch(() => {
+        /* the default stands */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return max;
+}
+
 export function ChatPanel({
   callId,
   onCitation,
@@ -67,6 +104,7 @@ export function ChatPanel({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const maxQuestionChars = useMaxQuestionChars();
 
   async function ask(question: string) {
     setMessages((m) => [...m, { role: "user", text: question }, { role: "assistant", text: "" }]);
@@ -77,6 +115,11 @@ export function ChatPanel({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ question }),
       });
+      // RFC 9457 first. Reading the body as NDJSON without checking the status sent every problem
+      // document — a 400 naming the character limit, a 429, a 502 from the platform — into the
+      // catch below, where it came out as "something went wrong": the one thing an answer panel
+      // must never say when the service has written a sentence explaining exactly what happened.
+      if (!res.ok) throw new Error(await problemDetail(res));
       if (!res.body) throw new Error("no stream");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -138,12 +181,13 @@ export function ChatPanel({
         }
       }
       flush();
-    } catch {
+    } catch (err) {
+      const detail = (err as Error).message;
       setMessages((m) => {
         const copy = [...m];
         copy[copy.length - 1] = {
           role: "assistant",
-          text: `Sorry, something went wrong answering that. Try again in a moment.`,
+          text: detail || "Sorry, something went wrong answering that. Try again in a moment.",
           error: true,
         };
         return copy;
@@ -259,6 +303,7 @@ export function ChatPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask about this call…"
+          maxLength={maxQuestionChars}
           disabled={busy}
           className="flex-1 rounded-md border border-brand-200 px-3 py-1.5 text-sm text-ink-950 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { HowThisWorks } from "@/components/HowThisWorks";
 import {
   IconActivity,
@@ -18,6 +18,7 @@ import {
   IconTaxonomy,
   IconUpload,
 } from "@/components/icons";
+import { useModalFocus } from "@/components/kit";
 import type { Branding } from "@/lib/branding";
 import { hasIdent, ProductIdent, Wordmark } from "./Brandmark";
 
@@ -130,10 +131,51 @@ function NavList({
   );
 }
 
+/**
+ * The mobile navigation trigger, shared between the shell and `PageHeader`.
+ *
+ * A white-label deployment (`BRAND_POWERED_BY=0`) removes the Progress band, and the hamburger
+ * used to live only inside it: below 900px that left no way at all to reach the rail — seven nav
+ * links, none of them openable. The shell therefore owns the drawer state and says where the one
+ * trigger is rendered: in the band when there is a band, and in the page header when there is
+ * not. Exactly one exists in either configuration, so its accessible name stays unambiguous.
+ */
+interface NavToggle {
+  open: boolean;
+  toggle: () => void;
+  /** True when the shell has already rendered the trigger in the Progress band. */
+  inBand: boolean;
+}
+const NavToggleContext = createContext<NavToggle | null>(null);
+
+function NavMenuButton({
+  nav,
+  className,
+  style,
+}: {
+  nav: NavToggle;
+  className: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={nav.toggle}
+      aria-label="Open navigation"
+      aria-expanded={nav.open}
+      className={className}
+      style={{ lineHeight: 0, ...style }}
+    >
+      <IconMenu size={18} />
+    </button>
+  );
+}
+
 export function AppShell({ branding, children }: { branding: Branding; children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
   const [collapsed, setCollapsed] = useState(false);
   const [drawer, setDrawer] = useState(false);
+  const rail = useRef<HTMLElement>(null);
   const deployment = useDeploymentState();
 
   // The collapse preference is per person, per browser — never a server concern.
@@ -159,154 +201,172 @@ export function AppShell({ branding, children }: { branding: Branding; children:
   // biome-ignore lint/correctness/useExhaustiveDependencies: closing on navigation is the point
   useEffect(() => setDrawer(false), [pathname]);
 
-  // Escape closes the drawer: it is an overlay, and the kit's overlay contract says every one of
-  // them dismisses the same way.
-  useEffect(() => {
-    if (!drawer) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(false);
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [drawer]);
-
   const railState = drawer ? "open" : collapsed ? "collapsed" : "expanded";
+  const nav: NavToggle = {
+    open: drawer,
+    toggle: () => setDrawer((d) => !d),
+    inBand: branding.poweredBy,
+  };
 
   return (
-    <div className="arag-app" data-rail-theme="light" data-rail={railState}>
-      <a className="arag-skip" href="#main">
-        Skip to content
-      </a>
-      {branding.poweredBy && (
-        <div className="arag-appband arag-dark" data-testid="powered-by-band">
-          <button
-            type="button"
-            onClick={() => setDrawer((d) => !d)}
-            aria-label="Open navigation"
-            aria-expanded={drawer}
-            className="arag-rail-menu"
-            style={{ lineHeight: 0 }}
-          >
-            <IconMenu size={18} />
-          </button>
-          <Wordmark variant="dark" height={18} className="wordmark" />
-          <span className="spacer" />
-          {deployment?.mode === "mock" && <span className="arag-pill-live">Sample data</span>}
-          <HowThisWorks />
-          <a href={branding.docsUrl}>Docs</a>
-        </div>
-      )}
-
-      <div className="body">
-        <nav className="arag-rail" aria-label="Primary" data-testid="app-sidebar">
-          {hasIdent(branding) && (
-            <Link href="/" className="ident" onClick={() => setDrawer(false)}>
-              <ProductIdent branding={branding} />
-            </Link>
-          )}
-          <div className="arag-railnav">
-            <NavList items={PRODUCT_NAV} pathname={pathname} onNavigate={() => setDrawer(false)} />
-            <div className="group">Operations</div>
-            <NavList items={OPERATIONS_NAV} pathname={pathname} onNavigate={() => setDrawer(false)} />
+    <NavToggleContext.Provider value={nav}>
+      <div className="arag-app" data-rail-theme="light" data-rail={railState}>
+        <a className="arag-skip" href="#main">
+          Skip to content
+        </a>
+        {branding.poweredBy && (
+          <div className="arag-appband arag-dark" data-testid="powered-by-band">
+            <NavMenuButton nav={nav} className="arag-rail-menu" />
+            <Wordmark variant="dark" height={18} className="wordmark" />
+            <span className="spacer" />
+            {deployment?.mode === "mock" && <span className="arag-pill-live">Sample data</span>}
+            <HowThisWorks />
+            <a href={branding.docsUrl}>Docs</a>
           </div>
-          <div className="foot">
-            {deployment && (
-              <>
-                <span
-                  className="arag-status"
-                  data-state={deployment.mode === "mock" ? undefined : "ok"}
-                  title={
-                    deployment.mode === "mock"
-                      ? "Running against the in-process sample Knowledge Box"
-                      : "Connected to a live Knowledge Box"
-                  }
-                >
-                  <span className="dot" />
-                  <span>{deployment.mode === "mock" ? "Sample data" : "Live"}</span>
-                </span>
-                {deployment.runningJobs > 0 && (
-                  <Link
-                    href="/upload/history"
+        )}
+
+        <div className="body">
+          {/*
+            While the drawer is open the rail IS the overlay, so it takes the dialog contract the
+            kit's own `Drawer` has: a modal role and, through `NavDrawer` below, the trap that
+            keeps Tab inside it and returns focus to the trigger on close.
+          */}
+          {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: `role` is conditional, so the rule
+              reads the element's implicit `navigation` role; while the drawer is open the role IS
+              `dialog`, which `aria-modal` belongs to. */}
+          <nav
+            ref={rail}
+            className="arag-rail"
+            aria-label="Primary"
+            data-testid="app-sidebar"
+            role={drawer ? "dialog" : undefined}
+            aria-modal={drawer ? true : undefined}
+            tabIndex={drawer ? -1 : undefined}
+          >
+            {hasIdent(branding) && (
+              <Link href="/" className="ident" onClick={() => setDrawer(false)}>
+                <ProductIdent branding={branding} />
+              </Link>
+            )}
+            <div className="arag-railnav">
+              <NavList items={PRODUCT_NAV} pathname={pathname} onNavigate={() => setDrawer(false)} />
+              <div className="group">Operations</div>
+              <NavList items={OPERATIONS_NAV} pathname={pathname} onNavigate={() => setDrawer(false)} />
+            </div>
+            <div className="foot">
+              {deployment && (
+                <>
+                  <span
                     className="arag-status"
-                    data-state="busy"
-                    onClick={() => setDrawer(false)}
-                    title={`${deployment.runningJobs} job${deployment.runningJobs === 1 ? "" : "s"} running`}
+                    data-state={deployment.mode === "mock" ? undefined : "ok"}
+                    title={
+                      deployment.mode === "mock"
+                        ? "Running against the in-process sample Knowledge Box"
+                        : "Connected to a live Knowledge Box"
+                    }
                   >
                     <span className="dot" />
-                    <span>
-                      {deployment.runningJobs} job{deployment.runningJobs === 1 ? "" : "s"} running
-                    </span>
-                  </Link>
-                )}
-              </>
-            )}
-            {/*
-              The architecture reveal normally lives in the Progress band. A white-label deployment
-              removes that band, and the disclosure must not disappear with the credit — it moves
-              here instead, styled for the light rail.
-            */}
-            {!branding.poweredBy && (
-              <div className="ca-light-reveal" style={{ marginTop: 4 }}>
-                <HowThisWorks />
-              </div>
-            )}
+                    <span>{deployment.mode === "mock" ? "Sample data" : "Live"}</span>
+                  </span>
+                  {deployment.runningJobs > 0 && (
+                    <Link
+                      href="/upload/history"
+                      className="arag-status"
+                      data-state="busy"
+                      onClick={() => setDrawer(false)}
+                      title={`${deployment.runningJobs} job${deployment.runningJobs === 1 ? "" : "s"} running`}
+                    >
+                      <span className="dot" />
+                      <span>
+                        {deployment.runningJobs} job{deployment.runningJobs === 1 ? "" : "s"} running
+                      </span>
+                    </Link>
+                  )}
+                </>
+              )}
+              {/*
+                The architecture reveal normally lives in the Progress band. A white-label deployment
+                removes that band, and the disclosure must not disappear with the credit — it moves
+                here instead, styled for the light rail.
+              */}
+              {!branding.poweredBy && (
+                <div className="ca-light-reveal" style={{ marginTop: 4 }}>
+                  <HowThisWorks />
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              className="arag-rail-toggle"
+              aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+            >
+              {collapsed ? <IconExpand size={16} /> : <IconCollapse size={16} />}
+              <span>Collapse</span>
+            </button>
+          </nav>
+
+          <main className="arag-main" id="main">
+            {children}
+          </main>
+        </div>
+
+        {drawer && <NavDrawer panel={rail} onClose={() => setDrawer(false)} />}
+
+        <footer className="arag-footer">
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              alignItems: "center",
+              padding: "12px 24px",
+              fontSize: 11.5,
+            }}
+          >
+            <span>{branding.footerText}</span>
+            <span style={{ marginLeft: "auto", display: "inline-flex", gap: 14, alignItems: "center" }}>
+              {deployment?.version && <span className="mono">v{deployment.version}</span>}
+              <a href={branding.docsUrl}>API</a>
+              {branding.supportUrl && <a href={branding.supportUrl}>Support</a>}
+              {branding.poweredBy && (
+                <span
+                  data-testid="powered-by-credit"
+                  className="credit"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  <Wordmark height={14} className="opacity-75" />
+                  Built on Progress Agentic RAG
+                </span>
+              )}
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            className="arag-rail-toggle"
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-          >
-            {collapsed ? <IconExpand size={16} /> : <IconCollapse size={16} />}
-            <span>Collapse</span>
-          </button>
-        </nav>
-
-        <main className="arag-main" id="main">
-          {children}
-        </main>
+        </footer>
       </div>
+    </NavToggleContext.Provider>
+  );
+}
 
-      {drawer && (
-        <div className="arag-scrim" onClick={() => setDrawer(false)} role="presentation">
-          <button
-            type="button"
-            onClick={() => setDrawer(false)}
-            aria-label="Close navigation"
-            style={{ position: "fixed", top: 8, right: 8, background: "none", border: 0, color: "#fff" }}
-          >
-            <IconClose size={18} />
-          </button>
-        </div>
-      )}
-
-      <footer className="arag-footer">
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 12,
-            alignItems: "center",
-            padding: "12px 24px",
-            fontSize: 11.5,
-          }}
-        >
-          <span>{branding.footerText}</span>
-          <span style={{ marginLeft: "auto", display: "inline-flex", gap: 14, alignItems: "center" }}>
-            {deployment?.version && <span className="mono">v{deployment.version}</span>}
-            <a href={branding.docsUrl}>API</a>
-            {branding.supportUrl && <a href={branding.supportUrl}>Support</a>}
-            {branding.poweredBy && (
-              <span
-                data-testid="powered-by-credit"
-                className="credit"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
-                <Wordmark height={14} className="opacity-75" />
-                Built on Progress Agentic RAG
-              </span>
-            )}
-          </span>
-        </div>
-      </footer>
+/**
+ * The scrim over the open rail, and the focus contract that goes with it.
+ *
+ * It mounts only while the drawer is open, so `useModalFocus` — the kit's single implementation,
+ * shared with `Drawer` and `ConfirmDialog` — runs for exactly the drawer's lifetime: focus moves
+ * into the rail on open, Tab cycles inside it instead of landing on the page behind the scrim,
+ * Escape closes, and focus returns to the trigger rather than to an off-canvas link.
+ */
+function NavDrawer({ panel, onClose }: { panel: React.RefObject<HTMLElement | null>; onClose: () => void }) {
+  useModalFocus(panel, onClose);
+  return (
+    <div className="arag-scrim" onClick={onClose} role="presentation">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close navigation"
+        style={{ position: "fixed", top: 8, right: 8, background: "none", border: 0, color: "#fff" }}
+      >
+        <IconClose size={18} />
+      </button>
     </div>
   );
 }
@@ -325,8 +385,19 @@ export function PageHeader({
   actions?: React.ReactNode;
   tabs?: React.ReactNode;
 }) {
+  const nav = useContext(NavToggleContext);
   return (
     <header className="arag-pagehead">
+      {/* The one mobile navigation trigger, when there is no Progress band to hold it. The kit's
+          `.arag-rail-menu` keeps it out of the way above 1023px; `.arag-btn` gives it a look
+          outside the dark band, where the band's own button styling does not reach. */}
+      {nav && !nav.inBand && (
+        <NavMenuButton
+          nav={nav}
+          className="arag-btn secondary sm arag-rail-menu"
+          style={{ alignSelf: "flex-start", marginInline: 0, marginBottom: 8 }}
+        />
+      )}
       {breadcrumb && breadcrumb.length > 0 && (
         <nav className="arag-breadcrumb" aria-label="Breadcrumb">
           <ol>

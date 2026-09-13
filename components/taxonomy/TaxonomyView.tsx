@@ -668,27 +668,19 @@ function LabelsetDrawer({ labelset, onClose }: { labelset: LabelsetDetail; onClo
   const origin = originOf(labelset);
   return (
     <Drawer title={labelset.title} onClose={onClose}>
+      {/* `<dt>`/`<dd>` are direct children: a `<div>` around each pair makes the pair one item of
+          the kit's `max-content 1fr` grid, so column one sizes to the longest whole row. */}
       <dl className="arag-kv">
-        <div>
-          <dt>Identifier</dt>
-          <dd className="mono">{labelset.id}</dd>
-        </div>
-        <div>
-          <dt>Source</dt>
-          <dd>{ORIGIN_LABEL[origin]}</dd>
-        </div>
-        <div>
-          <dt>Level</dt>
-          <dd>{levelLabel(labelset.kind)}</dd>
-        </div>
-        <div>
-          <dt>Selection</dt>
-          <dd>{labelset.multiple ? "Many labels" : "One label"}</dd>
-        </div>
-        <div>
-          <dt>In the Knowledge Box</dt>
-          <dd>{labelset.provisioned ? "Yes" : "No"}</dd>
-        </div>
+        <dt>Identifier</dt>
+        <dd className="mono">{labelset.id}</dd>
+        <dt>Source</dt>
+        <dd>{ORIGIN_LABEL[origin]}</dd>
+        <dt>Level</dt>
+        <dd>{levelLabel(labelset.kind)}</dd>
+        <dt>Selection</dt>
+        <dd>{labelset.multiple ? "Many labels" : "One label"}</dd>
+        <dt>In the Knowledge Box</dt>
+        <dd>{labelset.provisioned ? "Yes" : "No"}</dd>
       </dl>
 
       <p className="arag-help" style={{ marginTop: 12 }}>

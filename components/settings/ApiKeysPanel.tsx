@@ -34,7 +34,7 @@ export function ApiKeysPanel({
   canEdit: boolean;
   adminOff: boolean;
 }) {
-  const { toast, show } = useSettingsWrites(initial);
+  const { toast, show, fail, errorBanner } = useSettingsWrites(initial);
   const [keys, setKeys] = useState<ApiKeyView[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -105,7 +105,7 @@ export function ApiKeysPanel({
       setNewName("");
       await load();
     } catch (err) {
-      show((err as Error).message, "error");
+      fail((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -123,7 +123,7 @@ export function ApiKeysPanel({
       await load();
       show("Key renamed.");
     } catch (err) {
-      show((err as Error).message, "error");
+      fail((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -137,7 +137,7 @@ export function ApiKeysPanel({
       await load();
       show(`"${key.name}" can no longer authenticate.`);
     } catch (err) {
-      show((err as Error).message, "error");
+      fail((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -147,6 +147,7 @@ export function ApiKeysPanel({
 
   return (
     <section className="arag-stack">
+      {errorBanner}
       {created && (
         <div className="arag-card pad" data-testid="new-secret">
           <CardHead title={`"${created.key.name}" is ready`} />

@@ -117,7 +117,20 @@ export default function AdminOverview() {
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 16, alignItems: "flex-start" }}>
         <Panel title="Recent jobs" className="flex-1">
-          <StateBlock loading={jobs.loading} error={jobs.error} empty={jobs.data?.items.length === 0}>
+          <StateBlock
+            loading={jobs.loading}
+            error={jobs.error}
+            empty={jobs.data?.items.length === 0}
+            emptyState={{
+              title: "No ingestion runs yet.",
+              body: "Ingestion and provisioning runs appear here as soon as one starts.",
+              actions: (
+                <Link href="/upload" className="arag-btn sm">
+                  Upload a recording
+                </Link>
+              ),
+            }}
+          >
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
               {(jobs.data?.items ?? []).map((j) => (
                 <li key={j.id} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13 }}>
@@ -138,7 +151,20 @@ export default function AdminOverview() {
         </Panel>
 
         <Panel title="Recent errors" className="flex-1">
-          <StateBlock loading={errors.loading} error={errors.error} empty={errors.data?.items.length === 0}>
+          <StateBlock
+            loading={errors.loading}
+            error={errors.error}
+            empty={errors.data?.items.length === 0}
+            emptyState={{
+              title: "Nothing has failed.",
+              body: "The service has logged no errors since it started. The full log is still worth a look if something looks wrong elsewhere.",
+              actions: (
+                <Link href="/admin/logs" className="arag-btn secondary sm">
+                  All logs
+                </Link>
+              ),
+            }}
+          >
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
               {(errors.data?.items ?? []).map((l, i) => (
                 <li key={`${l.ts}-${i}`} style={{ fontSize: 12.5 }}>

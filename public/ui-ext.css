@@ -35,6 +35,18 @@
   font-size: 11px;
 }
 
+/* ---------- horizontally scrollable table wrapper ----------
+   PLATFORM GAP (arag-platform 0.2.0): the kit's only rule for this class is
+   `.arag-datatable > .scroll`, a child combinator. Six tables in this product use `.scroll`
+   without a `.arag-datatable` ancestor — they are plain panels, not framed data tables — so
+   `overflow-x` computed to `visible` and a wide table pushed the whole page sideways instead of
+   scrolling inside its own box. The unscoped fallback below is the fix here; upstream the kit
+   should style `.scroll` on its own and let `.arag-datatable > .scroll` add only the frame. */
+
+.scroll {
+  overflow-x: auto;
+}
+
 /* ---------- status dot ----------
    The kit's `.arag-chip` covers the colour/shape, but this product's state chips lead with a dot:
    a call's lifecycle is a *process* state, and the dot is what separates it at a glance from the
@@ -121,7 +133,9 @@
   cursor: pointer;
   background: var(--arag-border);
   height: 38%;
-  transition: height 0.12s ease;
+  /* The height transition is opted INTO under `prefers-reduced-motion: no-preference` further
+     down, rather than declared here and switched off: a tick that grows when it is hovered is
+     motion, and it was the one animation in this file the reduced-motion block did not cover. */
 }
 .ca-moments > button[data-moment="1"] {
   height: 100%;
@@ -202,6 +216,12 @@
 @media (prefers-reduced-motion: reduce) {
   .ca-state.busy::before {
     animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ca-moments > button {
+    transition: height 0.12s ease;
   }
 }
 

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { ErrorState, Skeleton, StateChip } from "@/components/kit";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { EmptyState, ErrorState, Skeleton, StateChip } from "@/components/kit";
 import { PageHeader } from "@/components/shell/AppShell";
 
 /**
@@ -133,13 +133,16 @@ export function Panel({
   return (
     <section className={`arag-card ${className ?? ""}`} style={{ padding: 16 }}>
       {(title || right) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        // The header is a flex row, so a wide control in `right` (the six-option audit filter, at
+        // 570px) used to sit on the title's line and push the page sideways. It wraps onto its own
+        // line instead, and `minWidth: 0` lets the control itself shrink rather than overflow.
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
           {title && (
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 650, color: "var(--arag-ink-950)" }}>
               {title}
             </h2>
           )}
-          {right && <span style={{ marginLeft: "auto" }}>{right}</span>}
+          {right && <span style={{ marginLeft: "auto", minWidth: 0, maxWidth: "100%" }}>{right}</span>}
         </div>
       )}
       {children}
@@ -151,11 +154,14 @@ export function StateBlock({
   loading,
   error,
   empty,
+  emptyState,
   children,
 }: {
   loading: boolean;
   error: string | null;
   empty?: boolean;
+  /** What the screen says when it has nothing: what is missing, why, and the way to change it. */
+  emptyState?: { title: string; body?: React.ReactNode; actions?: React.ReactNode };
   children: React.ReactNode;
 }) {
   if (error) {
@@ -185,22 +191,32 @@ export function StateBlock({
       </div>
     );
   if (empty)
+    // A bare "Nothing to show yet." was the entire content of an empty screen. The kit's empty
+    // state exists to stop exactly that: every one names what is missing and the way out.
     return (
-      <p className="small" style={{ color: "var(--arag-text-subtle)" }}>
-        Nothing to show yet.
-      </p>
+      <EmptyState
+        title={emptyState?.title ?? "Nothing to show yet."}
+        body={
+          emptyState?.body ??
+          "This list is empty because nothing has happened here yet, not because a read failed."
+        }
+        actions={emptyState?.actions}
+      />
     );
   return <>{children}</>;
 }
 
 export function KeyValues({ rows }: { rows: Array<[string, React.ReactNode]> }) {
   return (
+    // `<dt>`/`<dd>` are the grid items, never wrapped in a `<div>`: a wrapper makes each PAIR one
+    // item of the kit's `max-content 1fr` grid, so column one sizes to the longest whole row and
+    // the panel runs off the side of a phone. A keyed Fragment keeps the two as direct children.
     <dl className="arag-kv">
       {rows.map(([k, v]) => (
-        <div key={k}>
+        <Fragment key={k}>
           <dt>{k}</dt>
           <dd>{v}</dd>
-        </div>
+        </Fragment>
       ))}
     </dl>
   );

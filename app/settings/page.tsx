@@ -126,30 +126,23 @@ function About({ view, canEdit }: { view: SettingsView; canEdit: boolean }) {
     <section className="arag-stack">
       <div className="arag-card pad">
         <h2 style={{ margin: "0 0 12px", fontSize: 15, fontWeight: 650 }}>About</h2>
+        {/* `<dt>`/`<dd>` are direct children: a `<div>` around each pair makes the pair one item
+            of the kit's `max-content 1fr` grid, which then sizes column one to the longest whole
+            row and pushes the card off the side of a phone. */}
         <dl className="arag-kv">
-          <div>
-            <dt>Product</dt>
-            <dd data-testid="about-product">{view.branding.productName}</dd>
-          </div>
-          <div>
-            <dt>Version</dt>
-            <dd className="mono">{view.version}</dd>
-          </div>
-          <div>
-            <dt>Platform</dt>
-            <dd className="mono">arag-platform {view.platformVersion}</dd>
-          </div>
-          <div>
-            <dt>Licence</dt>
-            <dd>Apache-2.0</dd>
-          </div>
-          <div>
-            <dt>Labelsets</dt>
-            <dd>
-              {view.taxonomy.labelsets} ({view.taxonomy.resourceLabelsets} call-level,{" "}
-              {view.taxonomy.paragraphLabels} moment labels)
-            </dd>
-          </div>
+          <dt>Product</dt>
+          <dd data-testid="about-product">{view.branding.productName}</dd>
+          <dt>Version</dt>
+          <dd className="mono">{view.version}</dd>
+          <dt>Platform</dt>
+          <dd className="mono">arag-platform {view.platformVersion}</dd>
+          <dt>Licence</dt>
+          <dd>Apache-2.0</dd>
+          <dt>Labelsets</dt>
+          <dd>
+            {view.taxonomy.labelsets} ({view.taxonomy.resourceLabelsets} call-level,{" "}
+            {view.taxonomy.paragraphLabels} moment labels)
+          </dd>
         </dl>
       </div>
 

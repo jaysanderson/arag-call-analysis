@@ -113,7 +113,14 @@ export function ApiExplorer() {
     setError(null);
     fetch("/api/v1/openapi.json", { credentials: "same-origin" })
       .then(async (r) => {
-        if (!r.ok) throw new Error(`The document could not be read (${r.status}).`);
+        // The status line alone tells a reader nothing they can act on; the route answers with an
+        // RFC 9457 problem document whose `detail` is the sentence written for them.
+        if (!r.ok) {
+          const problem = (await r.json().catch(() => null)) as { detail?: string; title?: string } | null;
+          throw new Error(
+            problem?.detail || problem?.title || `The document could not be read (${r.status}).`,
+          );
+        }
         return (await r.json()) as OpenApiDoc;
       })
       .then(setDoc)

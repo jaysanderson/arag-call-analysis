@@ -431,11 +431,11 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
 
             <span className="spacer" />
 
-            {/* Anyone may open a saved view; creating, renaming and deleting one is gated on the
-                same write capability as the rest of the screen, because a view is shared team
-                state — a reader who cannot delete a call should not be able to delete the
-                definition of the queue their colleagues work from. */}
-            <SavedViews query={viewQuery} canEdit={canWrite} onNotify={show} />
+            {/* Saved views are `auth: "api"`, not a write capability: the API accepts a create,
+                rename or delete from any session that can read the list, and the settings screen
+                already offers Delete to everyone. Gating them on `canWrite` hid a feature the
+                server was willing to perform — the wrong flag, not a stricter one. */}
+            <SavedViews query={viewQuery} onNotify={show} />
             <ColumnsMenu
               columns={columnKeys}
               onToggle={(key) => persistColumns(toggleColumn(columnKeys, key))}

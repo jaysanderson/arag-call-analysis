@@ -42,7 +42,7 @@ export function LimitsPanel({
   canEdit: boolean;
   adminOff: boolean;
 }) {
-  const { view, busy, toast, save, reset } = useSettingsWrites(initial);
+  const { view, busy, toast, errorBanner, save, reset } = useSettingsWrites(initial);
   const [form, setForm] = useState<Form>(() => formOf(initial));
   const [saved, setSaved] = useState<Form>(() => formOf(initial));
 
@@ -67,6 +67,7 @@ export function LimitsPanel({
 
   return (
     <section className="arag-stack">
+      {errorBanner}
       {!canEdit && <ReadOnlyNotice adminOff={adminOff} />}
 
       <div className="arag-card pad">
@@ -79,7 +80,10 @@ export function LimitsPanel({
           onReset={async () => adopt(await reset("limits"))}
         />
 
-        <div style={{ display: "grid", gap: 14 }}>
+        {/* A `display: grid` with no `gridTemplateColumns` gets one implicit `auto` column whose
+            minimum is its content's min-content width, so a single unbreakable value can size the
+            column past the viewport. `minmax(0, 1fr)` lets it shrink instead. */}
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
           <Field
             id="l-question"
             label="Longest question"

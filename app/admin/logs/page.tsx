@@ -55,7 +55,15 @@ export default function AdminLogsPage() {
         </div>
       </Panel>
 
-      <StateBlock loading={loading && !data} error={error} empty={data?.items.length === 0}>
+      <StateBlock
+        loading={loading && !data}
+        error={error}
+        empty={data?.items.length === 0}
+        emptyState={{
+          title: "No log records match.",
+          body: "The service has written nothing at this level, or the filter above excludes everything it has. Widen the level or clear the text filter.",
+        }}
+      >
         <Panel title="Records">
           <div className="scroll-thin max-h-[560px] overflow-auto font-mono text-xs">
             {[...(data?.items ?? [])].reverse().map((r, i) => (

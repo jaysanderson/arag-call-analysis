@@ -36,7 +36,7 @@ export function RetentionPanel({
   canEdit: boolean;
   adminOff: boolean;
 }) {
-  const { view, busy, toast, show, save, reset } = useSettingsWrites(initial);
+  const { view, busy, toast, show, fail, errorBanner, save, reset } = useSettingsWrites(initial);
   const [days, setDays] = useState(initial.retention.days);
   const [enabled, setEnabled] = useState(initial.retention.enabled);
   const [saved, setSaved] = useState(initial.retention);
@@ -92,7 +92,7 @@ export function RetentionPanel({
       setDryRun(result);
       setTyped("");
     } catch (err) {
-      show((err as Error).message, "error");
+      fail((err as Error).message);
     } finally {
       setPurging(false);
     }
@@ -114,9 +114,9 @@ export function RetentionPanel({
           (result.sharesRevoked ? `, ${result.sharesRevoked} share link(s) revoked.` : "."),
       );
       if (result.failed.length > 0)
-        show(`${result.failed.length} call(s) could not be deleted: ${result.failed[0]?.error}`, "error");
+        fail(`${result.failed.length} call(s) could not be deleted: ${result.failed[0]?.error}`);
     } catch (err) {
-      show((err as Error).message, "error");
+      fail((err as Error).message);
     } finally {
       setPurging(false);
     }
@@ -128,6 +128,7 @@ export function RetentionPanel({
 
   return (
     <section className="arag-stack">
+      {errorBanner}
       {!canEdit && <ReadOnlyNotice adminOff={adminOff} />}
 
       <div className="arag-card pad">
@@ -159,7 +160,10 @@ export function RetentionPanel({
           }}
         />
 
-        <div style={{ display: "grid", gap: 14 }}>
+        {/* A `display: grid` with no `gridTemplateColumns` gets one implicit `auto` column whose
+            minimum is its content's min-content width, so a single unbreakable value can size the
+            column past the viewport. `minmax(0, 1fr)` lets it shrink instead. */}
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}>
           <Field
             id="r-days"
             label="Keep calls for"

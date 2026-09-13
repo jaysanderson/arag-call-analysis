@@ -190,8 +190,14 @@ export function LabelsetEditor({
         </div>
       )}
 
+      {/* A `display: grid` with no `gridTemplateColumns` gets one implicit `auto` column whose
+          minimum is its content's min-content width, so a single unbreakable value can size the
+          column past the viewport. `minmax(0, 1fr)` lets it shrink instead. */}
       {draft && (
-        <div style={{ display: "grid", gap: 14 }} data-testid="labelset-form">
+        <div
+          style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14 }}
+          data-testid="labelset-form"
+        >
           <div className="arag-field">
             <label htmlFor={`${uid}-id`}>Identifier</label>
             <input

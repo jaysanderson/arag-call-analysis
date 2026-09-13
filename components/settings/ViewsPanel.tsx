@@ -16,7 +16,7 @@ import { apiJson, CardHead, fmtWhen, useSettingsWrites } from "./common";
  * deleting one takes it away from every supervisor using it — which is why it confirms.
  */
 export function ViewsPanel({ initial }: { initial: SettingsView }) {
-  const { toast, show } = useSettingsWrites(initial);
+  const { toast, show, fail, errorBanner } = useSettingsWrites(initial);
   const [items, setItems] = useState<ViewView[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,7 +46,7 @@ export function ViewsPanel({ initial }: { initial: SettingsView }) {
       await load();
       show(`"${view.name}" deleted.`);
     } catch (err) {
-      show((err as Error).message, "error");
+      fail((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -54,6 +54,7 @@ export function ViewsPanel({ initial }: { initial: SettingsView }) {
 
   return (
     <section className="arag-stack">
+      {errorBanner}
       <div className="arag-card pad">
         <CardHead title="Saved views" />
         <p className="small" style={{ marginTop: 0 }}>

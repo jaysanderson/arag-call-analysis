@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconCopy, IconExport, IconRefresh, IconShare, IconTrash } from "@/components/icons";
-import { ConfirmDialog, KebabMenu, useToast } from "@/components/kit";
+import { ConfirmDialog, KebabMenu, useModalFocus, useToast } from "@/components/kit";
 import { fmtDateTime } from "@/lib/format";
 
 /**
@@ -235,13 +235,10 @@ function ShareDialog({
 
   const live = (links ?? []).filter((l) => !l.revoked && !l.expired);
 
-  // Escape closes, and focus starts on the first control rather than behind the overlay.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    panel.current?.querySelector<HTMLElement>("select, button, input")?.focus();
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // The kit's single overlay focus contract, shared with `Drawer` and `ConfirmDialog`. The
+  // hand-rolled effect this replaces moved focus in but never trapped it — twelve consecutive
+  // Tabs walked out of a dialog that declares `aria-modal` — and never returned it to the trigger.
+  useModalFocus(panel, onClose);
 
   return (
     <div className="arag-modal-backdrop" onClick={onClose} role="presentation">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import {
   AdminShell,
@@ -73,7 +74,20 @@ export default function AdminJobsPage() {
         </button>
       }
     >
-      <StateBlock loading={loading} error={error} empty={data?.items.length === 0}>
+      <StateBlock
+        loading={loading}
+        error={error}
+        empty={data?.items.length === 0}
+        emptyState={{
+          title: "No ingestion runs yet.",
+          body: "Nothing to show yet. Ingestion and provisioning runs appear here the moment one starts, with a stage-by-stage timeline for each.",
+          actions: (
+            <Link href="/upload" className="arag-btn sm">
+              Upload a recording
+            </Link>
+          ),
+        }}
+      >
         <div className="arag-split">
           <Panel title="Recent jobs">
             <div className="arag-datatable" data-testid="jobs-table">
