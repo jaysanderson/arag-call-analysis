@@ -1,8 +1,62 @@
 # White-labelling
 
-A partner can ship this product under their own identity **by configuration alone** — no fork, no
-rebuild, no code change. Every user-visible identity element is read from the environment at boot
-and served from one public endpoint.
+A partner can ship this product under their own identity **without a fork, a rebuild or a code
+change**. Every user-visible identity element is read from the environment at boot, editable in
+the product afterwards, and served from one public endpoint.
+
+## The settings model
+
+Read this first, because it governs everything below.
+
+**Environment variables are defaults; the settings store is the authority.** The `BRAND_*`
+variables in the next table set what a deployment *boots* with. From then on the same values are
+editable in **Settings → Branding**, are persisted to `DATA_DIR/settings.json`, and take effect on
+the next request with no restart. Once branding has been edited the store wins, and changing a
+`BRAND_*` variable moves nothing until the section is reset.
+
+| | |
+|---|---|
+| Read | `GET /api/v1/settings` (public, no secrets) and `GET /api/v1/branding` (public) |
+| Write | `PUT /api/v1/settings/branding` — admin token required |
+| Reset | `DELETE /api/v1/settings/branding` — restores the `BRAND_*` values the deployment booted with |
+| Logo | `POST /api/v1/settings/logo` (multipart) and `DELETE /api/v1/settings/logo` — admin token required |
+
+`GET /api/v1/settings` reports which sections the store is currently driving in its `overridden`
+array, so an operator looking at a value can tell whether changing the deployment's environment
+would move it.
+
+A worked edit:
+
+```bash
+export BASE=http://localhost:3000
+
+curl -s -X PUT "$BASE/api/v1/settings/branding" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "productName": "Northwind Call IQ",
+        "tagline": "Conversation intelligence for insurers",
+        "primaryColor": "#7c3aed",
+        "accentColor": "#0ea5e9",
+        "poweredBy": false,
+        "footerText": "© Northwind Analytics. All rights reserved.",
+        "supportUrl": "https://support.northwind.example"
+      }' | jq '.branding'
+```
+
+The body is a **patch**: only the keys present are changed, and an unrecognised key is rejected
+with a 400 rather than silently ignored, so a typo in a partner's automation fails loudly. The
+response is the whole settings view, not just the section that changed. The very next page render
+uses the new identity.
+
+Putting it back:
+
+```bash
+curl -s -X DELETE "$BASE/api/v1/settings/branding" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.branding.productName'
+```
+
+"Reset to environment default" in Settings → Branding is this call.
 
 ## The variables
 
@@ -21,7 +75,7 @@ and served from one public endpoint.
 All of them are optional. With none set, the product looks exactly as it does in the reference
 deployment.
 
-## A worked example
+## A worked example at deploy time
 
 ```bash
 fly secrets set \
@@ -34,7 +88,9 @@ fly secrets set \
   BRAND_SUPPORT_URL="https://support.northwind.example"
 ```
 
-Locally, put the same keys in `.env` and run `make dev`.
+Locally, put the same keys in `.env` and run `make dev`. This sets the deployment's *defaults* —
+what it boots with, and what a reset returns to. A partner who wants to keep tuning their identity
+afterwards does it in Settings → Branding rather than by redeploying.
 
 ## Checking it
 
@@ -57,17 +113,35 @@ curl -s http://localhost:3000/api/v1/branding | jq
 ```
 
 `GET /api/v1/branding` is public and carries no secrets: a partner front-end built against this API
-can theme itself from the same source the bundled UI uses. The admin console also shows the
-effective branding under **Config → Branding (white label)**, which is the quickest way to confirm
-what a deployment will show before anyone opens it.
+can theme itself from the same source the bundled UI uses. **Settings → Branding** shows the same
+identity with a live preview and the editable form; `/admin/branding` shows it read-only in the
+operator console, which is the quickest way to confirm what a deployment will show before anyone
+opens it.
 
 ## Supplying a logo
 
-Two options:
+Three options. The first is the one a partner should reach for.
 
-1. **Host it yourself** — `BRAND_LOGO_URL=https://cdn.example.com/logo.svg`. Any absolute
-   `http(s)` URL works.
-2. **Mount it on the data volume** — drop the file in `DATA_DIR/branding/` and set
+1. **Upload it in the product** — Settings → Branding, or:
+
+   ```bash
+   curl -s -X POST "$BASE/api/v1/settings/logo" \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -F "logo=@./logo.svg;type=image/svg+xml" | jq '.branding.logoUrl'
+   ```
+
+   The file is written to `DATA_DIR/branding/logo.<ext>` and `branding.logoUrl` is pointed at it
+   with a cache-busting query, so a re-upload is visible immediately rather than after a browser
+   cache clear. Accepted types are `image/svg+xml`, `image/png`, `image/jpeg` and `image/webp`;
+   the cap is 512 KB. Uploading one extension removes the others, so there is never an
+   accumulating pile of orphaned marks. `DELETE /api/v1/settings/logo` removes the file and clears
+   `logoUrl`.
+
+   The image is stored as a file rather than in the settings document on purpose: a base64 image
+   in a settings row would be re-read on every read of every unrelated setting.
+2. **Host it yourself** — `BRAND_LOGO_URL=https://cdn.example.com/logo.svg`, or the same value set
+   through `PUT /api/v1/settings/branding`. Any absolute `https` URL works.
+3. **Mount it on the data volume by hand** — drop the file in `DATA_DIR/branding/` and set
    `BRAND_LOGO_URL=/branding/logo.svg`. On Fly, `DATA_DIR` is the `data` volume, so the logo
    survives deploys and needs no image rebuild:
 
@@ -78,7 +152,8 @@ Two options:
 
 The `/branding/*` route serves image types only (`svg`, `png`, `jpg`, `webp`, `gif`, `ico`), refuses
 any path that resolves outside the branding directory, and sets `nosniff` plus a restrictive
-`Content-Security-Policy` on the response — an uploaded SVG cannot run script.
+`Content-Security-Policy` on the response — an uploaded SVG is a document that can carry script,
+and the sandboxed policy is what stops it running with this origin's privileges.
 
 Size the logo for a 24-pixel-high slot; SVG is strongly preferred.
 
@@ -95,11 +170,19 @@ Colour values are validated before they are emitted (`safeColor` in `lib/brandin
 could close the declaration and inject a rule is refused rather than rendered. `BRAND_LOGO_URL` and
 `BRAND_SUPPORT_URL` are checked the same way — only `http(s)` or a same-origin path.
 
+A colour or URL that arrives from the **settings form** goes through exactly the same grammar:
+`validateBranding()` in `services/config.ts` calls `safeColor` and `safeLogoUrl` before anything is
+persisted, and `applyToRuntime()` calls them again on the way into the runtime. A settings screen
+is not a way past the checks a value from the environment gets — an invalid colour is a 400, not a
+rendered rule.
+
 ## What white-labelling does *not* change
 
 - **The taxonomy and the agents.** Call reasons, outcomes, moments and the generated analysis are
-  product behaviour, not branding. To change those, see
-  [Build your own](build-your-own.md).
+  product behaviour, not branding — though they are no longer a fork either: labelsets and agents
+  are editable in the product at `/taxonomy`. See
+  [Extension points](extension-points.md#change-the-taxonomy) for the live route and
+  [Build your own](build-your-own.md) for re-targeting the shipped seed.
 - **The API shape.** `/api/v1` is identical in every deployment, so an integration written against
   one partner's instance works against another's.
 - **Attribution in the source.** Hiding the powered-by credit is a presentation choice; the
@@ -111,4 +194,8 @@ could close the declaration and inject a rule is refused rather than rendered. `
 that boot a second, white-labelled server and assert both `GET /api/v1/branding` and the rendered
 HTML. `make e2e` runs `test/e2e/branding.spec.ts`, which starts a partner-configured server and
 checks the rendered name, tagline, footer, support link, computed `--color-brand-600` and the
-absence of the Progress credit — including in the admin console.
+absence of the Progress credit — including in the operator console.
+
+Against a real Knowledge Box, `make smoke-write` additionally proves that a settings write
+persists *and* that a second reader sees the effect, which is the part a write-only assertion
+would miss.

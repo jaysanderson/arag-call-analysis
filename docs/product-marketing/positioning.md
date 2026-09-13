@@ -28,6 +28,16 @@ recording to it. Everything the demo UI shows is a client of one versioned, docu
 `/api/v1`, and the whole product runs with no ARAG credentials against an in-process mock for
 evaluation or CI.
 
+The product is also **configurable in itself**, not in a config file. The labelsets it classifies
+against, the prompts its analysis agent runs, the branding it wears, the Knowledge Box it points
+at, its limits, its retention policy and its API keys are all edited in the product by an
+operator, persist, and take effect on the next request — no redeploy, no engineer. Environment
+variables set what a deployment starts with; after that the product is the authority, every
+section can be reset to those defaults, and every change is audited. And the API is not merely
+documented but **browsable and callable from inside the product**: an API section lists every
+operation this deployment declares, with a form that calls it live and a copyable curl, generated
+from the deployment's own OpenAPI document rather than hand-maintained.
+
 ## What it is not
 
 Call Analysis is not a real-time or in-call product: there is no live transcription, no
@@ -35,11 +45,13 @@ whisper-coaching, no streaming call feed — a call is analyzed once it has been
 transcribed. It is not a telephony platform or CCaaS, and it does not capture calls itself; it
 consumes recordings or transcripts that already exist. It is not a general-purpose document
 chatbot pointed at a pile of files — the chat is deliberately scoped to one call at a time, backed
-by a purpose-built health-insurance call taxonomy rather than a generic prompt. And it is not a
-finished multi-tenant enterprise system: the MVP has no per-user authorization (anyone holding a
-valid key can read every call in the Knowledge Box), no real-time calls, and runs as a single
-tenant against a single Knowledge Box — see Competitive framing below for the honest version of
-this list.
+by a purpose-built call taxonomy — shipped for health insurance, edited in the product for any
+other domain — rather than a generic prompt. And it is not a finished multi-tenant enterprise
+system: the MVP has no per-user authorization (anyone holding a valid key can read every call in
+the Knowledge Box), no real-time calls, and runs as a single tenant against a single Knowledge
+Box. Configurability is not multi-tenancy: an operator configures one deployment for one
+customer, and a second customer needs a second deployment. See Competitive framing below for the
+honest version of this list.
 
 ## Product name options
 
@@ -147,16 +159,19 @@ a filter, not a re-coding project.
 integrator scoping a client engagement.
 
 **Cares about.** What the API surface actually is, whether the UI is doing anything the API can't,
-how auth and rate limiting work, and whether they can evaluate the whole thing without provisioning
-a live Knowledge Box first.
+how auth and rate limiting work, how much of a client engagement is configuration rather than
+code, and whether they can evaluate the whole thing without provisioning a live Knowledge Box
+first.
 
 **Pain today.** Vendor demos are often a UI with no documented API behind it, or a "trust us" black
 box that can't be evaluated without a signed contract and live credentials.
 
-**Answered by.** A single OpenAPI 3.1 document (`lib/openapi.ts`) is the source of truth for every
-route, served live with Redoc and Swagger UI; the demo and admin UIs call only `/api/v1`; the admin
-panel exposes a real Knowledge Box connection test, configuration, usage, logs, and agent status;
-and `make install && make dev` runs the entire product — dashboard, calls, chat, admin — against an
+**Answered by.** A single OpenAPI 3.1 document (`lib/openapi.ts`) is the source of truth for all 60
+operations, served live with Redoc and Swagger UI *and* rendered as an in-product API explorer at
+`/api` with a try-it form against the running deployment; the demo and operator UIs call only
+`/api/v1`; the operator console exposes a real Knowledge Box connection test, configuration,
+usage, logs, agent status and an audit trail; and `make install && make dev` runs the entire
+product — dashboard, calls, chat, settings, taxonomy editing, operator console — against an
 in-process mock ARAG with no credentials at all.
 
 ## Use cases
@@ -229,11 +244,22 @@ Call Analysis sits near four existing categories:
   was made and highlights the source transcript line.
 - API-first by construction: the demo UI is a client of the same public, documented `/api/v1` that
   any external integration would call (OpenAPI 3.1, served with Redoc and Swagger UI); nothing the
-  UI does is unavailable to the API.
+  UI does is unavailable to the API. The claim is checkable rather than asserted, because the
+  in-product API explorer is *generated* from the served document — it cannot list an operation
+  the deployment does not implement, or omit one it does.
+- Adaptation is configuration, not a fork. The call taxonomy — the labelsets, the label
+  descriptions the agent actually reads, and the prompts behind the narrative analysis and the
+  metrics — is created and edited in the product and written to the Knowledge Box as it is saved.
+  So is the identity a partner ships under, the Knowledge Box the deployment points at, its limits
+  and its retention policy. Most comparable tools make a taxonomy change a vendor request or a
+  code change; here it is a screen, it takes effect on the next request, and it is audited.
+- API keys are a product feature rather than a deployment variable: issued, named, rotated and
+  revoked in the product, stored as one-way digests, shown once, with a last-used time. A partner
+  onboarding a caller does not need an engineer or a redeploy.
 - It runs with no credentials: `make install && make dev` seeds an in-process mock Knowledge Box
   with realistic calls and runs the product's own labeler and ask agents against it, so the whole
-  product — dashboard, search, chat, admin — can be evaluated before a Knowledge Box is
-  provisioned.
+  product — dashboard, search, chat, settings, taxonomy editing, operator console — can be
+  evaluated before a Knowledge Box is provisioned.
 
 **Honest gaps** (true of this MVP, not overstated away):
 
@@ -245,30 +271,71 @@ Call Analysis sits near four existing categories:
   live-monitoring tool.
 - Single-tenant MVP. One deployment serves one Knowledge Box; rate limiting and the response cache
   are per-process, so a multi-machine deployment limits and caches per machine, not globally.
+  Configurability does not change that: an operator configures one deployment for one customer.
+- The configuration itself is per-machine. Settings, API keys, the taxonomy, saved views, share
+  links and the audit trail live in the deployment's own data volume, so a horizontally scaled
+  deployment would need that volume shared *and* a way to tell the other machines to re-apply —
+  today a change made on one machine reaches one machine. This is why the shipped topology is a
+  single machine with a single volume.
+- Retention is deliberate, not automatic. There is a policy, a preview and a purge; there is no
+  background sweeper, so "delete everything older than 90 days without anyone doing anything"
+  needs an external scheduler calling the purge endpoint.
 
 ## Proof points
 
-Verified against the codebase and a live test run on 2026-09-12; nothing below is estimated.
+Verified against the codebase on 2026-09-13, except the coverage figures, which are from the test
+run of 2026-09-12 and are labelled as such. Nothing below is estimated.
 
-- **Public API:** a single OpenAPI 3.1 document (`lib/openapi.ts`) describes every route; the same
-  document drives request validation and the contract tests. It is served at
+- **Public API:** a single OpenAPI 3.1 document (`lib/openapi.ts`) describes 60 operations across
+  45 paths; the same document drives request validation and the contract tests. It is served at
   `/api/v1/openapi.json`, with human-readable docs at `/api/v1/docs` (Redoc) and `/api/v1/swagger`
   (Swagger UI).
-- **Admin panel** at `/admin`: sign-in, Knowledge Box connection test, redacted effective
+- **In-product API explorer** at `/api`: every operation grouped by tag, with its parameters,
+  schemas, a try-it form that calls the live deployment, the response and a copyable curl —
+  rendered from `/api/v1/openapi.json` at runtime, so it cannot drift from what the deployment
+  serves. A unit test walks every operation in the real document through the explorer's indexing
+  and form generation.
+- **Configuration in the product:** `PUT`/`DELETE /api/v1/settings/{section}` over four sections
+  (branding, connection, limits, retention) persist to a JSON store and apply to the running
+  process without a restart; environment variables are the defaults each section resets to. The
+  service-account credential is write-only — accepted by the write, returned by no read model.
+  Every change is written to an audit trail (`GET /api/v1/admin/audit`) with actor, action and the
+  values that changed, secrets reduced to a boolean.
+- **Editable taxonomy and agents:** `POST /api/v1/labelsets`, `GET/PUT/DELETE
+  /api/v1/labelsets/{id}` and `POST /api/v1/labelsets/{id}/provision` make the vocabulary a
+  product feature; `GET /api/v1/agents`, `PUT/DELETE /api/v1/agents/{key}` and
+  `POST /api/v1/agents/{key}/start` enable, re-instruct, start and stop the data-augmentation
+  agents. A labeler's operations are derived from the current labelsets on every read rather than
+  stored, so the two cannot drift apart.
+- **Real API-key store:** keys are SHA-256 digests, shown once on creation, carry a name and a
+  last-used time, and are revoked rather than deleted. `API_KEYS` is a one-time seed, so an
+  environment-configured deployment keeps working and gains management.
+- **Retention:** `GET /api/v1/retention/preview` and `POST /api/v1/retention/purge` (operator-only,
+  irreversible, `dryRun` supported, 200 calls per run). No background sweeper: nothing is deleted
+  until someone asks.
+- **Operator console** at `/admin`: sign-in, Knowledge Box connection test, redacted effective
   configuration, usage counters, data-augmentation agent status with one-click reprovisioning, job
-  timeline, structured log inspector, and cache statistics with invalidation — eight admin API
-  routes (`/api/v1/admin/*`) behind an admin token.
-- **Test suite:** 11 test files (unit, in-process and over-HTTP integration, and OpenAPI contract
-  tests) with 170 passing tests. A coverage run on 2026-09-12 (`vitest run --coverage`) measured
-  96.7% statement coverage, 99.1% function coverage, and 82.3% branch coverage across `lib/` and
-  `services/`.
+  timeline with cancellation, structured log inspector, audit trail, and cache statistics with
+  invalidation — ten admin API routes (`/api/v1/admin/*`) behind an admin token.
+- **Test suite:** 21 vitest files (unit, in-process and over-HTTP integration, and OpenAPI contract
+  tests) plus 7 Playwright journeys covering the dashboard and calls, the operator console,
+  branding, saved views and the column picker, settings edits, taxonomy editing and the API
+  explorer. The last published coverage run, on 2026-09-12 (`vitest run --coverage`), measured
+  96.7% statement coverage, 99.1% function coverage and 82.3% branch coverage across `lib/` and
+  `services/`; `make check` gates every run at 80% line and statement coverage.
 - **No-credentials demo mode:** setting `ARAG_MOCK=1` seeds an in-process mock Knowledge Box with
   real call transcripts and runs the product's own labeler and ask agents against it at boot, so
   `make install && make dev` produces a fully working product with no ARAG account.
 - **Taxonomy:** 5 call-level labelsets (call reason — 10 labels, outcome — 5, sentiment — 4, line
   of business — 6, disposition flags — 8) and 1 paragraph-level labelset (11 call-moment labels),
   applied automatically by two labeler agents, plus one two-operation ask agent that writes a
-  structured `call_analysis` and `call_metrics` JSON field per call.
+  structured `call_analysis` and `call_metrics` JSON field per call. Those are the *seeded*
+  definitions: the store they seed is editable in the product, and a labelset may hold up to 60
+  labels.
 - **Grounded chat:** `POST /api/v1/calls/{id}/ask` streams an NDJSON answer scoped with
   `resource_filters` to a single call, with citations enabled, and appends a `/predict/remi`
   answer-quality score to the stream once the answer completes.
+- **Live write verification:** `make smoke-write` (opt-in, `CALLS_ALLOW_LIVE_WRITE=1`) exercises
+  every write path against a real Knowledge Box through the product's own HTTP API — settings,
+  keys, labelsets, agents, upload, share links, retention preview and deletion — and removes
+  everything it created, leaving the seeded corpus untouched.

@@ -55,11 +55,34 @@ at 200 calls down to one fetch per call per cache window (D-CA-04).
 
 `PUT /labelset/{id}` (via `AragClient.putLabelset`) creates or replaces a labelset:
 `{title, color, multiple, kind: ["RESOURCES"|"PARAGRAPHS"], labels: [{title}]}`. This product
-pre-creates every labelset from `lib/domain/taxonomy.ts` (`provisionLabelsets`,
-`services/labelsets.ts`) so the facets carry stable, human titles and colors — a labeler agent
+pre-creates every labelset so the facets carry stable, human titles and colours — a labeler agent
 would otherwise auto-create the labelset itself, but only with its bare identifier (e.g.
 `call_reason`) as the title, which is why provisioning always creates labelsets *before* starting
 the agents.
+
+**The definitions come from the product's own store, not from the source tree.**
+`lib/domain/taxonomy.ts` seeds `DATA_DIR/taxonomy.json` the first time anything reads it;
+`labelsetDefs(rt)` (`services/taxonomy-store.ts`) is what `provisionLabelsets()` iterates, so a
+labelset created or edited in the product is what reaches the Knowledge Box (DECISIONS D-CA-37).
+There are three ways into `PUT /labelset/{id}`:
+
+| Product operation | Upstream effect |
+|---|---|
+| `POST /api/v1/labelsets` | Saves the definition and writes that one labelset upstream in the same request |
+| `PUT /api/v1/labelsets/{id}` | Replaces the definition and re-provisions it, so the store and the Knowledge Box cannot drift apart |
+| `POST /api/v1/labelsets/{id}/provision` | Writes one existing definition upstream, for when an earlier write failed |
+| `POST /api/v1/admin/provision` | Writes *every* definition in the store, then restarts the enabled agents |
+
+Each of these deletes the cached `labelsets:all` entry immediately. Without that, a labelset
+created a second ago reads back as "not provisioned" for the rest of the cache window and the
+Taxonomy screen contradicts the request that had just succeeded.
+
+Deleting is deliberately asymmetric. `DELETE /api/v1/labelsets/{id}` removes the definition from
+the product's vocabulary and leaves the Knowledge Box alone; `?knowledge_box=true` additionally
+calls `DELETE /labelset/{id}` upstream, which removes the labels already applied to analysed
+calls. Those labels are data, not configuration, so the upstream delete is never the default. The
+upstream call tolerates a 404 — a labelset the Knowledge Box never had is already in the state the
+caller asked for.
 
 ## Data-augmentation `labeler` (resource `on:1` and paragraph `on:0`)
 
@@ -79,6 +102,18 @@ Both are `POST /task/start` with `{name: "labeler", parameters: {name, on, opera
 {ident, description, multiple, labels}}], llm}}`. `ident` on a `label` operation *names* the
 labelset the agent writes into (auto-creating it if it doesn't already exist, hence provisioning
 labelsets first).
+
+**A labeler's `operations` array is derived, not stored.** `agentConfigs()`
+(`services/taxonomy-store.ts`) rebuilds it from the *current* labelsets on every read: the
+resource-level sets for `resource-labeler`, the paragraph-level ones for `paragraph-labeler`, each
+turned into a `label` operation whose `ident` is the labelset id, whose `description` is generated
+from the labelset's title and its `multiple` flag, and whose `labels[]` carry each label's own
+`description` and `examples`. Nothing in the store holds a second copy, which is what stops a
+labelset edit and the agent that applies it from drifting apart (DECISIONS D-CA-37).
+
+The same function applies the operator's own edits: `enabled: false` forces the task's `on`
+parameter to `0`, a `model` override replaces the `llm` block's model, and for the `ask` agent a
+`prompts` override replaces the `question` of the operation writing that destination field.
 
 ## `ask` agents writing `da-call_analysis-*`/`da-call_metrics-*`
 
@@ -132,6 +167,48 @@ and falls back to its own citation-coverage floor (`lib/confidence.ts`'s `derive
 (`app/api/v1/calls/{id}/media/route.ts`) forwards the client's `Range` header verbatim so the
 player can scrub without downloading the whole file, and passes through
 `content-type`/`content-range`/`accept-ranges`/`etag`/`last-modified` from the upstream response.
+
+## What the product controls upstream, and what it does not
+
+The line matters, because a settings screen that appears to change the Knowledge Box but does not
+is worse than one that admits the limit.
+
+**The product writes these upstream:**
+
+| Product action | ARAG call |
+|---|---|
+| Upload a call | `POST /resources`, then `POST /resource/{rid}/file/media/upload` |
+| Delete a call, or purge under retention | `DELETE /resource/{rid}` |
+| Create, edit or provision a labelset | `PUT /labelset/{id}` |
+| Delete a labelset with `?knowledge_box=true` | `DELETE /labelset/{id}` |
+| Start an agent, or re-provision | `POST /task/start` |
+| Stop an agent, or re-provision | `DELETE /task/{id}` |
+| Ask a question | `POST /ask`, then `POST /predict/remi` |
+| Search, list, read a call | `POST /find`, `POST /catalog`, `GET /resource/{rid}` |
+
+**The product does not control these, and the UI does not pretend otherwise:**
+
+- **Which Knowledge Box exists, or its plan, quota and zone.** Settings → Connection re-points the
+  client at a Knowledge Box that already exists; it does not create one. A `kbId`, a token and
+  either a region or a base URL must all resolve before the client is rebuilt at all — an
+  incomplete connection patch is stored and the existing client is left running.
+- **The generative model catalogue.** `generativeModel` is passed through to `/ask` and into every
+  agent's `llm` block. The product does not enumerate or validate the available models; an
+  unrecognised value fails upstream, not here. An empty value means "the Knowledge Box default".
+- **Task scheduling.** ARAG owns the running task. The product can start one, stop one, and read
+  the `configs`/`running`/`done` buckets — it cannot queue one, prioritise one, or run two of the
+  same operation type. This is why an agent edit takes effect on the *next* provision rather than
+  immediately, and why `POST /api/v1/agents/{key}/start` fails rather than queueing when a task of
+  that type is already running.
+- **Re-analysis of existing resources when the taxonomy changes.** Starting an agent runs it over
+  whatever is in the Knowledge Box at that moment; there is no upstream "re-label these specific
+  resources" call. A labelset edit therefore changes how *subsequent* runs classify, and existing
+  calls keep their old labels until an agent passes over them again.
+- **Labels already applied.** Removing a labelset from the product's vocabulary does not remove
+  the labels; removing it from the Knowledge Box does, irreversibly.
+- **Transcription itself.** ARAG decides when a resource moves `PENDING` → `PROCESSED` and when it
+  becomes searchable. The product polls; `ARAG_TIMEOUT_MS` (editable as `connection.timeoutMs`)
+  bounds a single request, not the transcription.
 
 ## Gotchas (the hard-won parts)
 

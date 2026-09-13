@@ -384,11 +384,35 @@ Responses:
 
 Auth: public
 
+
+### `GET /api/v1/shares`
+
+**Every share link this deployment has issued** — The whole register, across every call, so links can be reviewed and revoked from one place rather than only from the call they point at.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `call_id` | query | string |  |  |
+| `state` | query | string |  |  |
+
+Responses:
+
+- `200` Share links — `application/json` [ShareList](#sharelist)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
 ## Settings
 
 ### `GET /api/v1/settings`
 
-**Non-sensitive deployment settings for the in-product Settings area** — Branding, connection mode, limits, which features this deployment allows, and how many API keys are configured. Contains no secrets and no key material; the operator view with the full effective environment is `GET /api/v1/admin/config`.
+**Non-sensitive deployment settings for the in-product Settings area** — Branding, connection, limits, retention, which features this deployment allows, and how many API keys exist. Contains no secrets and no key material; the operator view with the full effective environment is `GET /api/v1/admin/config`.
 
 Responses:
 
@@ -402,11 +426,326 @@ Responses:
 
 Auth: public
 
+
+### `PUT /api/v1/settings/{section}`
+
+**Edit one section of the deployment settings** — Environment variables are *defaults*; this write is the authority. The patch is validated, persisted to the product's JSON store and applied to the running process, so the change is in force for the very next request without a restart. Colours and URLs go through the same grammar the boot-time reader uses, so a settings form is not a way past them. `connection.apiKey` is write-only: it is never returned by any read model, and an empty value leaves the stored credential alone.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `section` | path | string | yes |  |
+
+Request body (`application/json`): [SettingsUpdateRequest](#settingsupdaterequest)
+
+
+Responses:
+
+- `200` The settings after the edit — `application/json` [SettingsView](#settingsview)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+
+### `DELETE /api/v1/settings/{section}`
+
+**Restore one section to its environment defaults**
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `section` | path | string | yes |  |
+
+Responses:
+
+- `200` The settings after the reset — `application/json` [SettingsView](#settingsview)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+
+### `POST /api/v1/settings/logo`
+
+**Upload the partner logo** — Stores an SVG, PNG, JPEG or WebP under `DATA_DIR/branding/` and points `branding.logoUrl` at it, so a white-label deployment needs no image baked into the container and no volume edited by hand. The file is served by `GET /branding/{path}` with `Content-Security-Policy: sandbox`, because an SVG is a document.
+
+Request body (`multipart/form-data`): object
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `logo` | string | yes |  |
+
+Responses:
+
+- `200` The settings after the upload — `application/json` [SettingsView](#settingsview)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+
+### `DELETE /api/v1/settings/logo`
+
+**Remove the uploaded partner logo**
+
+Responses:
+
+- `200` The settings after the removal — `application/json` [SettingsView](#settingsview)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+## API keys
+
+### `GET /api/v1/api-keys`
+
+**Every API key this deployment has issued** — Names, previews, creation and last-used times, and whether each key is revoked. The key material is stored as a SHA-256 digest and is never returned — a leaked store grants nothing.
+
+Responses:
+
+- `200` API keys — `application/json` [ApiKeyList](#apikeylist)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+
+### `POST /api/v1/api-keys`
+
+**Issue a new API key** — Returns the key material **once**. It cannot be recovered afterwards; a key that is lost is revoked and reissued.
+
+Request body (`application/json`): [ApiKeyCreateRequest](#apikeycreaterequest)
+
+
+Responses:
+
+- `201` The new key, with its secret — `application/json` [ApiKeyCreated](#apikeycreated)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+
+### `PUT /api/v1/api-keys/{id}`
+
+**Rename an API key**
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Request body (`application/json`): [ApiKeyUpdateRequest](#apikeyupdaterequest)
+
+
+Responses:
+
+- `200` The renamed key — `application/json` [ApiKey](#apikey)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+
+### `DELETE /api/v1/api-keys/{id}`
+
+**Revoke an API key** — Revokes rather than deletes: the record of a key that once had access, and when it was last used, is exactly what an incident review needs.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Responses:
+
+- `200` The revoked key — `application/json` [ApiKey](#apikey)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+## Views
+
+### `GET /api/v1/views`
+
+**Saved views on the calls list**
+
+Responses:
+
+- `200` Saved views — `application/json` [SavedViewList](#savedviewlist)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `POST /api/v1/views`
+
+**Save the current calls-list filters as a named view** — A view is a name for a query string. It is stored on the server rather than in one browser, because a rota of supervisors reviewing the same queue should be looking at the same definition of it. The query is re-parsed through an allowlist on save. Like a share link this writes application state only and grants no access the read API does not already give, so it sits at read-level auth rather than behind the write credential.
+
+Request body (`application/json`): [SavedViewRequest](#savedviewrequest)
+
+
+Responses:
+
+- `201` The saved view — `application/json` [SavedView](#savedview)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `PUT /api/v1/views/{id}`
+
+**Rename a saved view or update its filters**
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Request body (`application/json`): [SavedViewRequest](#savedviewrequest)
+
+
+Responses:
+
+- `200` The updated view — `application/json` [SavedView](#savedview)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `DELETE /api/v1/views/{id}`
+
+**Delete a saved view**
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Responses:
+
+- `204` Deleted
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+## Retention
+
+### `GET /api/v1/retention/preview`
+
+**Which calls the retention policy would remove** — Always available, whether or not the policy is enabled, so an operator can see the consequence of a policy before saving it. `days=0` means no retention limit and returns no candidates — the destructive reading of a default-valued field is never the right one.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `days` | query | integer |  | Preview a policy other than the saved one. |
+
+Responses:
+
+- `200` What the policy would remove — `application/json` [PurgePreview](#purgepreview)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `POST /api/v1/retention/purge`
+
+**Delete the calls the retention policy covers** — Irreversible: the Knowledge Box resource, its recording and every label and analysis derived from it are removed. Share links pointing at a purged call are revoked in the same pass, so no live URL is left resolving to nothing. `dryRun` returns the same shape without deleting.
+
+Request body (`application/json`): [PurgeRequest](#purgerequest)
+
+
+Responses:
+
+- `200` What was removed — `application/json` [PurgeResult](#purgeresult)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
 ## Analytics
 
 ### `GET /api/v1/dashboard`
 
-**Aggregated analytics across every analysed call**
+**Aggregated analytics across a date window** — Named windows are resolved on the server and snapped to whole UTC days, so a link reproduces the dashboard the sender saw and two people opening it four minutes apart share one cache entry. `from`/`to` override `range`.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `range` | query | string |  |  |
+| `from` | query | string |  | Inclusive ISO-8601 lower bound. |
+| `to` | query | string |  | Inclusive ISO-8601 upper bound. |
 
 Responses:
 
@@ -428,23 +767,6 @@ Auth: public
 Responses:
 
 - `200` Taxonomy — `application/json` [TaxonomyView](#taxonomyview)
-- `400` Validation failed — `application/problem+json` [Problem](#problem)
-- `401` Authentication required — `application/problem+json` [Problem](#problem)
-- `403` Forbidden — `application/problem+json` [Problem](#problem)
-- `404` Not found — `application/problem+json` [Problem](#problem)
-- `429` Rate limited — `application/problem+json` [Problem](#problem)
-- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
-
-Auth: public
-
-
-### `GET /api/v1/labelsets`
-
-**List the Knowledge Box labelsets used as filter facets**
-
-Responses:
-
-- `200` Labelsets — `application/json` object
 - `400` Validation failed — `application/problem+json` [Problem](#problem)
 - `401` Authentication required — `application/problem+json` [Problem](#problem)
 - `403` Forbidden — `application/problem+json` [Problem](#problem)
@@ -511,6 +833,229 @@ Responses:
 
 Auth: ApiKey or AdminToken
 
+## Taxonomy
+
+### `GET /api/v1/labelsets`
+
+**List the Knowledge Box labelsets used as filter facets**
+
+Responses:
+
+- `200` Labelsets — `application/json` object
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `POST /api/v1/labelsets`
+
+**Define a new labelset** — The shipped health-insurance taxonomy is a default, not a constraint: a partner classifying utility calls needs different reasons and different outcomes, and forking the repo to get them is the difference between a product and a sample. Creating a labelset also writes it to the Knowledge Box, so the labeler agent can apply it on the next run.
+
+Request body (`application/json`): [LabelsetDefinition](#labelsetdefinition)
+
+
+Responses:
+
+- `201` The labelset, and whether it reached the Knowledge Box — `application/json` [LabelsetWriteResult](#labelsetwriteresult)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
+### `GET /api/v1/labelsets/{id}`
+
+**One labelset definition**
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Responses:
+
+- `200` The labelset — `application/json` [LabelsetDefinition](#labelsetdefinition)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `PUT /api/v1/labelsets/{id}`
+
+**Replace a labelset definition** — The path id always wins over a body id: renaming it would orphan every label already applied in the Knowledge Box under the old one. Saving also re-provisions the labelset, so the definition and the Knowledge Box cannot drift apart.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Request body (`application/json`): [LabelsetDefinition](#labelsetdefinition)
+
+
+Responses:
+
+- `200` The saved labelset — `application/json` [LabelsetWriteResult](#labelsetwriteresult)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
+### `DELETE /api/v1/labelsets/{id}`
+
+**Remove a labelset from the taxonomy** — Removes it from the product's vocabulary. Whether the Knowledge Box also drops it is an explicit second choice (`?knowledge_box=true`), because the labels already applied to analysed calls are data, not configuration.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+| `knowledge_box` | query | boolean |  | Also delete the labelset — and the labels applied with it — from the Knowledge Box. |
+
+Responses:
+
+- `204` Deleted
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
+### `POST /api/v1/labelsets/{id}/provision`
+
+**Write one labelset to the Knowledge Box**
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Responses:
+
+- `200` Provisioned — `application/json` [LabelsetWriteResult](#labelsetwriteresult)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
+### `GET /api/v1/agents`
+
+**The data-augmentation agents, their configuration and their live state** — The labeler agents' operations are derived from the current labelsets rather than stored separately, which is what keeps a labelset edit and the agent that applies it from drifting apart.
+
+Responses:
+
+- `200` Agents — `application/json` [AgentList](#agentlist)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: public
+
+
+### `PUT /api/v1/agents/{key}`
+
+**Enable, disable or re-instruct an agent** — `enabled` decides whether provisioning starts the agent at all; `prompts` replaces the instruction for one of the agent's outputs, keyed by the resource field it writes. A change takes effect on the next provision — the Knowledge Box holds the running task, and rewriting an agent under a task that is mid-run is how you get half a corpus labelled two different ways.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `key` | path | string | yes |  |
+
+Request body (`application/json`): [AgentUpdateRequest](#agentupdaterequest)
+
+
+Responses:
+
+- `200` The agent after the edit — `application/json` [AgentConfig](#agentconfig)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
+### `DELETE /api/v1/agents/{key}`
+
+**Stop an agent's Knowledge Box task**
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `key` | path | string | yes |  |
+
+Responses:
+
+- `200` The agent after stopping — `application/json` [AgentConfig](#agentconfig)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
+### `POST /api/v1/agents/{key}/start`
+
+**Start one agent against the Knowledge Box** — ARAG allows exactly one running task per operation type, so starting an agent that already has one fails rather than silently queueing a second.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `key` | path | string | yes |  |
+
+Responses:
+
+- `200` The agent after starting — `application/json` [AgentConfig](#agentconfig)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
 ## Jobs
 
 ### `GET /api/v1/jobs`
@@ -559,6 +1104,30 @@ Responses:
 - `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
 
 Auth: public
+
+
+### `DELETE /api/v1/jobs/{id}`
+
+**Cancel a queued or running job** — Signals the job's abort controller and marks it cancelled. Work already committed upstream is not rolled back — a cancelled ingestion leaves the Knowledge Box resource it had already created, which the call list then shows as incomplete rather than pretending it never existed. A job that has already finished returns 409.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Responses:
+
+- `200` The cancelled job — `application/json` [Job](#job)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `409` The job had already finished — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
 
 
 ### `GET /api/v1/jobs/{id}/events`
@@ -726,6 +1295,30 @@ Request body (`application/json`): [ProvisionRequest](#provisionrequest)
 Responses:
 
 - `202` Provisioning job accepted — `application/json` [Job](#job)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+
+### `GET /api/v1/admin/audit`
+
+**Who changed what, and when** — Every settings edit, key issue or revocation, taxonomy change and purge, with the actor and the values that changed. Secrets are reduced to `true`: an audit trail that quotes the credential is a second place to leak it.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `action` | query | string |  |  |
+| `limit` | query | integer |  |  |
+
+Responses:
+
+- `200` Audit records — `application/json` [AuditPage](#auditpage)
 - `400` Validation failed — `application/problem+json` [Problem](#problem)
 - `401` Authentication required — `application/problem+json` [Problem](#problem)
 - `403` Forbidden — `application/problem+json` [Problem](#problem)
@@ -1119,9 +1712,192 @@ Non-sensitive deployment settings for the in-product Settings area. Contains no 
 | `branding` | [Branding](#branding) | yes |  |
 | `connection` | object | yes |  |
 | `limits` | object | yes |  |
+| `retention` | object |  |  |
+| `overridden` | array of string |  | Sections the settings store is currently overriding the environment for. |
 | `features` | object | yes | What this deployment allows: uploads, deletes, admin panel, API-key auth. |
 | `apiKeys` | object |  |  |
 | `taxonomy` | object |  |  |
+
+### SettingsUpdateRequest
+
+A patch for one settings section. Only the keys present are changed; the rest of the section keeps its current value. Unknown keys are rejected so a typo in a partner's automation fails loudly instead of silently doing nothing.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `productName` | string |  |  |
+| `tagline` | string |  |  |
+| `footerText` | string |  |  |
+| `poweredBy` | boolean |  |  |
+| `primaryColor` | string |  |  |
+| `accentColor` | string |  |  |
+| `logoUrl` | string |  |  |
+| `docsUrl` | string |  |  |
+| `supportUrl` | string |  |  |
+| `kbId` | string |  |  |
+| `region` | string |  |  |
+| `baseUrl` | string |  |  |
+| `generativeModel` | string |  |  |
+| `reranker` | string (`predict`, `noop`, ``) |  |  |
+| `timeoutMs` | integer |  |  |
+| `apiKey` | string |  | Write-only. An empty string leaves the stored credential untouched. |
+| `maxQuestionChars` | integer |  |  |
+| `maxUploadBytes` | integer |  |  |
+| `rateLimitRps` | integer |  |  |
+| `rateLimitBurst` | integer |  |  |
+| `cacheTtlMs` | integer |  |  |
+| `days` | integer |  |  |
+| `enabled` | boolean |  |  |
+
+### ApiKey
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `name` | string | yes |  |
+| `preview` | string | yes | `ca_live_` plus the first 8 characters. The key itself is stored hashed and is never returned after creation. |
+| `createdISO` | string | yes |  |
+| `lastUsedISO` | string |  | Recorded at most once a minute per key. |
+| `revoked` | boolean | yes |  |
+| `fromEnv` | boolean | yes | Imported from the `API_KEYS` seed. |
+| `createdBy` | string |  |  |
+
+### ApiKeyList
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `items` | array of [ApiKey](#apikey) | yes |  |
+
+### ApiKeyCreateRequest
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes |  |
+
+### ApiKeyCreated
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | [ApiKey](#apikey) | yes |  |
+| `secret` | string | yes | The key material, returned exactly once. It cannot be recovered afterwards. |
+
+### ApiKeyUpdateRequest
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes |  |
+
+### LabelsetDefinition
+
+A labelset as the product defines it: the vocabulary the labeler agent is told to apply.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | Stable identifier; also the Knowledge Box labelset id. Never changes after creation. |
+| `title` | string | yes |  |
+| `color` | string |  |  |
+| `multiple` | boolean |  | May several labels from this set apply to one call? |
+| `kind` | string (`RESOURCES`, `PARAGRAPHS`) |  |  |
+| `labels` | array of object | yes |  |
+
+### LabelsetWriteResult
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `labelset` | [LabelsetDefinition](#labelsetdefinition) | yes |  |
+| `provisioned` | boolean | yes | The Knowledge Box was updated in the same request. |
+| `provisionError` | string |  | Set when the definition was saved but the Knowledge Box write failed. |
+
+### AgentConfig
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `key` | string | yes |  |
+| `type` | string (`labeler`, `ask`) | yes |  |
+| `description` | string | yes |  |
+| `enabled` | boolean | yes |  |
+| `model` | string |  |  |
+| `state` | string (`running`, `completed`, `failed`, `configured`, `absent`) |  |  |
+| `taskId` | string |  |  |
+| `operations` | integer |  |  |
+| `prompts` | object |  | Editable instructions, keyed by the resource field the operation writes. |
+| `labelsets` | array of string |  | Labelsets this agent applies (labeler agents only). Derived from the taxonomy. |
+
+### AgentList
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `items` | array of [AgentConfig](#agentconfig) | yes |  |
+
+### AgentUpdateRequest
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean |  |  |
+| `description` | string |  |  |
+| `model` | string |  |  |
+| `prompts` | object |  |  |
+
+### SavedView
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes |  |
+| `name` | string | yes |  |
+| `query` | string | yes | Normalised calls-list query string, without the leading `?`. |
+| `href` | string | yes |  |
+| `description` | string |  |  |
+| `createdISO` | string | yes |  |
+| `createdBy` | string |  |  |
+
+### SavedViewList
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `items` | array of [SavedView](#savedview) | yes |  |
+
+### SavedViewRequest
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes |  |
+| `query` | string | yes |  |
+| `description` | string |  |  |
+
+### PurgePreview
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `days` | integer | yes |  |
+| `enabled` | boolean | yes |  |
+| `cutoffISO` | string | yes |  |
+| `total` | integer | yes |  |
+| `retained` | integer | yes |  |
+| `candidates` | array of object | yes |  |
+
+### PurgeRequest
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `days` | integer |  | Override the saved policy for this run. |
+| `dryRun` | boolean |  | Report what would be deleted without deleting it. |
+| `ids` | array of string |  |  |
+
+### PurgeResult
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `days` | integer | yes |  |
+| `cutoffISO` | string | yes |  |
+| `deleted` | array of string | yes |  |
+| `failed` | array of object | yes |  |
+| `sharesRevoked` | integer |  |  |
+| `dryRun` | boolean | yes |  |
+
+### AuditPage
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `items` | array of object | yes |  |
 
 ### CallCreateAccepted
 

@@ -5,6 +5,68 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added — full-implementation pass (13 September 2026)
+
+- **Every setting is editable in the product.** `PUT /api/v1/settings/{section}` and
+  `DELETE /api/v1/settings/{section}` (branding, connection, limits, retention) persist to
+  `DATA_DIR/settings.json` and apply to the running process without a restart; environment
+  variables become *defaults* the store overrides, and "Reset to environment default" restores the
+  value the deployment booted with. `POST/DELETE /api/v1/settings/logo` uploads and removes a
+  partner logo. The service-account token is write-only — set once, then "set · rotate", never
+  returned by any read model.
+- **A real API-key store** replacing the `API_KEYS` placeholder: `GET/POST /api/v1/api-keys`,
+  `PUT/DELETE /api/v1/api-keys/{id}`. Keys are stored as SHA-256 digests, shown once on creation,
+  carry a name and a last-used time, and are revoked rather than deleted. `API_KEYS` becomes a
+  one-time seed, so an environment-configured deployment keeps working and gains management.
+- **Editable taxonomy.** `POST /api/v1/labelsets`, `GET/PUT/DELETE /api/v1/labelsets/{id}` and
+  `POST /api/v1/labelsets/{id}/provision` make the labelset vocabulary a product feature rather
+  than a source file. Deleting from the Knowledge Box — which removes labels already applied to
+  analysed calls — is an explicit, separate choice.
+- **Editable agents.** `GET /api/v1/agents`, `PUT/DELETE /api/v1/agents/{key}` and
+  `POST /api/v1/agents/{key}/start` enable, disable, re-instruct, start and stop the
+  data-augmentation agents. The labeler agents' operations are derived from the current labelsets,
+  so a labelset edit and the agent that applies it cannot drift apart.
+- **Job cancellation** — `DELETE /api/v1/jobs/{id}`, with a Cancel action in the operator's Jobs
+  screen and on a processing call in the list.
+- **Dashboard date-range scoping** — `?range=7d|30d|90d|12m|all` or explicit `from`/`to` on
+  `GET /api/v1/dashboard`, with a range control on the dashboard and the window carried into every
+  drill-through so the list always agrees with the chart.
+- **Saved views** (`GET/POST /api/v1/views`, `PUT/DELETE /api/v1/views/{id}`), a **column picker**
+  and a **density toggle** on the calls table. Views are shared server-side state; column and
+  density choices are per-browser preferences.
+- **Share-link management in Settings** — `GET /api/v1/shares` lists the whole register across
+  every call, filterable by state and revocable from one place.
+- **Retention and purge** — `GET /api/v1/retention/preview` and `POST /api/v1/retention/purge`
+  (admin, irreversible, `dryRun` supported). There is no background sweeper: a policy is recorded
+  and previewed, and nothing is deleted until someone asks.
+- **An in-product API explorer** at `/api`, generated from the served OpenAPI document, covering
+  every `/api/v1` operation with parameters, schemas, a try-it form, the live response and a
+  copyable curl.
+- **An audit trail** — `GET /api/v1/admin/audit` and an Audit screen in the operator console,
+  recording who changed what and when, with secrets reduced to a boolean.
+- `make smoke-write` — an opt-in live **write** check that exercises upload, provisioning,
+  labelset and agent edits, share links and deletion against the real Knowledge Box, and removes
+  everything it created.
+
+### Changed
+
+- **arag-platform v0.2.0.** The application chrome is now the kit's (`.arag-app`, `.arag-appband`,
+  `.arag-rail` in the `rail="light"` family, `.arag-railnav`, `.arag-main`, `.arag-content`,
+  `.arag-statstrip`, `.arag-skeleton`, `.arag-breadcrumb`, `.arag-pagehead`). 15 of the 24 local
+  blocks in `public/ui-ext.css` and the whole "kit compatibility fixes" block are deleted; what
+  remains is this product's own — the moments track, the lifecycle dot, the ingest stepper, the
+  white-label reveal and the provenance line, all now `.ca-`-prefixed. The official wordmarks are
+  served from `public/ui/brand/`.
+- **The calls list no longer stalls after a dashboard drill-through.** The dashboard aggregate is
+  no longer cached under a key of its own — it was stamped later than the per-call summaries it was
+  built from, so the dashboard could render instantly while re-warming nothing and leave the next
+  screen to pay the whole cold load. The catalog and per-call summary reads are now served
+  stale-while-revalidating, `/calls` has its own loading boundary, and the dashboard's
+  drill-through links no longer prefetch.
+- The recording size cap is a setting (`CALLS_MAX_UPLOAD_BYTES`, editable in Settings → Limits)
+  rather than a constant.
+
+
 ### Added
 
 - **White-labelling.** `BRAND_PRODUCT_NAME`, `BRAND_TAGLINE`, `BRAND_LOGO_URL`,

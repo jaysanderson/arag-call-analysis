@@ -33,7 +33,14 @@ Open:
 - **http://localhost:3000/upload** — drop a recording or paste a transcript and watch the ingest
   job's own progress stream.
 - **http://localhost:3000/taxonomy** — the labelsets and the three data-augmentation agents, with
-  their live provisioning state.
+  their live provisioning state, and editable: create, edit, delete and provision a labelset;
+  enable, disable, re-instruct, start and stop an agent.
+- **http://localhost:3000/api** — the in-product API explorer: every operation in the served
+  OpenAPI document, grouped by tag, with its parameters, schemas, a try-it form against this
+  deployment and a copyable curl.
+- **http://localhost:3000/settings** — connection, branding, limits, retention, API keys, share
+  links, saved views, usage and about. Every value here is editable and persists (see
+  [Configuration is editable](#configuration-is-editable), below).
 - **http://localhost:3000/admin** — sign in with the dev admin token. `make dev` sets
   `ADMIN_TOKEN=dev-admin-token` automatically when it falls back to mock mode (override with
   `ADMIN_TOKEN=... make dev`).
@@ -102,14 +109,100 @@ The demo UI itself never needs a key: it exchanges a session cookie via `POST /a
 which is enough for reads. See
 [Examples](examples.md) for a full walkthrough of every endpoint.
 
+## Configuration is editable
+
+Environment variables are **defaults**; the settings store is the **authority**. Every value this
+product reads from configuration — branding, Knowledge Box connection, limits, retention — is
+editable at `PUT /api/v1/settings/{section}` and in **Settings**, is persisted to
+`DATA_DIR/settings.json`, and is in force for the very next request with no restart. Once a
+section has been edited the store wins over the environment; `DELETE /api/v1/settings/{section}`
+("Reset to environment default" in the UI) restores the values the deployment booted with.
+
+The four sections are `branding`, `connection`, `limits` and `retention`. The body is a *patch*:
+only the keys present are changed, and an unrecognised key is rejected rather than silently
+ignored. Both writes require the admin token (`auth: "admin"`); the read, `GET /api/v1/settings`,
+is public and carries no secrets.
+
+```bash
+# What this deployment is running with
+curl -s "$BASE/api/v1/settings" | jq '{limits, retention, overridden}'
+
+# Edit one field of one section — the response is the full settings view after the edit
+curl -s -X PUT "$BASE/api/v1/settings/limits" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"maxQuestionChars":800}' | jq '.limits'
+
+# The next request already sees it; no restart, no redeploy
+curl -s "$BASE/api/v1/settings" | jq '.limits.maxQuestionChars, .overridden'
+
+# Put the whole section back to what the environment supplied
+curl -s -X DELETE "$BASE/api/v1/settings/limits" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq '.limits.maxQuestionChars'
+```
+
+Secrets are the exception and are **write-only**. `connection.apiKey` (the ARAG service-account
+token) is accepted by the write and never returned by any read model — the UI shows "set ·
+rotate", and an empty string means "leave it alone", not "clear it". The audit trail
+(`GET /api/v1/admin/audit`) records the change with the value reduced to `true`.
+
+The full mechanism, including why "no restart" is true, is in
+[White-labelling](white-label.md#the-settings-model), [Extension
+points](extension-points.md#the-settings-model-environment-defaults-store-authority) and
+[Architecture](../architecture/architecture.md).
+
+## API keys
+
+`API_KEYS` is a one-time **seed**, not the mechanism. On first boot each comma-separated value is
+imported into the key store as a managed key named "Environment key N"; from then on keys are
+issued, named and revoked in the product. Keys are stored as SHA-256 digests and the material is
+returned exactly once, on creation.
+
+```bash
+curl -s -X POST "$BASE/api/v1/api-keys" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Reporting pipeline"}' | jq
+```
+
+```json
+{
+  "key": {
+    "id": "3f0b…",
+    "name": "Reporting pipeline",
+    "preview": "ca_live_Qx7mB2Zt…",
+    "createdISO": "2026-09-13T09:14:22.031Z",
+    "revoked": false,
+    "fromEnv": false
+  },
+  "secret": "ca_live_Qx7mB2Zt9f…"
+}
+```
+
+Copy `secret` now — it cannot be recovered. A caller presents it as either header:
+
+```bash
+curl -s -H "X-API-Key: $KEY" "$BASE/api/v1/calls?page_size=1"
+curl -s -H "Authorization: Bearer $KEY" "$BASE/api/v1/calls?page_size=1"
+```
+
+`GET/POST /api/v1/api-keys` and `PUT/DELETE /api/v1/api-keys/{id}` are operator-only. Revoking
+(`DELETE`) marks the row revoked rather than deleting it, so the record of what a key could reach
+and when it was last used survives.
+
 ## Interactive API docs
 
+- **`/api`** — the in-product API explorer. It fetches `/api/v1/openapi.json` from the running
+  deployment and renders every operation grouped by tag, with parameters, schemas, a try-it form
+  that calls the live endpoint with your session or a pasted key, the response, and a copyable
+  curl. Because it is generated from the served document, an operation added to the spec appears
+  here with no further code change. Destructive operations take a second click.
 - `GET /api/v1/openapi.json` — the OpenAPI 3.1 document (the single source of truth; authored in
   `lib/openapi.ts`).
 - `GET /api/v1/docs` — Redoc, read-only reference.
 - `GET /api/v1/swagger` — Swagger UI with try-it-out.
 
-All three are public and unauthenticated even when `API_KEYS`/`ADMIN_TOKEN` are set.
+The three documents are public and unauthenticated even when `API_KEYS`/`ADMIN_TOKEN` are set.
 
 ## Next
 

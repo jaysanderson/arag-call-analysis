@@ -45,11 +45,51 @@ reduce redundant ARAG round-trips rather than add cost of its own; see
 [Scaling](../architecture/scaling.md) for how the caching changed the ARAG-call profile.
 
 **Can it use my own taxonomy — different labels, different industry?**
-Yes. The entire label set and the analysis/metrics prompts live in one file,
-`lib/domain/taxonomy.ts` — nothing about the labeling or analysis pipeline is hardcoded to health
-insurance. Change the labelsets, the prompts, or add an entirely new data-augmentation agent, then
-re-provision (`POST /api/v1/admin/provision` or the "Re-provision" button in `/admin/agents`) to
-apply it. See [Extension points](../developer/extension-points.md#change-the-taxonomy).
+Yes, and without touching the code. **Agents & Taxonomy** (`/taxonomy`) is an editor: create a
+labelset, give it labels, write the description the agent reads when deciding to apply each one,
+and save — the labelset is written to the Knowledge Box in the same action. Editing one
+re-provisions it. The shipped health-insurance vocabulary is a default, not a constraint. The
+analysis and metrics prompts the `call-insights` agent uses are editable text on the same screen.
+Changing the source file (`lib/domain/taxonomy.ts`) is still possible and is what a *fresh*
+deployment is seeded from, but it is no longer how you adapt a running one. See
+[Extension points](../developer/extension-points.md#change-the-taxonomy).
+
+**Can I change the product's settings without a redeploy?**
+Yes — that is the rule the product is built around. Environment variables set what a deployment
+*starts* with; from then on the settings store is the authority. Branding, the Knowledge Box
+connection, the limits and the retention policy are all edited in **Settings**, persist, and take
+effect on the very next request with no restart. "Reset to environment default" puts a whole
+section back to what the deployment booted with. The one thing that never reads back is a secret:
+the service-account credential can be set or rotated, and is then shown only as "set · rotate".
+
+**Who can change settings, and is there a record?**
+Settings edits, API-key management and the retention purge are operator-only — they change the
+deployment for everyone, so they sit behind the admin sign-in. Editing a labelset or an agent, by
+contrast, changes what the product classifies with and needs only the product's write credential.
+Every change is written to an audit trail (**Admin → Audit**) recording who did it, what changed
+and when, with any secret value reduced to a yes/no.
+
+**How do we give another system access to the data?**
+Issue an API key in **Settings → API keys**. The key is shown once, at creation — the product
+stores only a one-way digest of it, so it physically cannot show it again; a lost key is revoked
+and reissued. Keys carry a name, a creation time and a last-used time, and revoking one keeps the
+record of what it could reach rather than erasing it. A caller presents the key as an `X-API-Key`
+header or as a bearer token.
+
+**Is there an automatic retention/deletion policy?**
+There is a retention policy, and it is deliberately not automatic. You set a number of days, and
+the product shows you exactly which calls that policy covers — before you save it. Deleting
+happens when an operator runs the purge (or when something calls the purge endpoint on a
+schedule). There is no background sweeper: a timer quietly removing a partner's recordings
+unattended is the failure mode this design avoids. A purge is irreversible, removes the Knowledge
+Box resource and everything derived from it, and revokes any live share link pointing at a purged
+call in the same pass.
+
+**Can I see and try the API without leaving the product?**
+Yes — the **API** section lists every operation this deployment declares, grouped by tag, with its
+parameters and schemas, a form that calls the live endpoint, the response, and a copyable curl
+command. It is generated from the deployment's own OpenAPI document rather than hand-maintained,
+so it cannot describe an API the deployment does not actually serve.
 
 **What languages does it support?**
 Transcription and language support are governed by ARAG's own transcription and generative
@@ -103,6 +143,13 @@ those ids don't already exist for another purpose in your Knowledge Box, this pr
 alongside whatever else is there without conflict. It's still recommended to use a dedicated
 Knowledge Box for a production deployment, both for this reason and because agent runs and catalog
 walks operate over every resource in the box, not just this product's calls.
+
+**Can two people share a filtered view of the calls list?**
+Yes. A filter stack can be saved as a named **view**, which is stored on the server and visible to
+everyone who uses the deployment — a rota of supervisors reviewing the same queue all see the same
+definition of it. Which columns are shown and how tightly rows are packed are *not* shared: they
+are each person's own preference, kept in their browser, so a link someone sends carries the
+question rather than the sender's taste in row heights.
 
 **Where do I go to actually try it, or to see everything the admin console exposes?**
 [Demo walkthrough](walkthrough-demo.md) and [Admin walkthrough](walkthrough-admin.md) are

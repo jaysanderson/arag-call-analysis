@@ -10,6 +10,13 @@
 - **You want a defensible, cited answer to a specific question about one call**, fast — "did the
   agent disclose X," "was the member's issue resolved" — with a way to jump straight to the
   moment in the recording that supports the answer, rather than trusting an unsourced summary.
+- **Your call taxonomy is not ours.** The shipped health-insurance vocabulary is a default, not a
+  constraint: labelsets, their labels and the instructions the agents read are created and edited
+  in the product, so a utility, telecoms or IT-support contact centre adapts it without a fork or
+  an engineer.
+- **A partner needs to ship it under their own identity.** Name, logo, colours, footer and credits
+  are edited in the product and take effect immediately — see
+  [White-labelling](../developer/white-label.md).
 - **Your organization already uses (or is willing to run) Progress Agentic RAG.** This product is
   a purpose-built application layer on ARAG, not a standalone analytics engine — see
   [Overview](overview.md#how-its-built).
@@ -17,6 +24,8 @@
   authentication or per-call authorization (see
   [Security model](../architecture/security-model.md#known-mvp-limitations)) — everyone who can
   reach the deployment (and hold the right API key, if configured) can see every call in it.
+  Configuration changes are a separate matter: those are operator-only, behind the admin sign-in,
+  and audited.
 
 ## Poor fit
 
@@ -29,6 +38,16 @@
   Knowledge Box catalog up to 500 resources and holds its read cache and rate limiter in one
   process; see [Scaling](../architecture/scaling.md) for what changes at 10x/100x before it fits
   a very large deployment.
+- **A horizontally scaled, multi-machine deployment, as it stands.** Each machine keeps its own
+  settings, API keys, taxonomy edits, saved views and audit trail in its own `DATA_DIR`, so a
+  change made on one machine does not reach the others unless that volume is shared — and even
+  then it is applied in memory, so the other machines pick it up only on restart. This is a real
+  operational constraint, not a performance note; see
+  [Scaling](../architecture/scaling.md#the-multi-machine-constraint-that-is-not-about-caching).
+- **Unattended, automatic deletion of old recordings.** Retention is a recorded policy with a
+  preview, and a purge that runs only when a person or a scheduler asks for it. There is no
+  background sweeper, deliberately. If your requirement is "this must happen without anyone doing
+  anything", point a scheduler at the purge endpoint.
 - **Regulatory environments requiring on-premises-only processing of every artifact**, unless your
   ARAG deployment itself satisfies that requirement — this product's own infrastructure footprint
   is minimal (Next.js + a small job store), but it is a thin layer over ARAG, and ARAG's own
@@ -47,6 +66,8 @@
 - **A generic transcription-plus-keyword-search tool** — cheaper and simpler, but without the
   structured labels, generated scorecards, or grounded-with-citations chat this product adds on
   top of raw transcripts.
-- **Build it yourself directly on ARAG** — this product's own architecture and taxonomy
-  (`lib/domain/taxonomy.ts`) are a fully documented, working reference for exactly that; see
+- **Build it yourself directly on ARAG** — this product's own architecture and its taxonomy
+  pattern are a fully documented, working reference for exactly that; see
   [Extension points](../developer/extension-points.md) if that's the direction you want to take.
+  Note that adapting the vocabulary is no longer a reason to fork: labelsets and agent
+  instructions are edited in the product.

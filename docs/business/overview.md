@@ -38,7 +38,43 @@ review:
 - **A searchable, filterable table of every call** — search, facet filters with live counts,
   sortable columns and a lifecycle status (queued, transcribing, labelling, partly analysed,
   analysed, failed) for every call, with every filter kept in the page's address so a view can be
-  shared or bookmarked.
+  shared or bookmarked. A filter stack worth returning to can be **saved as a named view**, shared
+  with everyone who uses the deployment; which columns are shown, and how tightly the rows are
+  packed, is each person's own preference.
+- **A dashboard scoped to a date window** — the last 7, 30 or 90 days, the last 12 months, all
+  time, or an explicit range. The window follows every drill-through, so the list always agrees
+  with the chart that led to it.
+
+## It is configurable in the product, not in a config file
+
+Everything this product reads from configuration is editable by an operator inside it, and takes
+effect immediately — no redeploy, no engineer, no file on a server:
+
+- **The identity.** Product name, tagline, logo (uploaded through the product), colours, footer
+  line, the "powered by" credit and the docs and support links.
+- **The connection.** Which Knowledge Box the deployment uses, which generative model and
+  reranker, and the request timeout. The service-account credential can be rotated but never read
+  back.
+- **The limits.** Maximum upload size, maximum question length, the rate limit, and how long reads
+  are cached.
+- **The vocabulary.** The labelsets every call is classified against — their labels, the
+  descriptions the agent reads when deciding to apply them, and their examples — are created and
+  edited in the product. The shipped health-insurance taxonomy is a starting point, not a
+  constraint: a partner classifying utility calls writes their own.
+- **The agents.** Each data-augmentation agent can be enabled, disabled, started, stopped and
+  re-instructed; the prompts that produce the narrative analysis and the metrics are editable text.
+- **Retention.** A policy in days, with a preview of exactly which calls it would remove, and a
+  purge that runs only when someone asks for it.
+- **Access.** API keys are issued, named and revoked in the product; share links are listed and
+  revoked from one place.
+
+Environment variables set what a deployment *starts* with. After that the product is the
+authority, and "Reset to environment default" puts a section back. Every change is recorded in an
+audit trail with who made it, what changed and when.
+
+Everything the product does through its own screens it does through a documented API, and that API
+is browsable and callable from inside the product itself under **API** — every operation, its
+parameters, a form that calls it against this deployment, and a copyable command line.
 
 ## What it is not
 

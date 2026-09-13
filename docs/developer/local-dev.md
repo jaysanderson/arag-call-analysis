@@ -5,9 +5,15 @@
 ```
 app/                     Next.js App Router
   page.tsx                Dashboard (server component, calls services/dashboard.ts directly)
-  calls/page.tsx           Category rails + filterable call list (client component over /api/v1)
-  calls/[id]/page.tsx      Call detail (server component over services/calls.ts)
-  admin/                   Admin panel pages (client components over /api/v1/admin/*)
+  calls/page.tsx           Calls table + category-rail browse (client component over /api/v1)
+  calls/[id]/page.tsx      Call workspace (server component over services/calls.ts)
+  upload/, welcome/        Ingest flow + ingest history; first-run onboarding
+  taxonomy/page.tsx        Agents & Taxonomy — labelset and agent editing
+  settings/page.tsx        Settings, one tab per section (?tab=…)
+  api/page.tsx             The in-product API explorer (renders /api/v1/openapi.json)
+  s/[token]/page.tsx       The read-only share-link view
+  branding/[...path]/      Serves an uploaded partner logo from DATA_DIR/branding/
+  admin/                   Operator console pages (client components over /api/v1/admin/*)
   api/v1/                  Every public route handler (one route.ts per resource)
   healthz/, readyz/        Liveness / readiness (used by Fly and Playwright's webServer probe)
 lib/
@@ -21,13 +27,21 @@ lib/
   domain/taxonomy.ts         Labelsets + the three data-augmentation agent definitions
   domain/scenarios.ts        The 24 synthetic demo call scripts
 services/                  Domain logic — the one place both the API and server components call
-  calls.ts, ask.ts, dashboard.ts, jobs.ts, admin.ts, agents.ts, labelsets.ts, cache.ts
+  calls.ts, ask.ts, dashboard.ts, jobs.ts, admin.ts, agents.ts, labelsets.ts, cache.ts,
+  export.ts, onboarding.ts, shares.ts
+  config.ts                The settings store: validate, persist, apply to the runtime, audit
+  settings.ts              The in-product Settings read model (no secrets)
+  apikeys.ts               The hashed API-key store (SHA-256 digests; API_KEYS is a seed)
+  taxonomy-store.ts        Editable labelsets + agent overrides (seeded from lib/domain/taxonomy.ts)
+  views.ts                 Saved views on the calls list
+  retention.ts             Retention preview and purge (no background sweeper)
 components/               React components (client, except where noted above)
-scripts/                  Thin CLIs over the public API (provision, ingest, reset, gen-media, smoke)
+scripts/                  Thin CLIs over the public API (provision, ingest, reset, gen-media,
+                          smoke, smoke-write)
 vendor/arag-platform/     Vendored platform (App, AragClient, JobManager, Store, Logger, ...) — never edited in place
 test/                     unit/, integration/, contract/, e2e/
 docs/                     This documentation tree
-data/                     DATA_DIR default — job records (gitignored)
+data/                     DATA_DIR default — one JSON file per collection, plus branding/ (gitignored)
 ```
 
 ## bun, never npm
@@ -61,10 +75,12 @@ Run `make help` for the live list. The full set, from the `Makefile`:
 | `make lint` | `biome check .` |
 | `make format` | `biome format --write .` |
 | `make typecheck` | `tsc --noEmit -p tsconfig.json` |
-| `make check` | lint + typecheck + coverage |
+| `make audit` | Dependency audit (`scripts/audit.ts --level high`); fails on un-waived high/critical advisories |
+| `make check` | lint + typecheck + audit + coverage |
 | `make docs` | Regenerate `docs/developer/api-reference.md` from `lib/openapi.ts` |
 | `make showcase` | Record the showcase walkthrough into `showcase/out` |
 | `make smoke` | Opt-in, read-only live check against the real Knowledge Box |
+| `make smoke-write` | Opt-in live **write** check against the real Knowledge Box (see below) |
 | `make docker` | `docker build` the container image |
 | `make fly-validate` | `fly config validate -c fly.toml` |
 | `make provision` | Create labelsets + (re)start agents on a running server |
@@ -93,8 +109,53 @@ Every variable is documented with a comment in [`.env.example`](../../.env.examp
   `dev-admin-token` in mock mode if unset.
 - `CALLS_MOCK_SEED`, `CALLS_MOCK_STREAM_DELAY_MS` — mock-only: corpus size and per-chunk answer
   stream pacing (the latter is used by the showcase recording to make streaming visible on video).
-- `DATA_DIR` — where job records are written (default `./data`); the e2e config points this at
-  `./data/e2e` so test runs don't collide with a dev server's job history.
+- `DATA_DIR` — where this product's own state is written (default `./data`); the e2e config points
+  this at `./data/e2e` so test runs don't collide with a dev server's state. It is no longer only
+  job history: see [Local state in `DATA_DIR`](#local-state-in-data_dir) below.
+
+Everything in the `.env.example` "Product", "ARAG generation", "White label" and "Retention"
+sections is a *default*. Once the matching section has been edited in Settings the store wins, and
+changing the variable moves nothing until the section is reset. This surprises people locally more
+than anywhere else: a `BRAND_PRIMARY_COLOR` you set in `.env` will not appear if you have already
+saved a colour in the product. `GET /api/v1/settings` reports which sections the store is driving
+in its `overridden` array.
+
+## Local state in `DATA_DIR`
+
+The platform `Store` writes one JSON file per collection under `DATA_DIR`, so a local dev run
+accumulates:
+
+| File | Written by | Holds |
+|---|---|---|
+| `jobs.json` | `JobManager` | Ingest, sample-load, re-analysis and provisioning job records |
+| `settings.json` | `services/config.ts` | The one settings document (`branding`, `connection`, `limits`, `retention`) |
+| `apikeys.json` | `services/apikeys.ts` | API keys as SHA-256 digests, names, last-used times |
+| `taxonomy.json` | `services/taxonomy-store.ts` | Labelset definitions and agent overrides |
+| `views.json` | `services/views.ts` | Saved views on the calls list |
+| `shares.json` | `services/shares.ts` | Share links, including revoked and expired ones |
+| `audit.json` | `services/config.ts` | The audit trail (capped at 5,000 records) |
+| `branding/` | `POST /api/v1/settings/logo` | An uploaded partner logo (`logo.svg|png|jpg|webp`) |
+
+`make clean` removes `data/` entirely, which is the quickest way back to a deployment that is
+driven purely by `.env` again. To reset one section without losing the rest, use
+`DELETE /api/v1/settings/{section}` or "Reset to environment default" in Settings.
+
+## The live write smoke check
+
+`make smoke-write` is opt-in and refuses to run without `CALLS_ALLOW_LIVE_WRITE=1`, and refuses to
+run in mock mode where it would prove nothing. It boots the product on a throwaway port with a
+throwaway admin token and drives its own HTTP API — so what it verifies is the route handlers, the
+auth rules and the validation a real caller meets.
+
+In one run it: records a baseline catalog count; writes a setting and reads it back through a
+second reader; issues an API key, authenticates a request with it and revokes it; creates a
+run-scoped labelset and confirms the Knowledge Box really holds it; edits it and confirms the
+re-provision; edits an agent's instructions and reverts them; uploads a call and reads it back;
+creates and resolves a share link; takes a retention preview; deletes the uploaded call; deletes
+the labelset from both the product and the Knowledge Box; and asserts the catalog count is back
+to the baseline. The 24 seeded demo calls are never touched, and no data-augmentation agent is
+started or stopped — a task is Knowledge-Box-wide and there is only one running task per operation
+type, so starting one would interfere with the demo corpus for minutes.
 
 ## Running tests
 
@@ -153,7 +214,18 @@ rendered media: the mock ARAG server synthesizes its own timestamped transcripts
 - **A live `make dev`/`make ingest` run has stale filters or an empty rail after an upload** — the
   read cache is TTL'd at `CALLS_CACHE_TTL_MS` (default 60 s); uploads/deletes/provisioning
   invalidate it immediately, but a page rendered from a request that started just before an
-  upload can still show the old catalog. Use `/admin/cache` to invalidate manually if needed.
+  upload can still show the old catalog. The catalog and per-call summary reads are additionally
+  served stale-while-revalidating, so a first read after the TTL lapses can be up to nine further
+  TTLs old while the refresh runs behind it. Use `/admin/usage` (Cache view; `/admin/cache`
+  redirects there) to invalidate manually if needed.
+- **A `BRAND_*` or limits variable in `.env` has no effect** — that section has been edited in
+  Settings, so the store is the authority. `GET /api/v1/settings` lists the overridden sections;
+  `DELETE /api/v1/settings/{section}` (or "Reset to environment default") hands the section back
+  to the environment.
+- **Connection settings saved in mock mode appear to do nothing** — connection edits are applied
+  in live mode only. Re-pointing the in-process sample Knowledge Box from the settings screen
+  would break the sample data with no route back through the UI, so the write is stored and the
+  client is left alone (DECISIONS D-CA-34). `generativeModel` and `reranker` still apply.
 - **`node scripts/reset.ts` refuses to run** — it requires `--yes-i-know` and, against anything
   that isn't the mock (`admin/health` reporting `mock:false`), also `CALLS_ALLOW_DESTRUCTIVE=1`.
   This is deliberate: the demo Knowledge Box holds the seeded calls the showcase depends on.

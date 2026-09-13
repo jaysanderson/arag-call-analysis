@@ -8,16 +8,29 @@ Decide first which of these you need:
 
 | You want to… | Do this | Fork required? |
 |---|---|---|
-| Ship under your own name and colours | [White-label config](white-label.md) | No |
-| Classify calls differently (your own reasons, outcomes, moments) | Edit `lib/domain/taxonomy.ts`, re-provision | Yes, but one file |
-| Generate different structured fields | Edit the `call-insights` agent prompts in the same file, adjust `lib/types.ts` and `lib/parse.ts` | Yes |
+| Ship under your own name and colours | [White-label settings](white-label.md) | No |
+| Classify calls differently (your own reasons, outcomes, moments) | Create and edit labelsets in **Agents & Taxonomy**, or through `/api/v1/labelsets` | No |
+| Re-instruct an agent (a different analysis or metrics prompt) | Edit its prompts in **Agents & Taxonomy**, or through `PUT /api/v1/agents/{key}` | No |
+| Change what a *fresh* deployment is seeded with | Edit `lib/domain/taxonomy.ts` | Yes, but one file |
+| Generate different structured *fields* (a new shape, not new wording) | Edit the prompts, then adjust `lib/types.ts`, `lib/parse.ts`, `lib/aggregate.ts` and the OpenAPI schemas | Yes |
 | Add an endpoint | Spec first, then a handler and a service | Yes |
 | Change the demo UI | `app/` + `components/` | Yes |
 | Use a different domain entirely (support tickets, sales calls, meetings) | All of the above, plus new demo data | Yes |
 
+Two of those rows moved. Labelsets and agent instructions are now product features, not source
+code: `lib/domain/taxonomy.ts` **seeds** `DATA_DIR/taxonomy.json` the first time the store is
+read, and every read afterwards comes from the store. Editing the file changes what a fresh
+deployment starts with and what "restore the shipped definition" restores to; it does not change a
+deployment that is already running. See
+[Extension points](extension-points.md#change-the-taxonomy) for the live routes and their rules
+(an id is immutable; `?knowledge_box=true` on a delete destroys applied labels).
+
+Everything below is therefore about re-targeting the *seed* — the right move when you are
+producing a variant of this product for another domain, rather than tuning one deployment.
+
 ## 1. The taxonomy
 
-`lib/domain/taxonomy.ts` is the single source of the domain model:
+`lib/domain/taxonomy.ts` is the single source of the seeded domain model:
 
 - `RESOURCE_LABELSETS` — the whole-call facets (`call_reason`, `call_outcome`, `sentiment`,
   `line_of_business`, `disposition_flags`). These become the filter chips in the calls explorer and
@@ -48,16 +61,22 @@ export const RESOURCE_LABELSETS: LabelsetDef[] = [
 ];
 ```
 
-Then apply it:
+Then apply it. A store that has already been seeded will not pick up a source change, so clear it
+first on a development machine (`make clean`, or delete `DATA_DIR/taxonomy.json`):
 
 ```bash
+make clean                    # drops DATA_DIR, including the seeded taxonomy store
 make dev                      # or point at a real Knowledge Box
 make provision                # POST /api/v1/admin/provision — labelsets, then agents, in order
 ```
 
-Provisioning is a job because ARAG allows only one *running* task per operation type, so the three
-agents must start sequentially. Watch it in the admin console under **Agents**, or stream
-`GET /api/v1/jobs/{id}/events`.
+Provisioning is a job because ARAG allows only one *running* task per operation type, so the
+agents must start sequentially. Watch it under **Agents & Taxonomy** (`/taxonomy`, or
+`/admin/taxonomy` in the operator console), or stream `GET /api/v1/jobs/{id}/events`.
+
+On a deployment you cannot clear, make the same change through
+`POST`/`PUT /api/v1/labelsets/{id}` instead — the result is identical and it re-provisions as it
+saves.
 
 Two constraints worth knowing before you write prompts:
 
@@ -126,9 +145,14 @@ as good as the signal in the text.
 - **Never edit `vendor/arag-platform/`.** Change the platform repo and re-run
   `make sync-platform TARGET=<your repo>` from it. A local edit is silently overwritten on the next
   sync.
-- Keep your changes in the files listed above. `lib/api.ts`, `lib/runtime.ts` and `services/cache.ts`
-  are infrastructure; if you find yourself editing them to add a feature, consider whether the
-  change belongs upstream instead — the platform team accepts them.
+- Keep your changes in the files listed above. `lib/api.ts`, `lib/runtime.ts`,
+  `services/cache.ts` and `services/config.ts` are infrastructure; if you find yourself editing
+  them to add a feature, consider whether the change belongs upstream instead — the platform team
+  accepts them.
+- Before adding a configuration *field*, check whether it belongs in the settings store rather
+  than in a new environment variable. A partner-facing value that an operator will want to change
+  without a redeploy should go through `services/config.ts`; see
+  [Adding a setting](extension-points.md#adding-a-setting).
 - Record every deviation in your `DECISIONS.md` with the reason. That file is what makes a fork
   reviewable a year later.
 - Run `make check` and `make e2e` before you merge upstream changes, and again after.
@@ -143,8 +167,12 @@ cp vendor/arag-platform/ui/arag-ui.js public/ui/arag-ui.js   # the UI kit's web 
 make check && make e2e
 ```
 
-`vendor/arag-platform/PLATFORM_VERSION` records the synced version, and the admin **Config** page
-shows it at runtime, so an operator can always tell which platform build is deployed.
+`vendor/arag-platform/PLATFORM_VERSION` records the synced version, and both **Settings → About**
+and the operator console's **Connection → Configuration** view show it at runtime, so an operator
+can always tell which platform build is deployed. The constant is re-declared locally in
+`lib/version.ts` rather than imported from the vendored platform, with a contract test pinning it
+to `PLATFORM_VERSION`; delete the local constant once the upstream export is correct (DECISIONS
+D-CA-43).
 
 ## 7. Licensing
 

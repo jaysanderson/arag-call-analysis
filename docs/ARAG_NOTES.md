@@ -68,25 +68,25 @@ All paths below are relative to the KB URL unless noted.
   we use `json:false` and instruct the model to emit JSON text; we parse the field in the app.
 - Task lifecycle: started → `configs`+`running` → `done` (`failed`/`completed` flags). `DELETE /task/{id}` removes it.
 
-### Transcription + timestamps  ✅
+### Transcription + timestamps (verified)
 - Content field: file resources `data.files.media`, text resources `data.texts.transcript`.
 - Extracted text: `<field>.extracted.text.text`. Paragraphs:
   `<field>.extracted.metadata.metadata.paragraphs[]` = `{start,end,start_seconds:[s],end_seconds:[s],kind,classifications}`.
 - Media paragraphs carry `start_seconds`/`end_seconds` → drives video/audio scrubbing. `kind`:
   `TRANSCRIPT` (media) / `TEXT` (text). Filter out `OCR` (waveform-frame noise from MP4).
 
-### Labels  ✅
+### Labels (verified)
 - Resource labels (resource-labeler, on=1): `computedmetadata.field_classifications[].classifications[]`
   = `{labelset,label}`. Also queryable via catalog facets `/classification.labels/<labelset>`.
 - Paragraph labels (paragraph-labeler, on=0): on each paragraph as `classifications[].label`
   (labelset "moment"). Media transcripts get fewer (coarser chunking) than text transcripts.
 
-### Generated JSON fields  ✅
+### Generated JSON fields (verified)
 - Stored as TEXT fields named `da-<destination>-<f|t>-<sourceField>`
   (e.g. `da-call_analysis-f-media`, `da-call_metrics-t-transcript`). Body is ```json-fenced
   JSON (json:false) → strip fence + `JSON.parse`. Content is accurate.
 
-### Scoped ask + citations  ✅
+### Scoped ask + citations (verified)
 - `/resource/{id}/ask` returns NO retrieval data on this KB. Use KB `/ask` with
   `resource_filters:[rid]`, `citations:true`, `generative_model:"chatgpt-azure-4o"`.
 - Citations: `{ "<rid>/f/media/<start>-<end>": [[answerStart,answerEnd]] }`. The char range maps
