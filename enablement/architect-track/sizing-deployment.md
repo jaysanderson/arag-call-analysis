@@ -27,10 +27,24 @@ a browsing session (dashboard + a few rails + several call detail views, all wit
 to roughly one ARAG request per distinct call touched, not per view.
 
 **Sizing implication:** ARAG request volume for *reads* scales with **distinct calls touched per
-TTL window**, not with page views. A demo with 24 seeded calls costs at most ~25 ARAG requests per
-cold TTL window regardless of how many times the dashboard is refreshed inside it. A production
-tenant's read cost scales with **catalog size** (every call is a dashboard/rail candidate) far more
-than with visitor count.
+TTL window**, not with page views. The sample deployment (13 calls: `CALLS_MOCK_SEED`, default 12,
+plus the platform's own sample) costs at most ~14 ARAG requests per cold TTL window regardless of
+how many times the dashboard is refreshed inside it; the live demo Knowledge Box, at 24 calls,
+costs ~25. A production tenant's read cost scales with **catalogue size** — every call is a
+dashboard candidate — far more than with visitor count.
+
+**Since D-CA-40 this is better than the table suggests, in one specific way.** `catalogIds()` and
+`summaryOf()` are served **stale-while-revalidate**: past the TTL, within `graceMs`
+(default `ttlMs × 9`), the expired value is returned immediately and refreshed behind the reader.
+So the cost is unchanged — the same upstream requests are made — but it is no longer *paid by a
+user waiting*. Only a genuinely cold key blocks. The dashboard aggregate is also no longer cached
+under a key of its own; `aggregate()` is pure and O(N) and is recomputed per render, which means
+every dashboard render re-warms exactly the entries the calls list reads next. Budget the request
+volume from the table; budget the *latency* from the fact that a warm deployment does not block.
+
+**And the cost of that:** the freshness bound a customer should be told is no longer
+`CALLS_CACHE_TTL_MS` but `CALLS_CACHE_TTL_MS × 10` — ten minutes at the default, per machine. See
+`enablement/architect-track/configuration-cache-and-sharing.md` §2.
 
 ### 2. Tokens per ask
 
@@ -62,9 +76,10 @@ as a requirement.
 ```
 
 with `min_machines_running = 1`, `auto_stop_machines = "stop"`, `auto_start_machines = true`, and a
-concurrency policy of `soft_limit = 40` / `hard_limit = 80` requests. This is sized for a demo/pilot
-tenant (the shipped 24-call seed, a handful of concurrent admin/demo users). It is **not** sized
-for the 50,000-calls/month whiteboard scenario in `WORKSHOP.md` without at least one change (below).
+concurrency policy of `soft_limit = 40` / `hard_limit = 80` requests. This is sized for a
+demo/pilot tenant (a two-dozen-call catalogue, a handful of concurrent operator and demo users). It
+is **not** sized for the 50,000-calls/month whiteboard scenario in `WORKSHOP.md` without at least
+one change (below).
 
 **What actually consumes memory on this machine:**
 - Next.js' standalone server process itself (baseline).
@@ -90,16 +105,44 @@ for the 50,000-calls/month whiteboard scenario in `WORKSHOP.md` without at least
                         └───────────────┬───────────────┘
                                         │
                                  [[mounts]] "data" 1gb
-                                 DATA_DIR=/data (job records only —
-                                 never call recordings/transcripts,
-                                 which live in the KB)
+                                 DATA_DIR=/data — jobs, settings,
+                                 API keys, taxonomy, views, shares,
+                                 audit. Never call recordings or
+                                 transcripts, which live in the KB.
 ```
 
-`primary_region = "iad"` is chosen to co-locate with the KB's `aws-us-east-2-1` zone — the `fly.toml`
-header comment states this explicitly. `DATA_DIR` holds only the `Store`'s JSON job records
-(ingestion/provisioning job state), not any call content — every byte of transcript, recording, and
-generated analysis lives in the ARAG Knowledge Box, not on the Fly volume. That's why the volume is
-sized at 1 GB regardless of catalog size.
+`primary_region = "iad"` is chosen to co-locate with the KB's `aws-us-east-2-1` zone — the
+`fly.toml` header comment states this explicitly.
+
+### What `DATA_DIR` actually holds now — read this before sizing or planning backups
+
+It is no longer "job records". It is the **deployment's own state**, in seven JSON collections:
+
+| Collection | File | Cap | What is lost with the volume |
+|---|---|---|---|
+| `jobs` | `jobs.json` | 500 | Ingestion/provisioning history |
+| `settings` | `settings.json` | 1 doc | Every in-product configuration override — **including, if the operator rotated it there, the Knowledge Box service-account credential** (D-CA-45; the file is `chmod 0600`) |
+| `apikeys` | `apikeys.json` | 500 | Every issued API key's digest and revocation state. Losing it does **not** leak keys (they are SHA-256 digests) but it does silently reopen the API, because `apiKeysEnforced()` reads this file |
+| `taxonomy` | `taxonomy.json` | 200 | Every labelset and agent customisation. Recreated from the shipped seed on next boot — so a partner's whole vocabulary silently reverts to health insurance |
+| `views` | `views.json` | 100 | Every shared saved view |
+| `shares` | `shares.json` | 2,000 | Every live share link — and these are **stored as plaintext tokens** |
+| `audit` | `audit.json` | 5,000 | The audit trail |
+
+Still true: **no call content lives here.** Every transcript, recording and generated analysis is in
+the Knowledge Box, which is why 1 GB is adequate regardless of catalogue size.
+
+No longer true: that losing the volume is a cosmetic event. Three consequences worth stating to a
+customer explicitly —
+
+1. **Losing `apikeys.json` reopens the API**, because enforcement is derived from the presence of
+   rows, not from a config flag.
+2. **Losing `taxonomy.json` reverts the taxonomy to the shipped default** on the next boot, without
+   an error, because `seedTaxonomy()` will find no `seeded` marker and re-seed.
+3. **`settings.json` may hold a secret**, so it belongs in whatever the customer's policy says about
+   credential-bearing files — backups, disk encryption, snapshot retention.
+
+**Sizing verdict unchanged (1 GB is plenty; these are small JSON files with hard caps). Backup and
+DR posture materially changed.** `DATA_DIR` needs a backup story, and this repo ships none.
 
 ## What changes for multi-machine
 
@@ -115,13 +158,29 @@ the current code has a documented limitation here (`D-CA-04`):
    catalog/`find` calls directly if the TTL can be dropped), or accept and document the
    multi-machine staleness window — genuinely acceptable for a KPI dashboard, less so if a customer
    has a hard "read your own write across any replica" requirement.
-2. **Jobs are per-machine.** `JobManager` and its `DATA_DIR`-backed `Store` are process-local.
-   `[[mounts]]` in `fly.toml` currently attaches one volume to one machine. Scaling to multiple
-   machines means either: (a) each machine gets its own volume and job visibility is scoped to
-   whichever machine handled the request (acceptable if `GET /api/v1/jobs/{id}` is always hit
-   against the same machine — not guaranteed behind Fly's load balancer), or (b) the job store
-   moves to a shared backend (e.g. a small Postgres/SQLite-over-network or a managed queue).
-   **This is real work, not a config flag — flag it as a required change, not a switch.**
+2. **The whole `DATA_DIR` store is per-machine, and that is now much more than jobs.** `Store` is
+   process-local over a Fly volume, and `[[mounts]]` attaches one volume to one machine. Since the
+   store grew from "job records" to seven collections, a second machine means **seven divergences**,
+   not one. Walk them explicitly with the customer:
+
+   | Collection | What a second machine does |
+   |---|---|
+   | `jobs` | `GET /api/v1/jobs/{id}` 404s on a machine that did not handle the upload — including the SSE progress stream the upload screen is watching |
+   | `settings` | **An operator changes a setting and it applies to one machine.** The other keeps the old branding, the old limits, the old Knowledge Box. `GET /api/v1/settings` then answers differently depending on which machine you reach, and so does the UI it drives |
+   | `apikeys` | A key issued on machine A does not authenticate on machine B — and because enforcement is derived from row presence, machine B may still be **open** while A is closed |
+   | `taxonomy` | A labelset edited on A is not edited on B, so the two machines provision and label with different vocabularies |
+   | `views` | A saved view is visible to half the users |
+   | `shares` | A share link resolves on one machine and 404s on the other |
+   | `audit` | The trail is split in two, and neither half is complete |
+
+   Options are the same as before and the work is larger: (a) accept machine-scoped state, which is
+   **not** tenable now that settings and credentials live here; or (b) move the store to a shared
+   backend. **This is the single change that has to happen before this product is multi-machine.**
+   Treat any "just scale it horizontally" proposal as blocked on it.
+
+   *A note on how this fails:* none of the above raises an error. It presents as intermittent —
+   "the setting didn't save", "the key works sometimes", "the share link is broken for Dave" — which
+   is the worst possible way for it to surface. Say so.
 3. **Rate limiting is per-machine.** The token-bucket limiter (`lib/api.ts`, `buckets()`) lives on
    `globalThis` per process. Multi-machine means the effective per-IP rate limit is
    `RATE_LIMIT_RPS × machine count`, not the configured value. Acceptable for a soft limit meant to
@@ -153,7 +212,18 @@ users, dashboard checked by ~40 supervisors a few times a day, no hard multi-reg
 - **Ingestion:** 270 calls/day at an assumed 5x peak ratio is ~55/hour at peak, well inside
   `JobManager({ concurrency: 2 })`'s throughput for a transcription-bound wait (the job itself
   mostly polls; it doesn't hold CPU).
-- **Recommendation to the customer:** single machine, default sizing, with one flagged follow-up —
-  raise the in-process cache's entry cap before the catalog exceeds ~2,000 hot entries, and revisit
-  this document's multi-machine section only if they later require horizontal scaling or true
-  read-your-write consistency across replicas, neither of which this scenario needs.
+- **Recommendation to the customer:** single machine, default sizing, with three flagged
+  follow-ups:
+  1. **Raise `TtlCache`'s entry cap before the catalogue passes ~1,500–2,000 hot entries.** It is a
+     constructor default, not an environment variable, so this is a code change — and past the cap
+     each render evicts entries the same render needs, so the hit rate collapses rather than
+     degrading gently. At 8,000 calls this is a pre-go-live change, not a later optimisation.
+  2. **Give `DATA_DIR` a backup story.** At 8,000 calls their retention policy, API keys, taxonomy
+     customisations and audit trail all live on one Fly volume, and this repo ships no backup. See
+     the `DATA_DIR` table above for what each file's loss actually does.
+  3. **Disclose the freshness bound as `CALLS_CACHE_TTL_MS × 10`** (ten minutes at the default),
+     not one minute, because of serve-stale.
+
+  Revisit the multi-machine section only if they later require horizontal scaling or true
+  read-your-write consistency across replicas, neither of which this scenario needs — and if they
+  do, read item 2 of that section first, because it is now a blocker rather than a caveat.

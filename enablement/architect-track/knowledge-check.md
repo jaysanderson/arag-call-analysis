@@ -1,7 +1,9 @@
 # Architect Track — Knowledge Check
 
-Mixes recall (what the architecture is) and judgement (what you'd tell a customer). Answers
-included.
+**Time:** 20 minutes. Eighteen questions, mixing recall (what the architecture is) with judgement
+(what you would tell a customer). Answers included. Questions 6, 7, 12 and 14–18 changed or were
+added after the product pass; 14, 16 and 17 cover
+[`configuration-cache-and-sharing.md`](configuration-cache-and-sharing.md) directly.
 
 ---
 
@@ -36,12 +38,15 @@ arithmetic and name the fix.**
 
 ---
 
-**4. What does `TtlCache.getOrLoad()`'s in-flight de-duplication protect against, specifically?**
+**4. What does `TtlCache.getOrLoad()`'s in-flight de-duplication protect against, and what does it
+cost?**
 
-> A thundering-herd of identical upstream requests when multiple concurrent callers ask for the
-> same uncached key at the same moment (e.g. several tabs opening the dashboard right after a cold
+> It protects against a thundering herd of identical upstream requests when concurrent callers ask
+> for the same uncached key at the same moment (several tabs opening the dashboard after a cold
 > boot or a cache clear) — they share one in-flight promise instead of each triggering its own
-> `rt.arag.getResource()` call.
+> `rt.arag.getResource()`. It costs the second caller the first caller's latency, timeout and
+> failure: one slow upstream read makes every concurrent reader of that key slow, not just the one
+> that asked first.
 
 ---
 
@@ -56,22 +61,40 @@ left to the TTL to expire naturally?**
 
 ---
 
-**6. On a multi-machine Fly deployment with the code as it stands today, what three things stop
-being consistent across machines, and what does each look like in practice?**
+**6. On a multi-machine Fly deployment as the code stands today, what stops being consistent, and
+what does each divergence look like in practice?**
 
-> (1) The `TtlCache` — different machines can serve different data within the same TTL window.
-> (2) The `JobManager`/`Store` on `DATA_DIR` — job state is machine-local unless the volume or
-> store is shared, so `GET /api/v1/jobs/{id}` can 404 on a machine that didn't handle the original
-> request. (3) The rate limiter's token buckets (`lib/api.ts`'s `buckets()` on `globalThis`) — the
-> effective per-IP rate limit becomes `RATE_LIMIT_RPS × machine count`, not the configured value.
+> More than it used to, because `DATA_DIR` grew from job records to seven collections.
+> (1) The `TtlCache` — different machines serve different data within the same window.
+> (2) The rate limiter's token buckets (`lib/api.ts`'s `buckets()` on `globalThis`) — the effective
+> per-IP limit becomes `RATE_LIMIT_RPS × machine count`.
+> (3) **The whole store**, one volume per machine: `jobs` (a job 404s on the machine that did not
+> run it, including its SSE stream), `settings` (an operator changes a setting and it applies to
+> one machine — different branding, different limits, possibly a different Knowledge Box),
+> `apikeys` (a key issued on A does not authenticate on B, and B may still be *open* while A is
+> closed), `taxonomy` (the two machines label with different vocabularies), `views` (visible to
+> half the users), `shares` (a link resolves on one machine and 404s on the other), `audit` (split
+> in two, neither half complete).
+> The thing to say out loud: **none of this errors.** It presents as intermittent — "the setting
+> didn't save", "the key works sometimes" — which is the worst way for it to surface. This is now a
+> blocker on horizontal scaling, not a caveat.
 
 ---
 
-**7. Why is `DATA_DIR` sized at only 1 GB in `fly.toml` regardless of call catalog size?**
+**7. `DATA_DIR` is 1 GB regardless of catalogue size. Is that still right, and what is actually in
+it?**
 
-> Because it stores only the `Store`'s JSON job records (ingestion/provisioning job metadata) —
-> never transcripts, recordings, or generated analysis, which live entirely in the ARAG Knowledge
-> Box. Catalog size drives KB storage and request volume, not this app's local volume.
+> The **sizing** is still right: seven small JSON collections with hard caps (`jobs` 500,
+> `settings` one document, `apikeys` 500, `taxonomy` 200, `views` 100, `shares` 2,000, `audit`
+> 5,000), and **no call content** — every transcript, recording and generated analysis lives in the
+> Knowledge Box. Catalogue size drives KB storage, not this volume.
+>
+> What changed is the **importance**, not the size. It now holds the deployment's configuration
+> (possibly including the Knowledge Box credential, D-CA-45), every API-key digest, the taxonomy,
+> live share tokens **in plaintext**, and the audit trail. Two loss modes are silent and worth
+> naming: losing `apikeys.json` **reopens** the API, because enforcement is derived from row
+> presence rather than a flag; losing `taxonomy.json` reverts a partner's whole vocabulary to the
+> shipped health-insurance default on the next boot. This repo ships no backup story for it.
 
 ---
 
@@ -118,15 +141,24 @@ for a customer instead of estimating from transcript length?**
 
 ---
 
-**12. A customer asks whether `API_KEYS` being unset is a security gap. What's the accurate
-answer?**
+**12. A customer asks whether having no API keys configured is a security gap. What is the
+accurate answer now?**
 
-> It's a configuration decision that must be made explicitly for the deployment, not a gap in the
-> code: `enforceAuth()` in `lib/api.ts` treats an empty `API_KEYS` list as "open API" for
-> write routes on `/calls` (deliberately, so the demo works with zero configuration). For any
-> deployment where uploads/deletes should not be publicly callable, `API_KEYS` must be set — this
-> is item 5 in `design-review-checklist.md`'s "known MVP limitations," precisely because it's easy
-> to leave unset by accident on a public-facing deployment.
+> It is a configuration decision, not a code gap — but the mechanism has changed and the old answer
+> is wrong. Keys are no longer an environment variable: `API_KEYS` is only a **one-time seed** into
+> a real store (D-CA-36), and keys are minted, named, attributed and revoked in the product.
+>
+> With no key ever issued, `api`-mode routes (saved views, share links) are **open**, which is what
+> makes the sample deployment browsable. `write` routes are not: they always need the operator
+> token or a real key, and in `NODE_ENV=production` with neither configured they are refused `403`
+> rather than defaulting open (D-CA-13). So the old "anyone can upload or delete" exposure is
+> closed by default.
+>
+> The thing to actually flag is the opposite direction: **enforcement is sticky** (D-CA-46). Once
+> the deployment has ever had a key, `api` routes need one for ever, and revoking the last key does
+> not reopen them — only purging the rows does. On a public demo that is a footgun; in an incident
+> it is the property that stops "revoke the compromised key" from opening the API to the world. It
+> belongs in the runbook either way.
 
 ---
 
@@ -139,23 +171,111 @@ NDJSON stream, instead of just letting the stream itself fail?**
 
 ---
 
-**14. What's the concrete, measurable trade-off a shorter `CALLS_CACHE_TTL_MS` would make, versus
-the current 60-second default?**
+**14. A customer asks for the deployment's freshness guarantee. What number do you give them, and
+why is `CALLS_CACHE_TTL_MS` the wrong answer?**
 
-> Fresher aggregates (a call's metrics becoming visible sooner after its augmentation agents
-> finish) at the direct cost of more ARAG requests per unit time — the exact defect (`~600
-> requests per dashboard view`) the cache exists to prevent would partially reassert itself as the
-> TTL shrinks toward zero. The 60 s default is a deliberate middle point, not an arbitrary one.
+> **`CALLS_CACHE_TTL_MS + graceMs`, where `graceMs` defaults to `ttlMs × 9` — ten minutes at the
+> 60-second default, per machine.** Since D-CA-40, `catalogIds()` and `summaryOf()` are served
+> stale-while-revalidate: past the TTL but within the grace window the expired value is returned
+> *immediately* and a refresh runs behind the reader. So the reader never blocks — but the value
+> they were handed can be ten TTLs old. A review that quotes 60 s has quoted the wrong figure.
+>
+> The trade is worth stating alongside it: what was bought is that a warm deployment never blocks a
+> reader on the 1+N fan-out again, which is what the eight-second stall was. What was sold is nine
+> extra TTLs of worst-case staleness on a product whose aggregates are a KPI dashboard, where that
+> is almost always acceptable — and is exactly the thing to check, rather than assume, if the
+> customer has a read-your-own-write requirement.
 
 ---
 
-**15. Which of this product's admin panel views would you demo first to prove "this deployment is
-healthy and observable," and what would you specifically check on each?**
+**15. Which operator views would you demo first to prove "this deployment is healthy and
+observable," and what would you check on each?**
 
-> `/admin/health` (KB connection test — `ok: true`, `mock: false` for production, reasonable
-> `ms`), `/admin/usage` (non-zero `requests`, sane `arag.errors` relative to `arag.calls`,
-> `cache.hits`/`cache.misses` ratio showing the cache is actually working), and `/admin/agents`
-> (all three named agents in `configured`/`completed`/`running` state, none stuck or `absent` when
-> they shouldn't be). Together these three answer "is it up," "is it being used and is the cache
-> earning its keep," and "did provisioning actually succeed" — the three questions a go-live check
-> needs answered.
+> The operator console lives in the same shell as the product (D-CA-21), reached from **Admin** in
+> the left rail. Four tabs, in this order:
+>
+> - **Connection** — the live Knowledge Box test: `ok: true`, `mock: false` for production, a
+>   sensible round-trip in ms, and the generative model the deployment is actually using. Its
+>   **Configuration** panel must show secrets redacted. *(The old `/admin/health` and
+>   `/admin/config` paths redirect here.)*
+> - **Usage** — non-zero `requests`, `arag.errors` sane relative to `arag.calls`, and the **Cache**
+>   panel showing `hits ≫ misses`. Watch `stale` too: climbing as fast as `hits` means the TTL is
+>   shorter than the traffic pattern. There should be no `dashboard:` key (§4).
+> - **Taxonomy & Agents** — all three agents `completed`/`configured`/`running`, none stuck or
+>   `absent`, and the labelsets reporting `provisioned: true`. This answers "did provisioning
+>   actually succeed", which nothing else does.
+> - **Audit** — the change history. And this is where to be honest rather than impressive: it
+>   records **configuration** only. It will show who changed a limit or issued a key; it will not
+>   show who deleted a call or published a share link.
+>
+> Together: "is it up", "is it being used and is the cache earning its keep", "did provisioning
+> succeed", "who changed what". The fourth is the one a customer's compliance reviewer asks about,
+> and the one with a gap to disclose.
+
+---
+
+**16. "Environment variables are defaults; the settings store is the authority." What makes "no
+restart" true, and what does that design cost?**
+
+> `applyToRuntime()` (`services/config.ts`), called at boot and again after every settings write.
+> It does not rebuild the runtime — it **mutates the memoised container on `globalThis` in place**:
+> reassigning `rt.branding`, the scalars on `rt.env`, and where needed `rt.cache` (a whole new
+> `TtlCache`, because `ttlMs` is `readonly`) and `rt.arag` (a new `AragClient` followed by
+> `rt.cache.clear()`, since every entry came from the old Knowledge Box).
+>
+> It was chosen over an `effectiveSettings()` object every consumer must consult, which is one
+> forgotten call site away from a setting that saves, renders as saved, and silently does nothing.
+>
+> Two costs. **The boot-time values are destroyed by the first override**, so `rt.envDefaults` and
+> `rt.envBranding` exist purely to make "reset to environment defaults" a real operation rather
+> than a synonym for "restart the process" — visible in the `Runtime` interface. And **there is no
+> declarative registry**: adding one setting means editing four places by hand (the interface plus
+> its validator, `EnvDefaults` plus the reset list, the OpenAPI request schema, and the read model
+> plus its panel). Whether that is acceptable maintenance is fair to raise in review.
+
+---
+
+**17. A customer's security reviewer asks about share links. Walk the controls, then give them the
+one thing that would change your answer.**
+
+> **Controls:** a 256-bit `randomBytes(32)` token, never derived from the call id; scoped to
+> exactly one call, rendered in the same workspace component with `readOnly` (no Ask, no Share, no
+> Export, no write affordance); a 1–90 day expiry, default 7; revocable, and the row is kept so the
+> register shows history; unknown, revoked and expired tokens all return an **identical** plain
+> `404`, so there is no oracle for "was this ever valid"; and a retention purge revokes every live
+> link for a purged call in the same pass, so no URL survives its recording (D-CA-38).
+>
+> **Two things to volunteer rather than wait to be asked.** The token is stored **in plaintext** —
+> it is the document id in `shares.json` — unlike API keys, which are SHA-256 digests. And creation
+> and revocation are **not audited**.
+>
+> **What would change the answer:** whether the deployment enforces API keys. The justification for
+> both the plaintext storage and the `auth: "api"` carve-out (D-CA-27, the one deliberate exception
+> to D-CA-13) is that a share grants no access the open read API already grants to anyone. That is a
+> statement about a *configuration*, not about the code — and it stops being true the moment keys
+> are enforced, at which point a share link becomes the one way data leaves this product with no
+> deployment credential at all, stored in the clear, with no record of who published it. On an open
+> demo: a documented trade-off. On a key-enforced PHI deployment: a finding.
+
+---
+
+**18. A partner white-labels this product for utility-company calls, rewrites
+`lib/domain/taxonomy.ts`, and redeploys to a cluster that has run for six months. What do their
+users see?**
+
+> **The old health-insurance taxonomy, unchanged.** `seedTaxonomy()` copied the shipped definitions
+> into `DATA_DIR/taxonomy.json` on that cluster's first boot and wrote a `seeded` marker; it returns
+> at that guard on every later read, and there is no re-seed operation (D-CA-37). Calls keep being
+> classified as *Claims* and *Prior Authorization*. In sample mode it is worse than nothing: the
+> mock Knowledge Box **is** re-seeded from source at boot, so labelsets appear
+> `provisioned: true, defined: false` — present upstream, unknown to the product, excluded from the
+> labeler's derived operations.
+>
+> The seed-once behaviour is correct — it is what stops a redeploy silently reverting a partner's
+> own customisations. The gap is that there is no supported migration path beside it: no re-seed,
+> and no way to restore a shipped labelset (`restoreLabelset()` exists in the service layer,
+> unit-tested, reachable from no route and no button), while every settings section has
+> `DELETE /api/v1/settings/{section}`. The partner's options are a deliberate migration through
+> `POST`/`DELETE /api/v1/labelsets`, or resetting the store and losing every operator
+> customisation with it. That belongs in their release notes, and the missing reset belongs in
+> yours to the product owner.

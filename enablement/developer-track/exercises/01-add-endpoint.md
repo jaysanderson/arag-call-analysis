@@ -39,7 +39,8 @@ Same 404 behaviour as `GET /api/v1/calls/{id}` for an unknown id (RFC 9457 probl
    cached, already throws `notFound("Call")` for an unknown id) rather than fetching the resource
    a second way.
 3. **`app/api/v1/calls/[id]/moments/route.ts`** (new file) — the thinnest possible handler:
-   `route()` + a call to your service function.
+   `route()` + a call to your service function, plus `export const OPTIONS = preflight;` (every
+   route in this product exports the shared CORS preflight handler — `DECISIONS.md` D-CA-14).
 4. **`test/contract/openapi.test.ts`** — add one case to the `describe("response validation
    (checkResponse)")` block that fetches your new endpoint and asserts it against the spec with
    `checkResponse`.
@@ -63,11 +64,20 @@ paths and fill in the blanks, or write the files from scratch; both are fine.
 - `services/calls.ts` already exports `getCall(rt, id): Promise<CallDetail>` — your function should
   call it and re-shape `call.paragraphs`, not re-fetch from `rt.arag`.
 - The route handler needs no `auth` field (defaults to `"none"`, same as `GET /api/v1/calls/{id}`).
+- Do not forget `export const OPTIONS = preflight;`. No contract test catches its absence today —
+  the convention is enforced by review, which is exactly why it is easy to miss.
+- The spec currently declares **60 operations across 13 tags**; yours makes 61. The in-product API
+  explorer at <http://localhost:3000/api> reads `/api/v1/openapi.json` at runtime, so your new
+  operation appears there — filterable, deep-linkable at `/api?op=getCallMoments`, and callable
+  from the try-it panel — the moment the spec entry exists. That is the fastest way to check your
+  work before you write the test (D-CA-41).
 
 ## Acceptance criteria
 
-- `make check` passes (lint + typecheck + `vitest run --coverage`, which includes the contract
-  test you added).
+- `make check` passes (lint + typecheck + audit + `vitest run --coverage`, which includes the
+  contract test you added).
+- `GET /api/v1/openapi.json` declares 61 operations, and `/api?op=getCallMoments` renders yours
+  with its parameter table and a working **Send**.
 - `curl -s http://localhost:3000/api/v1/calls/<id>/moments` returns `200` with the shape above for
   a real call id, and `404` (`application/problem+json`) for an unknown one.
 - `test/contract/openapi.test.ts`'s `"every implemented route is documented"` and `"every

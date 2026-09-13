@@ -1,157 +1,218 @@
 # Developer Track — Knowledge Check
 
-Answer, then check yourself. Questions mix recall (what the code does) and judgement (why it's
-built that way).
+**Time:** 20 minutes. Eighteen questions, mixing recall (what the code does) and judgement (why
+it is built that way). Answer, then check yourself. Questions 11–18 cover the surfaces added after
+the first product pass; if you ran the whole lab you have executed every one of them.
 
 ---
 
-**1. What single environment variable switches this app from a live ARAG Knowledge Box to the
-in-process mock, and what does `make dev` do if it's absent from `.env`?**
+**1. What puts this app in sample mode, and why is setting it on the command line enough even
+though `.env` holds live credentials?**
 
-> `ARAG_MOCK=1`. `make dev` checks whether `.env` has a non-empty `ARAG_API_KEY`; if not, it starts
-> Next.js with `ARAG_MOCK=1` and `ADMIN_TOKEN=dev-admin-token` set automatically, so the app runs
-> against the in-process mock ARAG server with no credentials needed.
-
----
-
-**2. Name the file that is the single source of truth for the API contract, and list three
-different consumers of it.**
-
-> `lib/openapi.ts`. Consumers: served at `/api/v1/openapi.json`; rendered by Redoc at
-> `/api/v1/docs` and Swagger UI at `/api/v1/swagger`; used by `operationSchemas()` inside
-> `lib/api.ts`'s `route()` to validate every request; used by the contract tests
-> (`lintSpec`, `checkResponse`, and the `API_ROUTES` coverage checks).
+> `ARAG_MOCK=1`. The platform's `loadDotEnv()` loads `.env` **without overwriting a variable that
+> is already set**, so a value exported in the real environment always wins over the file. That is
+> also why the lab's start line is `ARAG_MOCK=1 ADMIN_TOKEN=… DATA_DIR=… make dev` rather than
+> relying on the Makefile's own check, which only falls back to the mock when `.env` has no
+> `ARAG_API_KEY` at all.
 
 ---
 
-**3. A route handler throws `notFound("Call")`. Trace what happens to that exception before a
-byte reaches the client, and name the response's `Content-Type`.**
+**2. Name the single source of truth for the API contract, and four different consumers of it.**
 
-> `route()` (`lib/api.ts`) catches it in its `try/catch`. `toHttpError()` sees it's already an
-> `HttpError` and returns it unchanged. `problemResponse()` serializes `err.toProblem(instance,
-> requestId)` as the body with status `404` and `Content-Type: application/problem+json;
-> charset=utf-8`. Security headers and any queued cookies are then applied by `applyHeaders()`.
-
----
-
-**4. Why does `toHttpError()` map every `AragError` to a generic message instead of forwarding
-the ARAG error text to the client?**
-
-> To make sure the Knowledge Box's URL, KB id, or service-account token never leaks to a browser
-> in an error body. `AragError` is deliberately translated to safe, generic problem messages
-> (e.g. "The Knowledge Box request failed.") while the real detail is logged server-side with the
-> request id, so an operator can still correlate it.
+> `lib/openapi.ts`. Consumers: served at `/api/v1/openapi.json`; rendered by Redoc
+> (`/api/v1/docs`), Swagger UI (`/api/v1/swagger`) and the in-product explorer at `/api`, which
+> fetches it **at runtime** so the list is provably what the deployment serves (D-CA-41); used by
+> `operationSchemas()` inside `route()` to validate every request; and used by the contract tests
+> (`lintSpec`, `checkResponse`, and the `API_ROUTES` parity checks in both directions). It
+> currently declares 60 operations across 13 tags.
 
 ---
 
-**5. `GET /api/v1/calls` accepts a repeatable `label` query parameter. What format is each value,
-and how are multiple `label` values combined?**
+**3. A route handler throws `notFound("Call")`. Trace what happens before a byte reaches the
+client, and name the response's `Content-Type`.**
 
-> Each value is `labelset/label` (e.g. `call_reason/Claims`). Repeated `label` parameters are
-> ANDed across facets — `filterByLabels()` in `services/calls.ts` keeps a call only if it matches
-> every requested `(labelset, label)` pair, not just one.
-
----
-
-**6. What does `rt.cache.getOrLoad()` do differently from a plain `if (cached) return cached; else
-compute` pattern, and why does that matter under load?**
-
-> It de-duplicates concurrent loads for the same key via an in-flight `Map` of promises: if two
-> requests ask for the same uncached key at the same moment, the second one gets the *same
-> in-flight promise* instead of triggering a second upstream fetch. Without that, a burst of
-> concurrent renders for a cold key (e.g. a dashboard opened by several tabs at once right after
-> boot) would each independently call ARAG.
+> `route()` (`lib/api.ts`) catches it. `toHttpError()` sees it is already an `HttpError` and
+> returns it unchanged. `problemResponse()` serialises `err.toProblem(instance, requestId)` with
+> status `404` and `Content-Type: application/problem+json; charset=utf-8`. Security headers and
+> any queued cookies are then applied by `applyHeaders()`.
 
 ---
 
-**7. Name two cache keys that invalidating `summary:*` does NOT clear, and explain why that's
-correct rather than a bug.**
+**4. Why does `toHttpError()` map every `AragError` to a generic message?**
 
-> `catalog:*` (catalog ids) and `dashboard:all` (the dashboard aggregate) — also `find:*` and
-> `labelsets:all`. It's correct because `summary:` invalidation targets exactly the case "a
-> specific call's cached summary might be stale," not "everything derived from calls is stale."
-> Clearing every namespace on every invalidation would defeat the purpose of namespacing the cache
-> at all.
+> So the Knowledge Box's URL, id or service-account token can never reach a browser in an error
+> body. The real detail is logged server-side against the request id, so an operator can still
+> correlate it.
 
 ---
 
-**8. `services/calls.ts`'s `createCall()` calls `invalidateCall(rt, uuid)` before returning. What
-would a caller observe if that line were removed?**
+**5. Name the four `auth` modes in `API_ROUTES` and give one route for each.**
 
-> Immediately after a successful upload (`202` with the new call's id), a `GET /api/v1/calls`
-> request could still return the pre-upload catalog for up to `CALLS_CACHE_TTL_MS` — the new call
-> would appear to not exist yet, even though the upload itself succeeded and returned an id.
-
----
-
-**9. `POST /api/v1/calls` returns `202`, not `200` or `201`. Why, and what does the response body
-contain?**
-
-> `202 Accepted` because creating the ARAG resource is fast (synchronous, so the caller gets an id
-> and a `Location` header immediately) but transcription/retrievability is slow and tracked
-> separately as a background job. The body is `{ job, call }` — `job` is the `Job` view for
-> tracking progress via `GET /api/v1/jobs/{id}` or its SSE stream, `call` is `{ id, title }`.
+> `none` — `GET /api/v1/calls`. `api` — `GET /api/v1/views` (open until the deployment has ever had
+> a key). `write` — `DELETE /api/v1/calls/{id}`, `PUT /api/v1/labelsets/{id}` (operator token or a
+> real API key; the demo session cookie never suffices — D-CA-13). `admin` — `PUT
+> /api/v1/settings/{section}`, everything under `/api/v1/admin/*` (the operator token specifically;
+> an API key is refused with `401 Admin token required` — D-CA-42).
 
 ---
 
-**10. What HTTP header does `GET /api/v1/calls/{id}/media` respect to let a media player scrub
-through a recording, and what status code does a partial response use?**
+**6. `GET /api/v1/calls` returns `facets` alongside the page. Over which set are the counts
+computed, and why not over the fully filtered set?**
 
-> `Range`. `mediaStream()` (`services/calls.ts`) forwards it to `rt.arag.downloadFileField()`;
-> a satisfied range request returns `206 Partial Content`.
-
----
-
-**11. Why is the `field` query parameter on `GET /api/v1/calls/{id}/media` restricted to an enum
-(`media`, `transcript`) in the OpenAPI spec instead of accepting any string?**
-
-> Because it selects which file field on the ARAG resource gets proxied and streamed to the
-> browser; an unconstrained field name was the exact vulnerability the pre-audit version had (the
-> media route trusted a caller-supplied field name). Constraining it to an enum in the schema means
-> `route()`'s validation step rejects anything else with a `400` before the handler ever runs —
-> `MEDIA_FIELD_ALLOWLIST` in `services/calls.ts` enforces the same allowlist again at the service
-> layer as defense in depth.
+> Over the structurally-filtered set (search, date window, agent, queue, lifecycle) but **before**
+> the label filter is applied (D-CA-24). Counting after it would collapse every other facet to zero
+> the moment one label was selected, so the filter bar could never show you what else you could
+> narrow to.
 
 ---
 
-**12. What does `TRUST_PROXY=fly` change about how the rate limiter identifies a caller, and why
-is `xff` (trusting `X-Forwarded-For` blindly) unsafe outside that context?**
+**7. What does `getOrLoadStale()` do that `getOrLoad()` does not, and what bug motivated it?**
 
-> With `TRUST_PROXY=fly`, `clientIp()` reads the `Fly-Client-IP` header, which is set by Fly's own
-> edge and cannot be spoofed by a client behind it. `X-Forwarded-For` is client-settable unless a
-> proxy you control strips and re-sets it — trusting it blindly would let a single caller rotate
-> the header per request and get a fresh rate-limit bucket every time, defeating the limiter
-> entirely.
-
----
-
-**13. A generated `call_metrics.line_of_business` value doesn't match any of the taxonomy's known
-enum values. What happens to it, and where is that decision made?**
-
-> It's dropped (set to `undefined`), not rendered — `sanitizeMetrics()` in `lib/parse.ts` checks
-> every metrics field with a known enum (`VALID_METRIC_VALUES`) and strips any value not in the
-> allowed set, rather than letting a model's refusal sentence or malformed output reach a chart as
-> if it were a real category.
+> Within `graceMs` (default `ttlMs * 9`) of expiry it returns the **expired** value immediately and
+> starts a refresh behind the caller; only a genuinely cold or beyond-grace key blocks. It was
+> motivated by an eight-second stall on the calls list after a dashboard drill-through (D-CA-40):
+> `dashboard:all` was written when its own loader resolved, so it was stamped later than the
+> `summary:<id>` entries it was built from — the dashboard rendered instantly from its own fresh
+> entry while re-warming nothing, and the next screen paid the whole 1+N fan-out cold.
 
 ---
 
-**14. Why does the demo mock (`lib/mock.ts`) run the product's own labeler and `ask` agents
-against the seeded transcripts at boot, instead of shipping pre-baked label/analysis data in the
-seed itself?**
+**8. Why is there no `dashboard:` cache key any more, and why is its absence the fix?**
 
-> So the mock exercises the real taxonomy (`lib/domain/taxonomy.ts`) end to end, proving the agent
-> definitions actually work — not just the UI's ability to render fake data. If the taxonomy has a
-> bug (e.g. a malformed `ask` prompt), running it against the mock at boot would surface that the
-> same way it would against a live Knowledge Box.
+> `aggregate()` was made pure and O(N) so the dashboard is recomputed per render directly from the
+> `summary:<id>` entries. Because it now reads those entries rather than a cache of its own, **every
+> dashboard render re-warms exactly what the calls list will read next.** A separate dashboard key
+> was what let the two screens' cache lifetimes diverge in the first place.
 
 ---
 
-**15. `make check` runs three things. Name them, and say which one a change to
-`lib/domain/taxonomy.ts` alone (no other file) is most likely to fail, if anything.**
+**9. `services/calls.ts`'s `createCall()` calls `invalidateCall()` before returning. What would a
+caller observe if that line were removed — and why is that worse under stale-while-revalidate?**
 
-> Lint (`biome check .`), typecheck (`tsc --noEmit`), and tests-with-coverage
-> (`vitest run --coverage`). A taxonomy-only change is unlikely to fail any of them by itself
-> (there's no test asserting exact taxonomy contents), but it's worth knowing `test/unit/
-> services.test.ts` imports `AGENTS` from the taxonomy and would fail to *import* the module (and
-> so fail the whole suite) if the edit introduced a TypeScript error — which typecheck would also
-> have already caught.
+> They could upload a call, get a `202` with its id, and still not see it in `GET /api/v1/calls`.
+> Under `getOrLoad()` that lasts at most one TTL. Under `getOrLoadStale()` a reader can be served a
+> value up to `ttlMs + graceMs` — ten TTLs, ten minutes at the default — old. Serving stale is only
+> sound because every write path deletes outright; it converts a one-minute bug into a ten-minute
+> one the moment a write path forgets.
+
+---
+
+**10. `TtlCache`'s `delete`/`invalidatePrefix`/`clear` also mark in-flight loads `dirty`. What race
+does that close?**
+
+> A load that started *before* a write and resolves *after* it would otherwise repopulate the key
+> the write had just removed — a deleted call reappearing in the list for a whole TTL. A dirty
+> load returns its value to its own caller and declines to store it.
+
+---
+
+**11. `lib/domain/taxonomy.ts` is no longer the taxonomy. What is it, and what is?**
+
+> It is the **seed**. `seedTaxonomy()` (`services/taxonomy-store.ts`) copies `ALL_LABELSETS` and
+> `AGENTS` into `DATA_DIR/taxonomy.json` the first time anything reads it, writes a `seeded`
+> marker, and never runs again (D-CA-37). From then on the store is the authority, and the labeler
+> agents' `operations` are derived from it on every read. A source edit therefore changes nothing
+> on a deployment whose store already exists — there is no re-seed endpoint.
+
+---
+
+**12. Editing a labelset and provisioning it changes no call's labels. Why, and what does?**
+
+> Provisioning writes the **vocabulary** to the Knowledge Box — `putLabelset()` per labelset. It is
+> not retroactive. Only re-running the labeler (`POST /api/v1/agents/resource-labeler/start`, or a
+> full `POST /api/v1/admin/provision`) reclassifies existing calls, and you must then invalidate
+> the read cache or you will watch the old counts for a TTL and think the agent failed.
+
+---
+
+**13. Why does `PUT /api/v1/labelsets/{id}` ignore an `id` in the request body?**
+
+> The labelset id is also the Knowledge Box labelset id, stamped into every label already applied
+> to every analysed call. Honouring a rename would orphan that data, so the id is immutable after
+> creation and the path always wins (D-CA-37). `?knowledge_box=true` on delete is the related
+> asymmetry: removing a labelset from the product's vocabulary is configuration; removing the
+> labels already applied is data, so it is a separate, unticked, explicit choice.
+
+---
+
+**14. "Changes take effect with no restart." Name the function that makes that true, and the design
+it was chosen over.**
+
+> `applyToRuntime()` in `services/config.ts`, which **mutates the memoised runtime container on
+> `globalThis` in place** — reassigning `rt.branding`, the scalars on `rt.env`, and where needed
+> `rt.cache` (a new `TtlCache`, because `ttlMs` is `readonly`) and `rt.arag` (a new `AragClient`,
+> followed by `rt.cache.clear()`, since every entry came from the old Knowledge Box). It was chosen
+> over an `effectiveSettings()` object that every consumer must remember to consult — which is one
+> forgotten call site away from a setting that saves, displays as saved, and does nothing
+> (D-CA-34).
+
+---
+
+**15. `connection.apiKey` can be written but never read back, and appears in the audit trail as
+`true`. Name the two distinct problems that avoids.**
+
+> (a) A credential that can be read back is one more thing a mis-scoped read, a log line or a
+> screenshot can disclose. (b) A settings form that renders what it read and posts back what it
+> renders would wipe the service-account token the moment an operator saved an unrelated field,
+> taking the deployment offline from an edit that had nothing to do with credentials. Hence: empty
+> string means "leave it alone" (D-CA-35). Writing it to `DATA_DIR/settings.json` at all is a
+> recorded exception to "secrets only from env" (D-CA-45); the file is chmod `0600` on every write.
+
+---
+
+**16. Revoking the last API key does not reopen the API. Why is that correct, and what does reopen
+it?**
+
+> `apiKeysEnforced()` asks *"has this deployment **ever** had a key"*, not *"does it have an active
+> one"*. The earlier version asked the second question, which meant that revoking a compromised key
+> — the exact incident-response action — turned the API **open**, silently, with no way back, since
+> the `API_KEYS` seed is idempotent by digest and a restart resurrected the same revoked row
+> (D-CA-46). Reopening requires deleting the rows: `DELETE /api/v1/api-keys/{id}?purge=true`.
+
+---
+
+**17. Key material is stored as a SHA-256 digest rather than under a password KDF, and
+`verifyApiKey()` keeps comparing after it finds a match. Justify both.**
+
+> A generated key is `randomBytes(24)` — 192 bits — so there is nothing to brute-force offline and
+> a deliberately slow hash would only add latency to every authenticated request, against every
+> active key. Not stopping at the first match means the response time varies with neither the key's
+> **position** in the store nor with whether a match happened at all, so timing leaks neither which
+> key matched nor how many exist. (The caveat: this reasoning depends on the entropy. Keys seeded
+> from `API_KEYS` may be operator-chosen, which is why `previewOf()` shows eight characters of the
+> *digest* for those, and eight of the *secret* only for keys the product generated.)
+
+---
+
+**18. A saved view is stored on the server; the column picker and row density are not. Give the
+rule, and say where the filters themselves live.**
+
+> The rule (D-CA-39): **the question is shared, the furniture is not.** A saved view names a work
+> queue that a rota of supervisors must all see, so it lives in `DATA_DIR/views.json` and is
+> readable by anyone who can read the API. Columns and density are one person's preference, so they
+> live in that browser's `localStorage` (`ca.calls.columns`, `ca.calls.density`) and appear nowhere
+> in the URL — a link therefore carries your question and the recipient's own furniture. The
+> filters, search, sort, page, date window and table/browse mode all live in **the URL**, which is
+> what makes them linkable, pasteable and back-button-able; a saved view is just a name for one,
+> re-parsed through an allowlist on the way in because it is a URL the product will later follow.
+
+---
+
+## Stretch questions
+
+No answers supplied. These have real disagreement in them.
+
+**S1.** You changed one label's description and six calls were reclassified, four of them wrongly.
+What would you need to add to this product before you would let a customer edit descriptions on a
+deployment with 8,000 analysed calls?
+
+**S2.** Every clickable number on the dashboard is computed from `call_metrics` and every
+drill-through filters on labels. Propose the fix, then write the single property a test should
+assert to stop it recurring.
+
+**S3.** `GET /api/v1/shares/{token}` is public and unauthenticated, and `POST` on shares is `api`
+rather than `write` — the one deliberate exception to D-CA-13. Argue the exception is sound, then
+argue it is not, and say which argument you would put in front of a customer's security reviewer.
+
+**S4.** Deleting a call writes no audit entry; purging one under a retention policy does. Is that a
+defect or a scoping decision? What would you change, and what would it cost?

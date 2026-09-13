@@ -1,94 +1,121 @@
-# Solution — Exercise 2: extend the taxonomy
+# Solution — Exercise 2: extend the taxonomy the product ships
 
-## Option A — add a label to `disposition_flags`
+## The code change
 
-In `lib/domain/taxonomy.ts`, inside `RESOURCE_LABELSETS`, find the `disposition_flags` entry and
-add one more item to its `labels` array:
-
-```ts
-{
-  id: "disposition_flags",
-  title: "Disposition Flags",
-  color: "#ea580c",
-  multiple: true,
-  kind: "RESOURCES",
-  labels: [
-    { label: "Complaint Raised", description: "A complaint or grievance was expressed during the call." },
-    { label: "Cross-sell Offered", description: "The agent offered an additional product or plan." },
-    { label: "Cross-sell Accepted", description: "The member agreed to an additional product or plan." },
-    { label: "Retention Save", description: "A member who wanted to cancel was retained." },
-    { label: "Compliance Risk", description: "Possible compliance issue: missing disclosure, PHI mishandling, unverified identity." },
-    { label: "Coverage Denied", description: "A claim, service, or authorization was denied." },
-    { label: "First-Call Resolution", description: "Issue resolved on the first contact with no follow-up." },
-    { label: "Vulnerable Member", description: "Member appears elderly, distressed, or in a sensitive health situation." },
-    // added:
-    { label: "Language Barrier", description: "The call involved a language barrier or required an interpreter." },
-  ],
-},
-```
-
-That's the entire code change. `labelOps(RESOURCE_LABELSETS)` (also in `lib/domain/taxonomy.ts`)
-automatically includes the new label in the `resource-labeler` agent's `label` operation the next
-time it's built — nothing else references the array by length or by a hardcoded label list.
-
-## Option B — a new labelset
-
-Add a new entry to `RESOURCE_LABELSETS` (same array), following the `line_of_business` shape:
+One entry appended to `RESOURCE_LABELSETS` in `lib/domain/taxonomy.ts`, immediately before the
+array's closing `];`:
 
 ```ts
-{
-  id: "channel_preference",
-  title: "Preferred Channel",
-  color: "#0d9488",
-  multiple: false,
-  kind: "RESOURCES",
-  labels: [
-    { label: "Phone", description: "Member prefers to be contacted by phone." },
-    { label: "Email", description: "Member prefers email." },
-    { label: "Portal", description: "Member prefers the self-service portal/app." },
-  ],
-},
+  {
+    id: "resolution_path",
+    title: "Resolution Path",
+    color: "#7c3aed",
+    multiple: false,
+    kind: "RESOURCES",
+    labels: [
+      {
+        label: "Self-service Restored",
+        description:
+          "The agent walked the member through the portal, the app, a password reset or a login so they could do it themselves.",
+      },
+      {
+        label: "Agent Action",
+        description:
+          "The agent made the change on the member's behalf during the call: autopay, enrolment, a form or an update.",
+      },
+      {
+        label: "Referred Onward",
+        description:
+          "The agent referred the member to a supervisor, a specialist team, a provider or a pharmacy to finish the job.",
+      },
+    ],
+  },
 ```
 
-## Re-provision
+That is the entire diff. Nothing else in the repo names a labelset by id, counts them, or indexes
+into the array:
 
-```bash
-curl -s -X POST http://localhost:3000/api/v1/admin/provision \
-  -H "Authorization: Bearer dev-admin-token" -H "Content-Type: application/json" -d '{}'
+- `ALL_LABELSETS` is `[...RESOURCE_LABELSETS, PARAGRAPH_LABELSET]`.
+- `labelOps(RESOURCE_LABELSETS)` builds the `resource-labeler` agent's `operations` by iterating.
+- `seedTaxonomy()` iterates `ALL_LABELSETS`.
+- `services/labelsets.ts`'s `FACET_ORDER` affects order only; an unlisted id is appended.
+
+## What was actually observed
+
+Run while writing this solution, against the in-process sample Knowledge Box.
+
+**Step 2 — the running deployment, whose store was already seeded:**
+
+```
+id                     shipped  defined  provisioned
+call_reason            True     True     True
+call_outcome           True     True     True
+sentiment              True     True     True
+line_of_business       True     True     True
+disposition_flags      True     True     True
+moment                 True     True     True
+resolution_path        False    False    True
 ```
 
-This returns `202` with a `Job`. Poll it:
+Read that last row carefully. `provisioned: true`, `defined: false`. The Knowledge Box has the
+labelset — because in sample mode `startDemoMock()` seeds the mock KB straight from `ALL_LABELSETS`
+at boot, and `ALL_LABELSETS` is the source file you just edited. The product's own taxonomy store
+does not have it, because `seedTaxonomy()` found its `seeded` marker and returned. `shipped` is
+`false` for the same reason: that flag is read off the store document, and there is no store
+document.
 
-```bash
-curl -s http://localhost:3000/api/v1/jobs/<jobId> -H "Authorization: Bearer dev-admin-token"
+So the deployment is in a split state: a vocabulary exists upstream that the product has no record
+of, and the labeler's `operations` — derived from the **store** — do not include it. Inspecting
+`DATA_DIR/taxonomy.json` directly confirms it:
+
+```
+['labelset:call_reason', 'labelset:call_outcome', 'labelset:sentiment',
+ 'labelset:line_of_business', 'labelset:disposition_flags', 'labelset:moment',
+ 'agent:resource-labeler', 'agent:paragraph-labeler', 'agent:call-insights', 'seeded']
 ```
 
-until `"status":"succeeded"`. Under the hood (`services/jobs.ts`, `JOB_PROVISION`):
-`provisionLabelsets(rt)` (in `services/labelsets.ts`) calls `rt.arag.putLabelset()` once per
-labelset in `ALL_LABELSETS` — including your new one — and then, unless you passed
-`{"agents": false}`, `startAgent()` restarts `resource-labeler` so existing seeded calls are
-re-classified with the label now available.
+In **live** mode the same edit produces no visible effect whatsoever: there is no mock boot seeding,
+and `provisionLabelsets()` iterates `labelsetDefs(rt)` — the store.
 
-## Confirm
+**Steps 3–4 — restarted against a fresh `DATA_DIR`:**
 
-```bash
-curl -s http://localhost:3000/api/v1/labelsets | python3 -m json.tool
+```
+resolution_path        True     True     True
 ```
 
-For Option A, look inside the `disposition_flags` entry's `labels` array for `"Language Barrier"`.
-For Option B, look for a new top-level entry with `"id": "channel_preference"`.
+and the labeler classified the sample corpus into it:
 
-Then open http://localhost:3000/calls — the filter sidebar (built from this same
-`GET /api/v1/labelsets` response by `components/CallsExplorer.tsx`) shows the new label or
-labelset as a selectable chip. It will have a `0` count until at least one call is (re)classified
-with it — either because you provisioned with agents on, or because you upload a new call whose
-transcript matches the label's description.
+```
+[('Agent Action', 12), ('Self-service Restored', 1)]
+```
 
-## Why this works without touching ARAG-specific code
+Twelve of the thirteen sample calls are an agent doing something on the member's behalf, one is a
+password reset walked through in the portal, and none were referred onward. That distribution comes
+from the real `resource-labeler` agent reading the real `description` strings you wrote — the
+descriptions *are* the instruction, which is the point Exercise 4 develops.
 
-`services/labelsets.ts`'s `putLabelset()` and `provisionLabelsets()`, and
-`lib/domain/taxonomy.ts`'s `labelOps()`, all iterate the taxonomy arrays generically — nothing in
-the product hardcodes label names outside the taxonomy file itself (the one exception is
-`lib/parse.ts`'s `VALID_METRIC_VALUES`, which validates the *generated metrics* enum fields, not
-labelsets — a genuinely new metric enum value would need a matching update there too, but this
-exercise only touched a labelset, which has no such allowlist).
+## Answer to the question
+
+> A partner forks this product for utility-company calls, rewrites `lib/domain/taxonomy.ts`
+> wholesale, and redeploys to a cluster that has been running six months with a persistent
+> `DATA_DIR`. What do their users see?
+
+**The old health-insurance taxonomy, unchanged.** The store was seeded on that cluster's first boot
+in month one, `seedTaxonomy()` returns at its `seeded` guard on every subsequent read, and there is
+no re-seed endpoint. Their calls keep being classified into *Claims*, *Benefits & Coverage* and
+*Prior Authorization*. In sample/mock mode they would get the confusing half-state above instead,
+which is arguably worse because it looks like something happened.
+
+The release notes needed to say one of three things, and the choice is a real product decision:
+
+1. **Migrate deliberately** — for each new labelset, `POST /api/v1/labelsets`; for each obsolete
+   one, `DELETE /api/v1/labelsets/{id}?knowledge_box=true`; then re-provision and re-run the
+   labeler. Every call already classified keeps its old labels until that last step. This is the
+   only option that preserves the operator's own customisations.
+2. **Reset the taxonomy** — delete the labelset rows from `DATA_DIR/taxonomy.json` and restart,
+   accepting that any in-product edits the operator made are gone.
+3. **Ship it as a new deployment** with its own `DATA_DIR`.
+
+That there is no fourth option — no `POST /api/v1/taxonomy/reseed`, no "restore shipped" — is a gap
+worth naming to the product owner rather than working around silently. It is recorded in the lab's
+*Known defects and gaps* section.

@@ -3,7 +3,7 @@
 // Copy this file to app/api/v1/calls/[id]/moments/route.ts in the real repo and fill in the TODOs.
 // Compare with the working GET handler in app/api/v1/calls/[id]/route.ts for the pattern.
 
-import { route } from "@/lib/api";
+import { preflight, route } from "@/lib/api";
 // TODO: import your new service function once you've written it, e.g.:
 // import { momentsOf } from "@/services/calls";
 
@@ -17,3 +17,6 @@ export const GET = route({ path: "/api/v1/calls/{id}/moments", method: "get" }, 
   // The handler itself should be one line — all the real work belongs in services/calls.ts.
   throw new Error("not implemented");
 });
+
+// Every route in this product exports the shared CORS preflight handler (DECISIONS D-CA-14).
+export const OPTIONS = preflight;
