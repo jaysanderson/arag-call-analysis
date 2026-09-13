@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           to an `--arag-*` token, so overriding these re-colours the utilities and the shared
           `.arag-*` components together. Rendered after the stylesheet so it wins on document
           order; the values are validated in `lib/branding.ts` before they reach this string.
-          `--pg-green` is deliberately NOT emitted here: Progress green is not a themeable colour,
+          `--arag-green` is deliberately NOT emitted here: Progress green is not a themeable colour,
           it belongs to the wordmark and the Progress band, both of which BRAND_POWERED_BY removes.
         */}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: colours are validated by safeColor() */}

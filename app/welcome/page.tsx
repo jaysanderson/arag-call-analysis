@@ -12,7 +12,7 @@ export default function WelcomePage() {
         description="Four things have to be true before every call is categorised, summarised and searchable."
         breadcrumb={[{ label: "Home", href: "/" }, { label: "Get started" }]}
       />
-      <div className="arag-pagebody">
+      <div className="arag-content">
         <Welcome />
         <ApiMeta>
           <code>GET /api/v1/onboarding</code> and <code>POST /api/v1/samples</code>

@@ -22,7 +22,7 @@ export function Wordmark({
   height?: number;
   className?: string;
 }) {
-  const src = variant === "dark" ? "/brand/arag-logo-alt.svg" : "/brand/arag-logo.svg";
+  const src = variant === "dark" ? "/ui/brand/arag-logo-alt.svg" : "/ui/brand/arag-logo.svg";
   return (
     <img
       src={src}
@@ -41,23 +41,21 @@ export function Wordmark({
  * corner and made the platform, rather than the product, read as the thing you are using. What
  * belongs here is the partner's logo when one is configured, and the product name and tagline.
  */
-export function ProductIdent({ branding, compact }: { branding: Branding; compact?: boolean }) {
+export function ProductIdent({ branding }: { branding: Branding }) {
   return (
     <>
-      {branding.logoUrl && (
-        <img src={branding.logoUrl} alt={branding.productName} style={{ height: 20, width: "auto" }} />
-      )}
-      {!compact && (
-        <>
-          <span className="name">{branding.productName}</span>
-          {branding.tagline && <span className="tag">{branding.tagline}</span>}
-        </>
-      )}
+      {branding.logoUrl && <img src={branding.logoUrl} alt={branding.productName} />}
+      <span className="name">{branding.productName}</span>
+      {branding.tagline && <span className="tag">{branding.tagline}</span>}
     </>
   );
 }
 
-/** True when the sidebar identity block would render nothing at all (collapsed, no partner logo). */
-export function hasIdent(branding: Branding, compact?: boolean): boolean {
-  return Boolean(branding.logoUrl) || !compact;
+/**
+ * True when the rail identity block would render anything at all. It always does now — the kit's
+ * collapsed rail hides the name and tagline with CSS rather than by dropping them from the DOM —
+ * but the predicate stays as the single place that answers the question.
+ */
+export function hasIdent(_branding: Branding): boolean {
+  return true;
 }

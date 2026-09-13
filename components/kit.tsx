@@ -29,7 +29,7 @@ export function StateChip({
 }) {
   const cls = tone === "neutral" ? "" : ` ${tone}`;
   return (
-    <span className={`arag-state${cls}${busy ? " busy" : ""}`} title={title}>
+    <span className={`ca-state${cls}${busy ? " busy" : ""}`} title={title}>
       {children}
     </span>
   );
@@ -93,7 +93,7 @@ export function Skeleton({
   width?: number | string;
   className?: string;
 }) {
-  return <div className={`arag-skel ${className ?? ""}`} style={{ height, width: width ?? "100%" }} />;
+  return <div className={`arag-skeleton ${className ?? ""}`} style={{ height, width: width ?? "100%" }} />;
 }
 
 export function TableSkeleton({ rows = 6, cols = 6 }: { rows?: number; cols?: number }) {
@@ -432,20 +432,39 @@ export function Drawer({
   onClose,
   children,
   footer,
+  wide,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  wide?: boolean;
 }) {
   const panel = useRef<HTMLElement>(null);
   useModalFocus(panel, onClose);
+
+  /**
+   * The kit parks `.arag-drawer` at `translateX(100%)` and slides it in when `is-open` is added —
+   * its own custom element does that on the next frame. A React drawer has to do the same thing,
+   * and until it did, every drawer in this product was mounted, focused and announced while
+   * sitting entirely off-screen: present in the accessibility tree, impossible to click.
+   *
+   * The class is added on the next animation frame rather than in the same commit so the browser
+   * has painted the off-screen position first and the transition actually plays; going straight to
+   * the open state would make it appear with no motion at all.
+   */
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setOpen(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   return (
     <>
       <div className="arag-drawer-backdrop" onClick={onClose} role="presentation" />
       <aside
         ref={panel}
-        className="arag-drawer"
+        className={`arag-drawer${wide ? " wide" : ""}${open ? " is-open" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -490,10 +509,14 @@ export function ConfirmDialog({
   useModalFocus(panel, onCancel);
   return (
     <div className="arag-modal-backdrop" onClick={onCancel} role="presentation">
+      {/* `role="alertdialog"` rather than `dialog`: a confirmation interrupts to ask a question
+          whose wrong answer destroys something, and assistive technology should announce the body
+          text, not only the title. The kit's `.arag-confirm` narrows the modal to the width a
+          one-question dialog should be. */}
       <div
         ref={panel}
-        className="arag-modal"
-        role="dialog"
+        className="arag-modal arag-confirm"
+        role="alertdialog"
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
@@ -503,7 +526,7 @@ export function ConfirmDialog({
           <h2>{title}</h2>
         </div>
         <div className="body">{body}</div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: 16, paddingTop: 0 }}>
+        <div className="foot">
           <button type="button" className="arag-btn secondary" onClick={onCancel}>
             Cancel
           </button>

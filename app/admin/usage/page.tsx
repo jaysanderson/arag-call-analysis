@@ -94,7 +94,7 @@ export default function AdminUsagePage() {
         <StateBlock loading={usage.loading} error={usage.error}>
           {usage.data && (
             <div className="arag-stack">
-              <div className="arag-stat-strip">
+              <div className="arag-statstrip">
                 <div>
                   <div className="label">Requests</div>
                   <div className="value">{usage.data.requests.toLocaleString()}</div>

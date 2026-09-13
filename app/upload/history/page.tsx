@@ -22,7 +22,7 @@ export default function IngestHistoryPage() {
           </Link>
         }
       />
-      <div className="arag-pagebody">
+      <div className="arag-content">
         <IngestHistory />
         <ApiMeta>
           <code>GET /api/v1/jobs</code>

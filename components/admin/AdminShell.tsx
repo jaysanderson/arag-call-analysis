@@ -21,6 +21,7 @@ const NAV = [
   { href: "/admin/taxonomy", label: "Taxonomy & Agents" },
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/logs", label: "Logs" },
+  { href: "/admin/audit", label: "Audit" },
   { href: "/admin/usage", label: "Usage" },
   { href: "/admin/branding", label: "Branding" },
   { href: "/admin/security", label: "Security" },
@@ -113,7 +114,7 @@ export function AdminShell({
           </nav>
         }
       />
-      <div className="arag-pagebody">{children}</div>
+      <div className="arag-content">{children}</div>
     </>
   );
 }

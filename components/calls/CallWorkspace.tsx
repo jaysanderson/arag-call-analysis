@@ -141,7 +141,7 @@ export function CallWorkspace({
         )}
       </header>
 
-      <div className="arag-pagebody">
+      <div className="arag-content">
         <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 560px", minWidth: 0, display: "grid", gap: 16 }}>
             {hasMedia && (

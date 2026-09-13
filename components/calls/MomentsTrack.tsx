@@ -56,7 +56,7 @@ export function MomentsTrack({
 
   return (
     <div>
-      <fieldset className="arag-moments" data-testid="moments-track" aria-label="Call moments">
+      <fieldset className="ca-moments" data-testid="moments-track" aria-label="Call moments">
         {paragraphs.map((p) => {
           const moment = p.moments.find((m) => MOMENT_COLOR[m]);
           const colour = momentColor(moment);

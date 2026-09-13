@@ -336,6 +336,52 @@ export const IconInbox = (p: IconProps) => (
   </Svg>
 );
 
+export const IconApi = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m8 17-5-5 5-5M16 7l5 5-5 5M13.5 4l-3 16" />
+  </Svg>
+);
+
+export const IconColumns = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9 4v16M15 4v16" />
+  </Svg>
+);
+
+export const IconBookmark = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 4h12v16l-6-4-6 4z" />
+  </Svg>
+);
+
+export const IconStop = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="6" y="6" width="12" height="12" rx="2" />
+  </Svg>
+);
+
+export const IconCalendar = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="5" width="18" height="16" rx="2" />
+    <path d="M3 10h18M8 3v4M16 3v4" />
+  </Svg>
+);
+
+export const IconEdit = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 20h4l10-10a2.83 2.83 0 0 0-4-4L4 16z" />
+  </Svg>
+);
+
+export const IconImage = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="m3 16 5-5 4 4 3-3 6 6" />
+    <circle cx="8.5" cy="9" r="1.5" />
+  </Svg>
+);
+
 /** Media-type icon for a call, chosen from the parsed media type. */
 export function MediaIcon({ type, ...rest }: IconProps & { type: string }) {
   if (type === "video") return <IconVideo {...rest} />;

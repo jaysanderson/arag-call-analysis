@@ -174,7 +174,8 @@ export function HowThisWorks() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-white/20"
+        aria-label="How this works"
+        className="ca-reveal-trigger inline-flex items-center gap-1.5 rounded-md border border-white/25 bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-white/20"
       >
         <svg
           aria-hidden="true"
@@ -191,7 +192,9 @@ export function HowThisWorks() {
           <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.5-2.5 1.8-2.5 3.5" />
           <circle cx="12" cy="16.5" r="0.6" fill="currentColor" />
         </svg>
-        How this works
+        {/* The label collapses to the icon in the band on a narrow screen; `aria-label` above
+            keeps the accessible name either way. */}
+        <span className="label">How this works</span>
       </button>
 
       {open && (

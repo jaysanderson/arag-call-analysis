@@ -7,6 +7,7 @@ import { HowThisWorks } from "@/components/HowThisWorks";
 import {
   IconActivity,
   IconAdmin,
+  IconApi,
   IconCalls,
   IconClose,
   IconCollapse,
@@ -21,12 +22,18 @@ import type { Branding } from "@/lib/branding";
 import { hasIdent, ProductIdent, Wordmark } from "./Brandmark";
 
 /**
- * The standing application shell: Progress band, left sidebar, page area, footer.
+ * The standing application shell: Progress band, left rail, main column, footer.
+ *
+ * As of arag-platform 0.2.0 the chrome is the kit's (`.arag-app` / `.arag-appband` / `.arag-rail` /
+ * `.arag-railnav` / `.arag-main`), in the `rail="light"` family — this product's rail has always
+ * been a light surface and the kit ships both. The kit's shell is a custom element written for
+ * plain-DOM products; this is the same markup contract rendered by React, so the CSS, the collapse
+ * behaviour, the drawer and the collapsed-rail accessibility rules are all the kit's.
  *
  * Three things it is responsible for that a page must never re-implement:
  *  1. **Identity.** The Progress band and the product identity block, both driven by `Branding`.
  *  2. **Navigation.** One nav definition, so a new screen cannot be added without appearing in it.
- *  3. **Live deployment state.** The connection mode and running-job count in the sidebar foot,
+ *  3. **Live deployment state.** The connection mode and running-job count in the rail foot,
  *     polled once for the whole app rather than per screen.
  */
 
@@ -41,6 +48,7 @@ const PRODUCT_NAV: NavItem[] = [
   { href: "/calls", label: "Calls", icon: IconCalls },
   { href: "/upload", label: "Upload", icon: IconUpload },
   { href: "/taxonomy", label: "Agents & Taxonomy", icon: IconTaxonomy },
+  { href: "/api", label: "API", icon: IconApi },
   { href: "/settings", label: "Settings", icon: IconSettings },
 ];
 
@@ -87,15 +95,18 @@ function useDeploymentState(): DeploymentState | null {
   return state;
 }
 
+/**
+ * Nav links follow the kit's `.arag-railnav` contract: the label is always rendered inside a
+ * `<span>` and the collapsed rail hides it with CSS, so the accessible name survives collapsing
+ * (the previous implementation dropped the text node entirely, leaving an unnamed link).
+ */
 function NavList({
   items,
   pathname,
-  rail,
   onNavigate,
 }: {
   items: NavItem[];
   pathname: string;
-  rail?: boolean;
   onNavigate?: () => void;
 }) {
   return (
@@ -106,13 +117,12 @@ function NavList({
           <Link
             key={n.href}
             href={n.href}
-            className="item"
             aria-current={active ? "page" : undefined}
-            title={rail ? n.label : undefined}
+            title={n.label}
             onClick={onNavigate}
           >
             <n.icon size={18} />
-            {!rail && <span>{n.label}</span>}
+            <span>{n.label}</span>
           </Link>
         );
       })}
@@ -149,89 +159,30 @@ export function AppShell({ branding, children }: { branding: Branding; children:
   // biome-ignore lint/correctness/useExhaustiveDependencies: closing on navigation is the point
   useEffect(() => setDrawer(false), [pathname]);
 
-  const sidebar = (rail: boolean, onNavigate?: () => void) => (
-    <>
-      {/* Collapsed to the rail with no partner logo there is nothing to show, so the block is
-          omitted rather than left as empty padding above the nav. */}
-      {hasIdent(branding, rail) && (
-        <Link href="/" className="ident" onClick={onNavigate}>
-          <ProductIdent branding={branding} compact={rail} />
-        </Link>
-      )}
-      <NavList items={PRODUCT_NAV} pathname={pathname} rail={rail} onNavigate={onNavigate} />
-      {!rail && <div className="group">Operations</div>}
-      <NavList items={OPERATIONS_NAV} pathname={pathname} rail={rail} onNavigate={onNavigate} />
-      <div className="foot">
-        {deployment && (
-          <>
-            <span
-              className={`arag-state ${deployment.mode === "mock" ? "muted" : "ok"}`}
-              title={
-                deployment.mode === "mock"
-                  ? "Running against the in-process sample Knowledge Box"
-                  : "Connected to a live Knowledge Box"
-              }
-            >
-              {rail ? "" : deployment.mode === "mock" ? "Sample data" : "Live"}
-            </span>
-            {deployment.runningJobs > 0 && (
-              <Link
-                href="/upload/history"
-                className="arag-state busy"
-                onClick={onNavigate}
-                title={`${deployment.runningJobs} job${deployment.runningJobs === 1 ? "" : "s"} running`}
-              >
-                {rail
-                  ? ""
-                  : `${deployment.runningJobs} job${deployment.runningJobs === 1 ? "" : "s"} running`}
-              </Link>
-            )}
-          </>
-        )}
-        {!rail && (
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            className="arag-btn ghost sm"
-            style={{ justifyContent: "flex-start", paddingLeft: 6 }}
-          >
-            <IconCollapse size={16} />
-            Collapse
-          </button>
-        )}
-        {rail && (
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            className="arag-btn ghost sm"
-            aria-label="Expand navigation"
-          >
-            <IconExpand size={16} />
-          </button>
-        )}
-        {/*
-          The architecture reveal normally lives in the Progress band. A white-label deployment
-          removes that band, and the disclosure must not disappear with the credit — it moves here
-          instead, styled for a light surface.
-        */}
-        {!branding.poweredBy && !rail && (
-          <div className="arag-light-reveal" style={{ marginTop: 4 }}>
-            <HowThisWorks />
-          </div>
-        )}
-      </div>
-    </>
-  );
+  // Escape closes the drawer: it is an overlay, and the kit's overlay contract says every one of
+  // them dismisses the same way.
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [drawer]);
+
+  const railState = drawer ? "open" : collapsed ? "collapsed" : "expanded";
 
   return (
-    <div className="arag-app">
+    <div className="arag-app" data-rail-theme="light" data-rail={railState}>
+      <a className="arag-skip" href="#main">
+        Skip to content
+      </a>
       {branding.poweredBy && (
         <div className="arag-appband arag-dark" data-testid="powered-by-band">
           <button
             type="button"
-            onClick={() => setDrawer(true)}
+            onClick={() => setDrawer((d) => !d)}
             aria-label="Open navigation"
-            className="lg:hidden"
+            aria-expanded={drawer}
+            className="arag-rail-menu"
             style={{ lineHeight: 0 }}
           >
             <IconMenu size={18} />
@@ -245,33 +196,86 @@ export function AppShell({ branding, children }: { branding: Branding; children:
       )}
 
       <div className="body">
-        <nav
-          className={`arag-sidebar${collapsed ? " rail" : ""}`}
-          aria-label="Primary"
-          data-testid="app-sidebar"
-        >
-          {sidebar(collapsed)}
+        <nav className="arag-rail" aria-label="Primary" data-testid="app-sidebar">
+          {hasIdent(branding) && (
+            <Link href="/" className="ident" onClick={() => setDrawer(false)}>
+              <ProductIdent branding={branding} />
+            </Link>
+          )}
+          <div className="arag-railnav">
+            <NavList items={PRODUCT_NAV} pathname={pathname} onNavigate={() => setDrawer(false)} />
+            <div className="group">Operations</div>
+            <NavList items={OPERATIONS_NAV} pathname={pathname} onNavigate={() => setDrawer(false)} />
+          </div>
+          <div className="foot">
+            {deployment && (
+              <>
+                <span
+                  className="arag-status"
+                  data-state={deployment.mode === "mock" ? undefined : "ok"}
+                  title={
+                    deployment.mode === "mock"
+                      ? "Running against the in-process sample Knowledge Box"
+                      : "Connected to a live Knowledge Box"
+                  }
+                >
+                  <span className="dot" />
+                  <span>{deployment.mode === "mock" ? "Sample data" : "Live"}</span>
+                </span>
+                {deployment.runningJobs > 0 && (
+                  <Link
+                    href="/upload/history"
+                    className="arag-status"
+                    data-state="busy"
+                    onClick={() => setDrawer(false)}
+                    title={`${deployment.runningJobs} job${deployment.runningJobs === 1 ? "" : "s"} running`}
+                  >
+                    <span className="dot" />
+                    <span>
+                      {deployment.runningJobs} job{deployment.runningJobs === 1 ? "" : "s"} running
+                    </span>
+                  </Link>
+                )}
+              </>
+            )}
+            {/*
+              The architecture reveal normally lives in the Progress band. A white-label deployment
+              removes that band, and the disclosure must not disappear with the credit — it moves
+              here instead, styled for the light rail.
+            */}
+            {!branding.poweredBy && (
+              <div className="ca-light-reveal" style={{ marginTop: 4 }}>
+                <HowThisWorks />
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="arag-rail-toggle"
+            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+          >
+            {collapsed ? <IconExpand size={16} /> : <IconCollapse size={16} />}
+            <span>Collapse</span>
+          </button>
         </nav>
 
-        <div className="arag-page">{children}</div>
+        <main className="arag-main" id="main">
+          {children}
+        </main>
       </div>
 
       {drawer && (
-        <>
-          <div className="arag-drawer-backdrop" onClick={() => setDrawer(false)} role="presentation" />
-          <nav className="arag-drawer left arag-sidebar" aria-label="Primary" style={{ padding: 16 }}>
-            <button
-              type="button"
-              onClick={() => setDrawer(false)}
-              className="arag-btn ghost sm"
-              style={{ alignSelf: "flex-end" }}
-              aria-label="Close navigation"
-            >
-              <IconClose size={16} />
-            </button>
-            {sidebar(false, () => setDrawer(false))}
-          </nav>
-        </>
+        <div className="arag-scrim" onClick={() => setDrawer(false)} role="presentation">
+          <button
+            type="button"
+            onClick={() => setDrawer(false)}
+            aria-label="Close navigation"
+            style={{ position: "fixed", top: 8, right: 8, background: "none", border: 0, color: "#fff" }}
+          >
+            <IconClose size={18} />
+          </button>
+        </div>
       )}
 
       <footer className="arag-footer">
@@ -293,6 +297,7 @@ export function AppShell({ branding, children }: { branding: Branding; children:
             {branding.poweredBy && (
               <span
                 data-testid="powered-by-credit"
+                className="credit"
                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 <Wordmark height={14} className="opacity-75" />
@@ -322,22 +327,23 @@ export function PageHeader({
 }) {
   return (
     <header className="arag-pagehead">
-      <div style={{ minWidth: 0 }}>
-        {breadcrumb && breadcrumb.length > 0 && (
-          <nav className="arag-breadcrumb" aria-label="Breadcrumb">
+      {breadcrumb && breadcrumb.length > 0 && (
+        <nav className="arag-breadcrumb" aria-label="Breadcrumb">
+          <ol>
             {breadcrumb.map((b, i) => (
-              <span key={`${b.label}-${i}`} style={{ display: "inline-flex", gap: 6 }}>
-                {i > 0 && <span className="sep">/</span>}
-                {b.href ? <Link href={b.href}>{b.label}</Link> : <span>{b.label}</span>}
-              </span>
+              <li key={`${b.label}-${i}`}>{b.href ? <Link href={b.href}>{b.label}</Link> : b.label}</li>
             ))}
-          </nav>
-        )}
-        <h1>{title}</h1>
-        {description && <p className="sub">{description}</p>}
+          </ol>
+        </nav>
+      )}
+      <div className="row">
+        <div style={{ minWidth: 0 }}>
+          <h1>{title}</h1>
+          {description && <p className="sub">{description}</p>}
+        </div>
+        {actions && <div className="actions">{actions}</div>}
       </div>
-      {actions && <div className="actions">{actions}</div>}
-      {tabs && <div style={{ flexBasis: "100%" }}>{tabs}</div>}
+      {tabs}
     </header>
   );
 }
@@ -345,7 +351,7 @@ export function PageHeader({
 /** The one-line provenance note every screen carries: which endpoint produced what you see. */
 export function ApiMeta({ children }: { children: React.ReactNode }) {
   return (
-    <p className="arag-meta-line" data-testid="api-meta">
+    <p className="ca-meta-line" data-testid="api-meta">
       Fed by {children}
     </p>
   );

@@ -1,717 +1,46 @@
-/*! ARAG UI kit — product-experience extensions (Call Analysis, D-28). Apache-2.0.
+/*! Call Analysis — the only front-end CSS this product still owns. Apache-2.0.
 
-    Authored in kit style so the Head can lift this file into
-    `arag-platform/ui/arag-ui.css` unchanged: `.arag-*` class names, `--arag-*` tokens only,
-    no Tailwind, no product-specific selectors. Everything here is a component the kit was
-    missing for a real application shell — a sidebar, a data table with sorting and selection,
-    a drawer, a filter bar, a stat strip, pagination, a menu, a segmented control, skeletons and
-    a media moments track.
+    Everything generic that used to live here — the application shell, the data table, the filter
+    bar, the drawer, the stat strip, pagination, the menu, the segmented control, skeletons, the
+    empty state, the meter and the "kit compatibility fixes" block — moved into the shared kit in
+    arag-platform 0.2.0 and was deleted from this file per that release's migration notes. What is
+    left is genuinely this product's: the moments track over a recording, the trust/status dot,
+    the ingest stepper, the white-label reveal trigger and the provenance line. They carry a
+    `.ca-` prefix so nothing here can ever shadow a kit component.
 
-    Two tokens are added, both Progress brand values that the kit does not carry yet:
-      --pg-green        #5ce500  the Progress green from the official wordmark
-      --pg-green-ink    #00123c  the only text colour legible on that fill
-    Rules for using them are enforced by convention, not by CSS: `--pg-green` is a FILL and
-    a DARK-SURFACE colour. It is never text on a light surface (it fails WCAG AA against white at
-    1.6:1), never a hairline, and never the only signal for a state.
+    `--pg-green` / `--pg-green-ink` are gone too: the kit ships `--arag-green` / `--arag-green-ink`
+    with the same values and the same rule (a FILL and a DARK-SURFACE colour, never text on white).
 */
 
-:root {
-  --pg-green: #5ce500;
-  --pg-green-ink: #00123c;
-  --arag-sidebar-w: 248px;
-  --arag-sidebar-rail-w: 64px;
-  --arag-inspector-w: 400px;
-  --arag-band-h: 44px;
-  --arag-row-h: 56px;
-  --arag-row-h-compact: 40px;
+/* ---------- page scaffold ----------
+   The kit's `.arag-pagehead` carries no gutter because it normally sits inside `.arag-content`.
+   This product renders it as a sibling of the content column so its underline runs full-bleed
+   across the main column, which is the divider the design specifies; it therefore needs the
+   gutter applied here. */
+
+.arag-main > .arag-pagehead {
+  padding: var(--arag-gutter) var(--arag-gutter) 16px;
+  margin-bottom: 0;
+  max-width: var(--arag-content-max);
 }
 
-/* ---------- application shell ---------- */
-
-.arag-app {
-  display: flex;
-  min-height: 100vh;
-  flex-direction: column;
-  background: var(--arag-surface);
-}
-.arag-app > .body {
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
-  align-items: stretch;
-}
-
-/* Top brand band. Dark by definition — this is where Progress green is legitimate. */
-.arag-appband {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  height: var(--arag-band-h);
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 16px;
-  background: var(--arag-ink-950);
-  color: #fff;
-}
-.arag-appband .wordmark {
-  height: 18px;
-  width: auto;
-  display: block;
-}
-.arag-appband .spacer {
-  margin-left: auto;
-}
-.arag-appband a,
-.arag-appband button {
-  color: rgba(255, 255, 255, 0.82);
-  font: inherit;
-  font-size: 13px;
-  background: none;
-  border: 0;
-  cursor: pointer;
-  text-decoration: none;
-  padding: 6px 8px;
-  border-radius: var(--arag-radius);
-}
-.arag-appband a:hover,
-.arag-appband button:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-/* The one place a solid Progress-green fill appears by default. */
-.arag-pill-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 999px;
-  background: var(--pg-green);
-  color: var(--pg-green-ink);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-/* ---------- sidebar ---------- */
-
-.arag-sidebar {
-  position: sticky;
-  top: var(--arag-band-h);
-  align-self: flex-start;
-  width: var(--arag-sidebar-w);
-  flex: 0 0 var(--arag-sidebar-w);
-  height: calc(100vh - var(--arag-band-h));
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 16px 12px 12px;
-  border-right: 1px solid var(--arag-border);
-  background: var(--arag-surface-raised);
-  overflow-y: auto;
-}
-.arag-sidebar.rail {
-  width: var(--arag-sidebar-rail-w);
-  flex-basis: var(--arag-sidebar-rail-w);
-  padding-left: 8px;
-  padding-right: 8px;
-}
-.arag-sidebar .ident {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 2px 8px 14px;
-  text-decoration: none;
-  color: inherit;
-}
-.arag-sidebar .ident img,
-.arag-sidebar .ident svg {
-  height: 20px;
-  width: auto;
-  display: block;
-}
-.arag-sidebar .ident .name {
-  font-family: var(--arag-font-display);
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--arag-ink-950);
-  line-height: 1.2;
-}
-.arag-sidebar .ident .tag {
+/* The one-line provenance note every screen carries: which endpoint produced what you see. */
+.ca-meta-line {
+  margin: 22px 0 0;
   font-size: 11.5px;
   color: var(--arag-text-subtle);
 }
-.arag-sidebar .group {
-  margin-top: 14px;
-  padding: 0 10px 6px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--arag-text-subtle);
-}
-.arag-sidebar a.item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 36px;
-  padding: 0 10px;
-  border-radius: var(--arag-radius);
-  color: var(--arag-text-muted);
-  font-size: 13.5px;
-  font-weight: 550;
-  text-decoration: none;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.arag-sidebar a.item:hover {
-  background: var(--arag-brand-50);
-  color: var(--arag-ink-950);
-}
-.arag-sidebar a.item[aria-current="page"] {
-  background: var(--arag-brand-50);
-  color: var(--arag-brand-600);
-}
-.arag-sidebar a.item[aria-current="page"]::before {
-  content: "";
-  position: absolute;
-  left: -12px;
-  top: 7px;
-  bottom: 7px;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--arag-brand-600);
-}
-.arag-sidebar.rail a.item[aria-current="page"]::before {
-  left: -8px;
-}
-.arag-sidebar a.item svg {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
-}
-.arag-sidebar a.item .count {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--arag-text-subtle);
-}
-.arag-sidebar .foot {
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--arag-border);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 11.5px;
-  color: var(--arag-text-muted);
-}
-
-/* ---------- page scaffold ---------- */
-
-.arag-page {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.arag-pagehead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 18px 24px 14px;
-  border-bottom: 1px solid var(--arag-border);
-  background: var(--arag-surface-raised);
-}
-.arag-pagehead h1 {
-  margin: 0;
-  font-family: var(--arag-font-display);
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--arag-ink-950);
-}
-.arag-pagehead .sub {
-  margin: 3px 0 0;
-  font-size: 13px;
-  color: var(--arag-text-muted);
-}
-.arag-pagehead .actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.arag-pagebody {
-  padding: 20px 24px 32px;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.arag-pagebody.narrow {
-  max-width: 760px;
-}
-.arag-meta-line {
-  margin-top: 22px;
-  font-size: 11.5px;
-  color: var(--arag-text-subtle);
+.ca-meta-line code {
   font-family: var(--arag-font-mono);
+  font-size: 11px;
 }
 
-.arag-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--arag-text-subtle);
-  margin-bottom: 4px;
-}
-.arag-breadcrumb a {
-  color: var(--arag-text-muted);
-  text-decoration: none;
-}
-.arag-breadcrumb a:hover {
-  color: var(--arag-brand-600);
-  text-decoration: underline;
-}
-.arag-breadcrumb .sep {
-  opacity: 0.5;
-}
+/* ---------- status dot ----------
+   The kit's `.arag-chip` covers the colour/shape, but this product's state chips lead with a dot:
+   a call's lifecycle is a *process* state, and the dot is what separates it at a glance from the
+   many taxonomy labels sharing the same row. Kept local for exactly that reason. */
 
-/* ---------- stat strip ---------- */
-
-.arag-stat-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  border: 1px solid var(--arag-border);
-  border-radius: var(--arag-radius-lg);
-  background: var(--arag-surface-raised);
-  overflow: hidden;
-}
-.arag-stat-strip > * {
-  padding: 14px 16px;
-  border-right: 1px solid var(--arag-border);
-  text-decoration: none;
-  color: inherit;
-  display: block;
-  min-width: 0;
-}
-.arag-stat-strip > *:last-child {
-  border-right: 0;
-}
-.arag-stat-strip a:hover {
-  background: var(--arag-brand-50);
-}
-.arag-stat-strip .label {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--arag-text-subtle);
-}
-.arag-stat-strip .value {
-  margin-top: 4px;
-  font-family: var(--arag-font-display);
-  font-size: 26px;
-  font-weight: 650;
-  line-height: 1.1;
-  color: var(--arag-ink-950);
-  font-variant-numeric: tabular-nums;
-}
-.arag-stat-strip .sub {
-  margin-top: 3px;
-  font-size: 11.5px;
-  color: var(--arag-text-muted);
-}
-
-/* ---------- filter bar ---------- */
-
-.arag-filterbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--arag-border);
-  border-radius: var(--arag-radius-lg);
-  background: var(--arag-surface-raised);
-}
-.arag-search {
-  position: relative;
-  flex: 1 1 260px;
-  max-width: 360px;
-}
-.arag-search > svg {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 15px;
-  height: 15px;
-  color: var(--arag-text-subtle);
-  pointer-events: none;
-}
-.arag-search > input {
-  width: 100%;
-  height: 34px;
-  padding: 0 10px 0 31px;
-  border: 1px solid var(--arag-border);
-  border-radius: var(--arag-radius);
-  background: var(--arag-surface-raised);
-  color: var(--arag-text);
-  font: inherit;
-  font-size: 13px;
-}
-.arag-search > input:focus {
-  outline: none;
-  border-color: var(--arag-brand-500);
-  box-shadow: var(--arag-focus);
-}
-
-.arag-filterchips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-.arag-filterchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 4px 0 9px;
-  border: 1px solid var(--arag-brand-200);
-  border-radius: 999px;
-  background: var(--arag-brand-50);
-  color: var(--arag-brand-700);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.arag-filterchip button {
-  border: 0;
-  background: none;
-  cursor: pointer;
-  color: inherit;
-  opacity: 0.65;
-  line-height: 0;
-  padding: 3px;
-  border-radius: 999px;
-}
-.arag-filterchip button:hover {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.07);
-}
-
-/* ---------- segmented control ---------- */
-
-.arag-segmented {
-  display: inline-flex;
-  padding: 2px;
-  border: 1px solid var(--arag-border);
-  border-radius: var(--arag-radius);
-  background: var(--arag-surface);
-}
-.arag-segmented button {
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--arag-text-muted);
-  padding: 5px 12px;
-  border-radius: 6px;
-}
-.arag-segmented button[aria-pressed="true"] {
-  background: var(--arag-surface-raised);
-  color: var(--arag-ink-950);
-  box-shadow: 0 1px 2px rgba(0, 18, 60, 0.1);
-}
-
-/* ---------- data table ---------- */
-
-.arag-datatable {
-  border: 1px solid var(--arag-border);
-  border-radius: var(--arag-radius-lg);
-  background: var(--arag-surface-raised);
-  overflow: hidden;
-}
-.arag-datatable .scroll {
-  overflow-x: auto;
-}
-.arag-datatable table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.arag-datatable thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--arag-surface);
-  border-bottom: 1px solid var(--arag-border);
-  text-align: left;
-  padding: 0 12px;
-  height: 38px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--arag-text-subtle);
-  white-space: nowrap;
-}
-.arag-datatable thead th button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: inherit;
-  padding: 0;
-}
-.arag-datatable thead th button:hover {
-  color: var(--arag-brand-600);
-}
-.arag-datatable thead th[aria-sort] button {
-  color: var(--arag-ink-950);
-}
-.arag-datatable tbody td {
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--arag-brand-50);
-  vertical-align: top;
-  color: var(--arag-text);
-}
-.arag-datatable tbody tr:last-child td {
-  border-bottom: 0;
-}
-.arag-datatable tbody tr:hover td {
-  background: var(--arag-brand-50);
-}
-.arag-datatable tbody tr[aria-selected="true"] td {
-  background: var(--arag-brand-50);
-}
-.arag-datatable.compact tbody td {
-  padding: 5px 12px;
-}
-.arag-datatable .num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.arag-datatable .cell-title {
-  font-weight: 600;
-  color: var(--arag-ink-950);
-  text-decoration: none;
-  display: block;
-}
-.arag-datatable .cell-title:hover {
-  color: var(--arag-brand-600);
-  text-decoration: underline;
-}
-.arag-datatable .cell-sub {
-  color: var(--arag-text-subtle);
-  font-size: 11.5px;
-}
-
-/* Bulk bar replaces the header row in place, so selecting rows shifts nothing. */
-.arag-bulkbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--arag-ink-950);
-  color: #fff;
-  font-size: 12.5px;
-}
-.arag-bulkbar .count {
-  font-weight: 700;
-}
-.arag-bulkbar .spacer {
-  margin-left: auto;
-}
-.arag-bulkbar button {
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: var(--arag-radius);
-  cursor: pointer;
-}
-.arag-bulkbar button:hover {
-  background: rgba(255, 255, 255, 0.18);
-}
-.arag-bulkbar button.danger {
-  border-color: rgba(255, 145, 160, 0.6);
-  color: #ffb3bf;
-}
-.arag-bulkbar button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* ---------- pagination ---------- */
-
-.arag-pagination {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--arag-border);
-  font-size: 12.5px;
-  color: var(--arag-text-muted);
-}
-.arag-pagination .spacer {
-  margin-left: auto;
-}
-.arag-pagination button {
-  border: 1px solid var(--arag-border);
-  background: var(--arag-surface-raised);
-  color: var(--arag-text);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: var(--arag-radius);
-  cursor: pointer;
-}
-.arag-pagination button:hover:not(:disabled) {
-  border-color: var(--arag-brand-400);
-  color: var(--arag-brand-600);
-}
-.arag-pagination button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* ---------- menu (kebab) ---------- */
-
-.arag-menu {
-  position: relative;
-  display: inline-block;
-}
-.arag-menu > .panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 30;
-  min-width: 196px;
-  padding: 4px;
-  border: 1px solid var(--arag-border);
-  border-radius: var(--arag-radius);
-  background: var(--arag-surface-raised);
-  box-shadow: var(--arag-shadow);
-}
-.arag-menu > .panel button,
-.arag-menu > .panel a {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 9px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--arag-text);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-}
-.arag-menu > .panel button:hover,
-.arag-menu > .panel a:hover {
-  background: var(--arag-brand-50);
-}
-.arag-menu > .panel button.danger {
-  color: var(--arag-danger-fg);
-}
-.arag-menu > .panel .sep {
-  height: 1px;
-  margin: 4px 2px;
-  background: var(--arag-border);
-}
-
-/* ---------- drawer / inspector ---------- */
-
-.arag-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(0, 18, 60, 0.45);
-  backdrop-filter: blur(2px);
-}
-.arag-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 51;
-  height: 100vh;
-  width: min(var(--arag-inspector-w), 100vw);
-  display: flex;
-  flex-direction: column;
-  background: var(--arag-surface-raised);
-  border-left: 1px solid var(--arag-border);
-  box-shadow: -8px 0 32px rgba(0, 18, 60, 0.16);
-}
-.arag-drawer.left {
-  right: auto;
-  left: 0;
-  border-left: 0;
-  border-right: 1px solid var(--arag-border);
-  box-shadow: 8px 0 32px rgba(0, 18, 60, 0.16);
-  width: min(288px, 86vw);
-}
-.arag-drawer > .head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--arag-border);
-}
-.arag-drawer > .head h2 {
-  margin: 0;
-  font-family: var(--arag-font-display);
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--arag-ink-950);
-}
-.arag-drawer > .head .close {
-  margin-left: auto;
-}
-.arag-drawer > .body {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 14px;
-}
-
-/* An inspector docked beside the content rather than floating over it. */
-.arag-inspector {
-  width: var(--arag-inspector-w);
-  flex: 0 0 var(--arag-inspector-w);
-  border: 1px solid var(--arag-border);
-  border-radius: var(--arag-radius-lg);
-  background: var(--arag-surface-raised);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* ---------- status chips ---------- */
-
-.arag-state {
+.ca-state {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -724,7 +53,7 @@
   background: var(--arag-brand-50);
   color: var(--arag-brand-700);
 }
-.arag-state::before {
+.ca-state::before {
   content: "";
   width: 6px;
   height: 6px;
@@ -732,26 +61,31 @@
   background: currentColor;
   flex: 0 0 6px;
 }
-.arag-state.ok {
+.ca-state.ok {
   background: var(--arag-accent-soft);
   color: var(--arag-accent-fg);
 }
-.arag-state.warn {
+.ca-state.warn {
   background: var(--arag-warn-bg);
   color: var(--arag-warn-fg);
 }
-.arag-state.error {
+.ca-state.error {
   background: var(--arag-danger-bg);
   color: var(--arag-danger-fg);
 }
-.arag-state.muted {
+.ca-state.muted {
   background: var(--arag-brand-50);
   color: var(--arag-text-muted);
 }
-.arag-state.busy::before {
-  animation: arag-pulse 1.4s ease-in-out infinite;
+.ca-state.busy::before {
+  animation: ca-pulse 1.4s ease-in-out infinite;
 }
-@keyframes arag-pulse {
+.arag a.ca-state,
+.arag a.ca-state:hover {
+  color: inherit;
+  text-decoration: none;
+}
+@keyframes ca-pulse {
   0%,
   100% {
     opacity: 1;
@@ -761,48 +95,24 @@
   }
 }
 
-/* ---------- meter ---------- */
+/* ---------- moments track ----------
+   A density strip over one recording: every analysed moment as a tick, tall when it carries a
+   label, clickable to seek the player to it. */
 
-.arag-meter {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 3px 10px;
-  align-items: baseline;
-  font-size: 12px;
-}
-.arag-meter > .track {
-  grid-column: 1 / -1;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--arag-brand-50);
-  overflow: hidden;
-}
-.arag-meter > .track > i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--arag-brand-600);
-}
-.arag-meter .val {
-  font-variant-numeric: tabular-nums;
-  font-weight: 650;
-  color: var(--arag-ink-950);
-}
-
-/* ---------- moments track ---------- */
-
-.arag-moments {
+.ca-moments {
   display: flex;
   align-items: flex-end;
   gap: 1px;
   height: 30px;
   padding: 2px;
+  margin: 0;
+  min-width: 0;
   border: 1px solid var(--arag-border);
   border-radius: var(--arag-radius);
   background: var(--arag-surface);
   overflow: hidden;
 }
-.arag-moments > button {
+.ca-moments > button {
   flex: 1 1 0;
   min-width: 2px;
   border: 0;
@@ -813,88 +123,22 @@
   height: 38%;
   transition: height 0.12s ease;
 }
-.arag-moments > button[data-moment="1"] {
+.ca-moments > button[data-moment="1"] {
   height: 100%;
 }
-.arag-moments > button:hover {
+.ca-moments > button:hover {
   outline: 2px solid var(--arag-brand-500);
   outline-offset: 1px;
 }
-.arag-moments > button[aria-current="true"] {
+.ca-moments > button[aria-current="true"] {
   outline: 2px solid var(--arag-ink-950);
   outline-offset: 1px;
 }
 
-/* ---------- skeletons ---------- */
+/* ---------- ingest stepper ----------
+   Upload → transcribe → analyse → ready, shown while a recording is being processed. */
 
-.arag-skel {
-  border-radius: var(--arag-radius);
-  background: linear-gradient(
-    90deg,
-    var(--arag-brand-50) 25%,
-    var(--arag-surface-raised) 37%,
-    var(--arag-brand-50) 63%
-  );
-  background-size: 400% 100%;
-  animation: arag-shimmer 1.3s ease-in-out infinite;
-}
-@keyframes arag-shimmer {
-  from {
-    background-position: 100% 50%;
-  }
-  to {
-    background-position: 0 50%;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .arag-skel,
-  .arag-state.busy::before {
-    animation: none;
-  }
-}
-
-/* ---------- empty state ---------- */
-
-.arag-emptystate {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 48px 24px;
-  border: 1px dashed var(--arag-border);
-  border-radius: var(--arag-radius-lg);
-  background: var(--arag-surface-raised);
-  text-align: center;
-}
-.arag-emptystate svg {
-  width: 28px;
-  height: 28px;
-  color: var(--arag-text-subtle);
-}
-.arag-emptystate h3 {
-  margin: 0;
-  font-family: var(--arag-font-display);
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--arag-ink-950);
-}
-.arag-emptystate p {
-  margin: 0;
-  max-width: 52ch;
-  font-size: 13px;
-  color: var(--arag-text-muted);
-}
-.arag-emptystate .acts {
-  margin-top: 6px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-}
-
-/* ---------- stepper ---------- */
-
-.arag-stepper {
+.ca-stepper {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -902,12 +146,12 @@
   font-size: 12.5px;
   color: var(--arag-text-muted);
 }
-.arag-stepper > .step {
+.ca-stepper > .step {
   display: inline-flex;
   align-items: center;
   gap: 7px;
 }
-.arag-stepper > .step > .n {
+.ca-stepper > .step > .n {
   display: grid;
   place-items: center;
   width: 21px;
@@ -918,200 +162,72 @@
   font-weight: 700;
   color: var(--arag-text-subtle);
 }
-.arag-stepper > .step.current > .n {
+.ca-stepper > .step.current > .n {
   border-color: var(--arag-brand-600);
   background: var(--arag-brand-600);
   color: #fff;
 }
-.arag-stepper > .step.current {
+.ca-stepper > .step.current {
   color: var(--arag-ink-950);
   font-weight: 650;
 }
-.arag-stepper > .step.done > .n {
+.ca-stepper > .step.done > .n {
   border-color: var(--arag-accent-500);
   background: var(--arag-accent-500);
   color: #fff;
 }
-.arag-stepper > .sep {
+.ca-stepper > .sep {
   width: 22px;
   height: 1px;
   background: var(--arag-border);
 }
 
-/* ---------- responsive ---------- */
+/* ---------- white-label reveal ----------
+   The architecture disclosure normally lives in the ink band. BRAND_POWERED_BY=false removes that
+   band, and the disclosure must not vanish with the credit — it moves into the rail foot, which on
+   `rail="light"` is a light surface, so the trigger is restyled for it. */
 
-@media (max-width: 1023px) {
-  .arag-sidebar {
-    display: none;
-  }
-  .arag-pagehead,
-  .arag-pagebody {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-}
-@media (max-width: 1399px) {
-  .arag-inspector {
-    width: 340px;
-    flex-basis: 340px;
-  }
-}
-
-/* ---------- kit compatibility fixes ----------
-   PLATFORM BUG (arag-platform 0.1.8): `.arag a { color: var(--arag-brand-600) }` has higher
-   specificity (0,1,1) than `.arag-btn` (0,1,0), so ANY anchor styled as a button inside `body.arag`
-   renders brand-blue text on a brand-blue fill — invisible. The same applies to `.arag-tabs`,
-   whose rules are written for `button` only, and to `.arag-dropzone .icon`, which sizes a font
-   glyph rather than an SVG. These three blocks are the local work-around; the fix belongs upstream
-   (raise the component selectors' specificity, or scope the base link rule to `:where()`).      */
-
-.arag a.arag-btn,
-.arag a.arag-btn:hover {
-  color: #fff;
-  text-decoration: none;
-}
-.arag a.arag-btn.secondary,
-.arag a.arag-btn.ghost,
-.arag a.arag-btn.secondary:hover,
-.arag a.arag-btn.ghost:hover {
-  color: var(--arag-brand-600);
-}
-.arag a.arag-state,
-.arag a.arag-state:hover {
-  color: inherit;
-  text-decoration: none;
-}
-.arag .arag-stat-strip a,
-.arag .arag-stat-strip a:hover {
-  color: inherit;
-  text-decoration: none;
-}
-.arag .arag-sidebar a.item,
-.arag .arag-sidebar a.item:hover,
-.arag .arag-sidebar a.ident,
-.arag .arag-sidebar a.ident:hover {
-  text-decoration: none;
-}
-.arag .arag-sidebar a.item[aria-current="page"] {
-  color: var(--arag-brand-600);
-}
-.arag .arag-datatable a.cell-title {
-  color: var(--arag-ink-950);
-}
-
-/* Tabs: the kit styles `button` only, but a tab that navigates must be a link. */
-.arag-tabs a {
-  background: none;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 8px 12px;
-  font: 500 0.86rem var(--arag-font-text);
-  color: var(--arag-text-muted);
-  cursor: pointer;
-  text-decoration: none;
-}
-.arag .arag-tabs a:hover {
-  color: var(--arag-ink-950);
-  text-decoration: none;
-}
-.arag .arag-tabs a[aria-selected="true"] {
-  color: var(--arag-brand-600);
-  border-bottom-color: var(--arag-brand-600);
-}
-
-/* Dropzone: the kit sizes a font glyph; this product uses an inline SVG icon. */
-.arag-dropzone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  font: inherit;
-  color: var(--arag-text);
-}
-.arag-dropzone .icon {
-  color: var(--arag-brand-500);
-  line-height: 0;
-}
-.arag-dropzone .small {
-  color: var(--arag-text-subtle);
-}
-
-/* The kit's stack/grid helpers are used by the product's panels. */
-.arag-stack {
-  display: grid;
-  gap: 16px;
-}
-
-/* The architecture reveal trigger is authored for a dark band; this restyles it for a light
-   surface when a white-label deployment removes the band. */
-.arag-light-reveal > button {
+.ca-light-reveal > button {
   width: 100%;
   justify-content: flex-start;
   border-color: var(--arag-border) !important;
   background: var(--arag-surface-raised) !important;
   color: var(--arag-text-muted) !important;
 }
-.arag-light-reveal > button:hover {
+.ca-light-reveal > button:hover {
   background: var(--arag-brand-50) !important;
   color: var(--arag-ink-950) !important;
 }
 
-/* A `fieldset` is used where a group of controls needs a native accessible group; its default
-   browser chrome is reset here so the component looks the same as any other. */
-.arag-segmented,
-.arag-moments {
-  margin: 0;
-  min-width: 0;
-}
-
-/* A colour input inherits the text-input height and padding, which collapses the swatch to a
-   hairline. Size it as a swatch and strip the browser's inner chrome. */
-.arag-input[type="color"] {
-  width: 44px;
-  height: 34px;
-  padding: 3px;
-  cursor: pointer;
-}
-.arag-input[type="color"]::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-.arag-input[type="color"]::-webkit-color-swatch {
-  border: 0;
-  border-radius: 5px;
-}
-
-/* A table that is refetching keeps its rows readable but visibly stale, with an indeterminate bar
-   above them — never a blank panel, and never a silent swap. */
-.arag-datatable[aria-busy="true"] tbody {
-  opacity: 0.55;
-  transition: opacity 0.12s;
-}
-.arag-datatable[aria-busy="true"]::before {
-  content: "";
-  display: block;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--arag-brand-600) 40%,
-    var(--arag-brand-600) 60%,
-    transparent
-  );
-  background-size: 40% 100%;
-  background-repeat: no-repeat;
-  animation: arag-indeterminate 1.1s ease-in-out infinite;
-}
-@keyframes arag-indeterminate {
-  from {
-    background-position: -40% 0;
-  }
-  to {
-    background-position: 140% 0;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .arag-datatable[aria-busy="true"]::before {
+  .ca-state.busy::before {
     animation: none;
-    background-position: 50% 0;
+  }
+}
+
+@media (max-width: 1023px) {
+  .arag-main > .arag-pagehead {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* ---------- band at phone width ----------
+   The kit already shrinks the wordmark and the band links below 600 px. This product puts two
+   more things up there — the sample-data pill and the architecture reveal — which together took
+   the row about 55 px past a 390 px viewport. The pill goes (the rail foot says the same thing)
+   and the reveal keeps its icon and loses its label; its accessible name is on the button. */
+
+@media (max-width: 599px) {
+  .arag-appband > .arag-pill-live {
+    display: none;
+  }
+  .arag-appband .ca-reveal-trigger .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 }

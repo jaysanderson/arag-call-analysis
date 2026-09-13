@@ -356,7 +356,7 @@ export function UploadFlow({ maxBytes }: { maxBytes: number }) {
 function Stepper({ step }: { step: number }) {
   const steps = ["Choose a file", "Add details", "Processing"];
   return (
-    <div className="arag-stepper" data-testid="upload-stepper">
+    <div className="ca-stepper" data-testid="upload-stepper">
       {/* The steps and separators are direct children of the stepper: the kit styles them with a
           child combinator, and wrapping each pair in a span silently loses every rule. */}
       {steps.map((label, i) => (

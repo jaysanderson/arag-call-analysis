@@ -22,7 +22,7 @@ export default async function UploadPage() {
           </Link>
         }
       />
-      <div className="arag-pagebody">
+      <div className="arag-content">
         {s.features.uploads ? (
           <UploadFlow maxBytes={s.limits.maxUploadBytes} />
         ) : (

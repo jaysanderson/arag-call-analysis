@@ -65,7 +65,7 @@ export default function AdminOverview() {
       <StateBlock loading={health.loading} error={health.error}>
         {d && (
           <div className="arag-stack">
-            <div className="arag-stat-strip">
+            <div className="arag-statstrip">
               <Link href="/admin/connection">
                 <div className="label">Mode</div>
                 <div className="value" style={{ fontSize: 20 }}>

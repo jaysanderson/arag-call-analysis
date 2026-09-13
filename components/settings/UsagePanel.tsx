@@ -75,7 +75,7 @@ export function UsagePanel() {
 
   return (
     <section className="arag-stack">
-      <div className="arag-stat-strip">
+      <div className="arag-statstrip">
         <div>
           <div className="label">Requests</div>
           <div className="value">{data.requests.toLocaleString()}</div>

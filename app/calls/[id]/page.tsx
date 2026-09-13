@@ -35,7 +35,7 @@ export default async function CallPage({ params }: { params: Promise<{ id: strin
             { label: call.slug || id.slice(0, 8) },
           ]}
         />
-        <div className="arag-pagebody">
+        <div className="arag-content">
           <ErrorState
             title="This call is still being processed."
             detail="The Knowledge Box has the recording but has not produced a transcript yet. Transcription usually takes under a minute; labelling and analysis follow it."
