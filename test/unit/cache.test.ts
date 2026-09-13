@@ -105,7 +105,6 @@ describe("cacheKeys", () => {
     expect(cacheKeys.detail("x")).toBe("detail:x");
     expect(cacheKeys.catalogIds()).toBe("catalog:");
     expect(cacheKeys.find("premium")).toBe("find:premium");
-    expect(cacheKeys.dashboard()).toBe("dashboard:all");
     expect(cacheKeys.labelsets()).toBe("labelsets:all");
   });
 });

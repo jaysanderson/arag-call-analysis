@@ -37,7 +37,7 @@ const SENTIMENT_COLORS: Record<string, string> = {
 function clickable(href: string | null, key: string, className: string, children: React.ReactNode) {
   if (href) {
     return (
-      <Link key={key} href={href} className={`${className} cursor-pointer`}>
+      <Link key={key} href={href} className={`${className} cursor-pointer`} prefetch={false}>
         {children}
       </Link>
     );
@@ -175,6 +175,7 @@ export function DashboardCharts({
   byLob,
   complaintsByCategory,
   crossSell,
+  scope = "",
 }: {
   byReason: Datum[];
   bySentiment: Datum[];
@@ -182,9 +183,15 @@ export function DashboardCharts({
   byLob: Datum[];
   complaintsByCategory: Datum[];
   crossSell: { offered: number; accepted: number };
+  /**
+   * Extra query parameters carried into every drill-through, so the calls list the user lands on
+   * covers the same date window the chart they clicked was aggregated over. A chart that says 12
+   * complaints and a list that then shows 40 is worse than no drill-through at all.
+   */
+  scope?: string;
 }) {
   const link = (labelset: string, label: string) =>
-    `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}`;
+    `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}${scope}`;
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <Card className="p-4">

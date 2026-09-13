@@ -88,9 +88,16 @@ export interface CallPage extends Page<CallSummary> {
   queues: string[];
 }
 
-/** Every resource id in the KB (cached; one catalog page walk). */
+/**
+ * Every resource id in the KB (cached; one catalog page walk).
+ *
+ * Served stale-while-revalidating: this and `summaryOf` are the two reads whose expiry used to
+ * cost a reader the whole 1 + N fan-out at once. Every write path that can change the set
+ * (`createCall`, `deleteCall`, `invalidateCall`, provisioning) invalidates the key outright, so
+ * the staleness window is bounded by the TTL and never by a missed write.
+ */
 export async function catalogIds(rt: Runtime): Promise<string[]> {
-  return rt.cache.getOrLoad(cacheKeys.catalogIds(), () =>
+  return rt.cache.getOrLoadStale(cacheKeys.catalogIds(), () =>
     withRetry(() => rt.arag.listResourceIds({ pageSize: 100, max: 500 })),
   );
 }
@@ -106,7 +113,7 @@ export async function searchIds(rt: Runtime, query: string): Promise<string[]> {
 /** One call summary (cached per id). Returns null when the resource is gone or unreadable. */
 export async function summaryOf(rt: Runtime, id: string): Promise<CallSummary | null> {
   try {
-    return await rt.cache.getOrLoad(cacheKeys.summary(id), async () => {
+    return await rt.cache.getOrLoadStale(cacheKeys.summary(id), async () => {
       const res = (await rt.arag.getResource(id, {
         show: SUMMARY_SHOW,
         extracted: ["metadata"],
@@ -420,7 +427,6 @@ export function invalidateCall(rt: Runtime, id?: string): void {
   }
   rt.cache.invalidatePrefix("catalog:");
   rt.cache.invalidatePrefix("find:");
-  rt.cache.delete(cacheKeys.dashboard());
 }
 
 /** Stream a call's media/transcript file field, forwarding Range so the player can scrub. */

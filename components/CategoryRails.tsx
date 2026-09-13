@@ -73,6 +73,7 @@ function Rail({ labelset, name, count }: { labelset: string; name: string; count
           </span>
         </h2>
         <Link
+          prefetch={false}
           href={href}
           className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
         >

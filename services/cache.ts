@@ -16,6 +16,8 @@ export interface CacheStats {
   entries: number;
   hits: number;
   misses: number;
+  /** Hits served from an expired entry while a refresh ran behind them. */
+  stale: number;
   evictions: number;
   invalidations: number;
   ttlMs: number;
@@ -29,6 +31,7 @@ export class TtlCache {
   private readonly inflight = new Map<string, Promise<unknown>>();
   private hits = 0;
   private misses = 0;
+  private stale = 0;
   private evictions = 0;
   private invalidations = 0;
 
@@ -92,6 +95,53 @@ export class TtlCache {
     return p;
   }
 
+  /**
+   * Serve-stale-and-refresh.
+   *
+   * `getOrLoad` has a cliff: the instant an entry expires, the next reader pays the whole load.
+   * For this product that load is one ARAG round-trip *per call* in the catalog, so the cliff was
+   * measured at about eight seconds on a live Knowledge Box — and it landed on whichever screen
+   * happened to read first after the TTL lapsed, which made it look like a bug in that screen
+   * rather than in the cache.
+   *
+   * Within `graceMs` of expiry the stale value is returned immediately and a refresh is started in
+   * the background, so a warm deployment never blocks a reader again: the first request after the
+   * TTL gets data up to `ttlMs + graceMs` old, and the one after it gets fresh data. Only a truly
+   * cold key (never loaded, or older than the grace window) waits.
+   *
+   * Correctness note: this is only safe for *read models the product itself invalidates on write*
+   * — every mutation here calls `delete`, `invalidatePrefix` or `clear`, which removes the entry
+   * outright rather than leaving it stale. Staleness is therefore bounded by the TTL, never by a
+   * write nobody noticed.
+   */
+  async getOrLoadStale<T>(
+    key: string,
+    load: () => Promise<T>,
+    opts: { ttlMs?: number; graceMs?: number } = {},
+  ): Promise<T> {
+    const ttlMs = opts.ttlMs ?? this.ttlMs;
+    const graceMs = opts.graceMs ?? Math.max(ttlMs * 9, 5 * 60_000);
+    const now = Date.now();
+    const entry = this.map.get(key) as CacheEntry<T> | undefined;
+
+    if (entry && entry.expiresAt > now) {
+      this.hits++;
+      return entry.value;
+    }
+    if (entry && now - entry.expiresAt < graceMs) {
+      this.hits++;
+      this.stale++;
+      // Kick off exactly one refresh; readers in the meantime keep getting the stale value.
+      if (!this.inflight.has(key)) void this.getOrLoad(key, load, ttlMs).catch(() => {});
+      return entry.value;
+    }
+    if (entry) {
+      this.map.delete(key);
+      this.evictions++;
+    }
+    return this.getOrLoad(key, load, ttlMs);
+  }
+
   /** Drop one key. */
   delete(key: string): boolean {
     const ok = this.map.delete(key);
@@ -133,6 +183,7 @@ export class TtlCache {
       entries,
       hits: this.hits,
       misses: this.misses,
+      stale: this.stale,
       evictions: this.evictions,
       invalidations: this.invalidations,
       ttlMs: this.ttlMs,
@@ -151,6 +202,5 @@ export const cacheKeys = {
   summary: (id: string) => `summary:${id}`,
   detail: (id: string) => `detail:${id}`,
   labelsets: () => "labelsets:all",
-  dashboard: () => "dashboard:all",
   find: (query: string) => `find:${query}`,
 };

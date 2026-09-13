@@ -15,7 +15,16 @@ type Key = "name" | "calls" | "fcrRate" | "complaintRate" | "escalationRate" | "
  * dashboard is never a dead end. Groups with no analysed calls still appear, showing their call
  * count and an explicit "not analysed yet" rather than a row of zeroes that reads like a bad score.
  */
-export function RollupTable({ byAgent, byQueue }: { byAgent: Rollup[]; byQueue: Rollup[] }) {
+export function RollupTable({
+  byAgent,
+  byQueue,
+  scope = "",
+}: {
+  byAgent: Rollup[];
+  byQueue: Rollup[];
+  /** Query parameters carried into the drill-through so the list matches the window shown here. */
+  scope?: string;
+}) {
   const [mode, setMode] = useState<"agent" | "queue">("agent");
   const [sort, setSort] = useState<SortState<Key>>({ key: "calls", order: "desc" });
 
@@ -114,11 +123,11 @@ export function RollupTable({ byAgent, byQueue }: { byAgent: Rollup[]; byQueue: 
             </thead>
             <tbody>
               {rows.map((r) => {
-                const href = `/calls?${mode}=${encodeURIComponent(r.name)}`;
+                const href = `/calls?${mode}=${encodeURIComponent(r.name)}${scope}`;
                 return (
                   <tr key={r.name}>
                     <td>
-                      <Link href={href} className="cell-title">
+                      <Link href={href} className="cell-title" prefetch={false}>
                         {r.name}
                       </Link>
                     </td>
