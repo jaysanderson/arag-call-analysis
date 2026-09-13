@@ -16,13 +16,14 @@
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "e2e": "playwright test",
+    "smoke-write": "node --experimental-strip-types scripts/smoke-write.ts",
     "provision": "node --experimental-strip-types scripts/provision.ts",
     "ingest": "node --experimental-strip-types scripts/ingest.ts",
     "reset": "node --experimental-strip-types scripts/reset.ts",
     "gen-media": "node --experimental-strip-types scripts/gen-media.ts"
   },
   "dependencies": {
-    "next": "16.1.6",
+    "next": "16.2.12",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

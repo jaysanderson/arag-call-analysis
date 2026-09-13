@@ -183,6 +183,8 @@ export function makeClient(baseUrl: string) {
     get: <T = unknown>(p: string, o?: Parameters<typeof request>[2]) => request<T>("GET", p, o),
     post: <T = unknown>(p: string, json?: unknown, o?: Parameters<typeof request>[2]) =>
       request<T>("POST", p, { ...o, json }),
+    put: <T = unknown>(p: string, json?: unknown, o?: Parameters<typeof request>[2]) =>
+      request<T>("PUT", p, { ...o, json }),
     del: <T = unknown>(p: string, o?: Parameters<typeof request>[2]) => request<T>("DELETE", p, o),
   };
 }

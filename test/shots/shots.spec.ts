@@ -82,4 +82,42 @@ test("capture", async ({ page }) => {
 
   await open(page, "/admin/security");
   await shot(page, "12-admin-security");
+
+  // Screens and controls added by the full-implementation pass.
+  // Deep-linked to an operation so the frame shows what the screen is for — the parameters, the
+  // schemas and the try-it form — rather than the index and an empty right-hand pane.
+  await open(page, "/api?op=getDashboard");
+  await page
+    .locator('[data-testid="api-explorer"]')
+    .waitFor({ timeout: 30_000 })
+    .catch(() => {});
+  await shot(page, "13-api-explorer");
+
+  await open(page, "/settings?tab=api-keys");
+  await shot(page, "14-settings-api-keys");
+
+  await open(page, "/settings?tab=limits");
+  await shot(page, "15-settings-limits");
+
+  await open(page, "/settings?tab=retention");
+  await shot(page, "16-settings-retention");
+
+  await open(page, "/settings?tab=shares");
+  await shot(page, "17-settings-shares");
+
+  await open(page, "/?range=30d");
+  await shot(page, "18-dashboard-range");
+
+  await open(page, "/admin/jobs");
+  await shot(page, "19-admin-jobs");
+
+  await open(page, "/admin/audit");
+  await shot(page, "20-admin-audit");
+
+  await open(page, "/calls?label=sentiment%2FNegative");
+  await page
+    .locator('[data-testid="calls-table"]')
+    .waitFor({ timeout: 30_000 })
+    .catch(() => {});
+  await shot(page, "21-calls-filtered");
 });

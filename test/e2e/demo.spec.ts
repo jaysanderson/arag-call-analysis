@@ -139,7 +139,7 @@ test.describe("the workspace", () => {
 
     // Deleting is always confirmed, and the confirmation names what goes.
     await bulk.getByRole("button", { name: /Delete/ }).click();
-    const dialog = page.getByRole("dialog", { name: /Delete 1 call/ });
+    const dialog = page.getByRole("alertdialog", { name: /Delete 1 call/ });
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   });
@@ -277,8 +277,14 @@ test.describe("the workspace", () => {
     await expect(page.getByTestId("branding-preview")).toBeVisible();
     await expect(page.getByLabel("Product name")).toHaveValue("Call Analysis");
 
+    // Keys are now a real, operator-managed store rather than an environment placeholder, so a
+    // visitor who is not signed in is told where the register lives instead of being shown it.
     await page.getByRole("tab", { name: "API keys" }).click();
-    await expect(page.getByText(/API_KEYS/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "API keys" })).toBeVisible();
+    await expect(page.getByText("Keys are managed by an operator")).toBeVisible();
+    await expect(
+      page.getByTestId("empty-state").getByRole("link", { name: "Sign in as an operator" }),
+    ).toBeVisible();
 
     await page.getByRole("tab", { name: "About" }).click();
     await expect(page.getByText("Apache-2.0")).toBeVisible();

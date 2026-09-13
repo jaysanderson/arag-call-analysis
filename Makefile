@@ -4,7 +4,7 @@ NODE ?= node
 PORT ?= 3000
 IMAGE ?= call-analysis:local
 
-.PHONY: help install dev build start test coverage e2e lint format typecheck audit check docs showcase smoke docker fly-validate provision ingest gen-media reset clean
+.PHONY: help install dev build start test coverage e2e lint format typecheck audit check docs showcase smoke smoke-write docker fly-validate provision ingest gen-media reset clean
 
 help:
 	@echo "make install      bun install (exact pins, committed bun.lock)"
@@ -22,6 +22,7 @@ help:
 	@echo "make docs         regenerate docs/developer/api-reference.md from the OpenAPI document"
 	@echo "make showcase     record the showcase walkthrough into showcase/out"
 	@echo "make smoke        OPT-IN read-only live check against the real Knowledge Box"
+	@echo "make smoke-write  OPT-IN live WRITE check (CALLS_ALLOW_LIVE_WRITE=1); cleans up after itself"
 	@echo "make docker       build the container image"
 	@echo "make fly-validate validate fly.toml"
 	@echo "make provision    create labelsets + (re)start agents on a running server"
@@ -80,6 +81,11 @@ showcase: build
 
 smoke:
 	$(NODE) scripts/smoke.ts
+
+# OPT-IN live WRITE check. Creates and deletes real Knowledge Box resources; refuses to run
+# without CALLS_ALLOW_LIVE_WRITE=1, and never touches the seeded demo calls.
+smoke-write: build
+	$(NODE) scripts/smoke-write.ts
 
 docker:
 	docker build -t $(IMAGE) .

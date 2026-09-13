@@ -128,34 +128,43 @@ describe("spec ↔ implementation", () => {
     }
   });
 
-  it("marks every Knowledge Box mutation as write-authenticated", () => {
-    // Anything that creates, changes or destroys a Knowledge Box resource needs the admin token or
-    // an API key — never the freely issued browser session. Share links are the one deliberate
-    // exception: they write application state only, and grant no access the open read API does not
-    // already give (see the operation description in lib/openapi.ts).
+  it("marks every mutation as write- or admin-authenticated", () => {
+    // Anything that creates, changes or destroys state needs the admin token or an API key — never
+    // the freely issued browser session. The rule is asserted rather than a list enumerated, so a
+    // new mutating route cannot be added without deciding its auth.
+    //
+    // Three deliberate exceptions, each for its own reason:
+    //  - share links and saved views write application state only and grant no access the open
+    //    read API does not already give (see the operation descriptions in lib/openapi.ts);
+    //  - `/session` issues the demo session and `/admin/login` exchanges the admin token, so
+    //    neither can require the credential it hands out;
+    //  - `/ask` is a read that happens to be a POST because the question is a body.
+    const EXCEPT = new Set(["/api/v1/session", "/api/v1/calls/{id}/ask", "/api/v1/admin/login"]);
     const mutations = API_ROUTES.filter(
       (r) =>
-        (r.method === "post" || r.method === "delete") &&
-        !r.path.startsWith("/api/v1/admin/") &&
+        (r.method === "post" || r.method === "put" || r.method === "delete") &&
         !r.path.includes("/shares") &&
-        r.path !== "/api/v1/session" &&
-        r.path !== "/api/v1/calls/{id}/ask",
+        !r.path.startsWith("/api/v1/views") &&
+        !EXCEPT.has(r.path),
     );
-    expect(mutations.map((r) => `${r.method} ${r.path}`).sort()).toEqual(
-      [
-        "post /api/v1/calls",
-        "post /api/v1/calls/bulk",
-        "post /api/v1/calls/{id}/reanalyze",
-        "post /api/v1/samples",
-        "delete /api/v1/calls/{id}",
-      ].sort(),
+    expect(mutations.length).toBeGreaterThan(20);
+    for (const r of mutations) expect(["write", "admin"], `${r.method} ${r.path}`).toContain(r.auth);
+
+    // Settings, API keys and retention are operator surfaces: an API key must not be able to
+    // re-point the deployment at another Knowledge Box or mint itself a new credential.
+    const operatorOnly = mutations.filter(
+      (r) =>
+        r.path.startsWith("/api/v1/settings") ||
+        r.path.startsWith("/api/v1/api-keys") ||
+        r.path.startsWith("/api/v1/retention/purge"),
     );
-    for (const r of mutations) expect(r.auth, `${r.method} ${r.path}`).toBe("write");
+    expect(operatorOnly.length).toBeGreaterThanOrEqual(8);
+    for (const r of operatorOnly) expect(r.auth, `${r.method} ${r.path}`).toBe("admin");
   });
 
   it("keeps share links at read-level auth and says why in the spec", () => {
     const shares = API_ROUTES.filter((r) => r.path.includes("/shares"));
-    expect(shares.length).toBe(4);
+    expect(shares.length).toBe(5);
     for (const r of shares) {
       // Resolving a token is public (the token is the credential); the rest need whatever a read
       // needs on this deployment.
@@ -327,10 +336,17 @@ describe("response validation (checkResponse)", () => {
     expect(checkResponse(openapi, "/api/v1/settings", "get", 200, res.json)).toEqual([]);
     const raw = JSON.stringify(res.json);
     expect(raw).not.toContain("test-admin-token");
-    const body = res.json as { connection: { kbId: string }; apiKeys: { managed: boolean } };
+    const body = res.json as {
+      connection: { kbId: string; apiKeySet: boolean };
+      apiKeys: { managed: boolean };
+    };
     // Truncated, never the whole Knowledge Box id.
     expect(body.connection.kbId.length).toBeLessThanOrEqual(9);
-    expect(body.apiKeys.managed).toBe(false);
+    // Keys are managed in the product now; the read model reports *whether* a service-account
+    // token is set, and never the token.
+    expect(body.apiKeys.managed).toBe(true);
+    expect(typeof body.connection.apiKeySet).toBe("boolean");
+    expect(raw).not.toContain('apiKey":"');
   });
 
   it("GET /api/v1/dashboard", async () => {

@@ -35,6 +35,11 @@
       "package": "esbuild",
       "reason": "Transitive devDependency of Vitest. The advisory affects the esbuild dev server, which is never started here.",
       "reviewBy": "2026-12-01"
+    },
+    {
+      "package": "next",
+      "reason": "Upgraded 16.1.6 -> 16.2.12, which clears every advisory that applies to this deployment (the middleware, i18n, Server Action and Cache Components authorisation and SSRF issues fixed in 16.2.5/16.2.6/16.2.11 - none of which this product uses: there is no middleware.ts, no i18n, no Server Actions and no Cache Components; authorisation is enforced inside every route handler by lib/api.ts). Two advisories remain reported and are false positives for a 16.x install: both declare `<15.5.24`, and both are independently inapplicable - the Windows-hosted RCE (the runtime container is node:22-slim on Linux) and the Image Optimization API RCE (this product never uses next/image and serves no user-supplied images through it; `sharp` is waived above on the same basis).",
+      "reviewBy": "2026-12-01"
     }
   ]
 }
