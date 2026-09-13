@@ -9,6 +9,7 @@
 import { AGENTS, type AgentDef } from "@/lib/domain/taxonomy";
 import type { Runtime } from "@/lib/runtime";
 import type { TaskInfo } from "@/vendor/arag-platform/src/arag/types.ts";
+import { agentConfigs } from "./taxonomy-store";
 
 export interface AgentStatus {
   key: string;
@@ -18,6 +19,11 @@ export interface AgentStatus {
   state: "running" | "completed" | "failed" | "configured" | "absent";
   taskId?: string;
   operations: number;
+  /** False when an operator has switched this agent off in Taxonomy. */
+  enabled: boolean;
+  /** Editable instructions, keyed by the resource field the operation writes (ask agents only). */
+  prompts?: Record<string, string>;
+  model?: string;
 }
 
 function taskName(t: TaskInfo): string {
@@ -48,6 +54,11 @@ export function classifyAgents(
       state,
       taskId: hit?.id,
       operations: ((def.parameters.operations as unknown[]) ?? []).length,
+      enabled: (def as { enabled?: boolean }).enabled ?? true,
+      ...((def as { prompts?: Record<string, string> }).prompts
+        ? { prompts: (def as { prompts?: Record<string, string> }).prompts }
+        : {}),
+      ...((def as { model?: string }).model ? { model: (def as { model?: string }).model } : {}),
     };
   });
 }
@@ -59,7 +70,7 @@ export async function agentStatus(rt: Runtime): Promise<{
   raw: { configs: number; running: number; done: number };
 }> {
   const tasks = await rt.arag.listTasks();
-  const agents = classifyAgents(tasks);
+  const agents = classifyAgents(tasks, agentConfigs(rt));
   return {
     agents,
     running: agents.filter((a) => a.state === "running").length,

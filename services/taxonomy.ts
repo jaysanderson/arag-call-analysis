@@ -8,14 +8,19 @@
  * Doing that comparison in the browser would put the product's own correctness rules in the client.
  */
 
-import { AGENTS, ALL_LABELSETS, type LabelsetDef } from "@/lib/domain/taxonomy";
+import type { LabelsetDef } from "@/lib/domain/taxonomy";
 import type { Runtime } from "@/lib/runtime";
 import { type AgentStatus, agentStatus } from "./agents";
 import { type LabelsetView, listLabelsets } from "./labelsets";
+import { agentConfigs, isShipped, labelsetDefs } from "./taxonomy-store";
 
 export interface LabelsetDetail extends LabelsetView {
   /** True when this labelset is part of the shipped taxonomy (as opposed to one ARAG created). */
   shipped: boolean;
+  /** True when the product's own taxonomy defines it (shipped, or created in Taxonomy). */
+  defined: boolean;
+  /** True when the operator has changed the shipped definition. */
+  customised: boolean;
   /** True when the Knowledge Box holds it. A shipped-but-absent labelset needs provisioning. */
   provisioned: boolean;
   definitions: Array<{ label: string; description?: string; present: boolean; calls?: number }>;
@@ -61,7 +66,9 @@ function detailFor(
     multiple: def?.multiple ?? live?.multiple ?? false,
     kind: def ? [def.kind] : (live?.kind ?? []),
     labels: live?.labels ?? def?.labels.map((l) => l.label) ?? [],
-    shipped: Boolean(def),
+    shipped: Boolean(def) && isShipped(id),
+    defined: Boolean(def),
+    customised: Boolean(def) && !isShipped(id),
     provisioned: Boolean(live),
     definitions,
   };
@@ -82,27 +89,29 @@ export async function taxonomy(rt: Runtime): Promise<TaxonomyView> {
     labelCounts(rt).catch(() => new Map<string, number>()),
   ]);
 
+  const defs = labelsetDefs(rt);
   const liveById = new Map(live.map((l) => [l.id, l]));
-  const ids = [...new Set([...ALL_LABELSETS.map((d) => d.id), ...live.map((l) => l.id)])];
+  const ids = [...new Set([...defs.map((d) => d.id), ...live.map((l) => l.id)])];
   const labelsets = ids.map((id) =>
     detailFor(
-      ALL_LABELSETS.find((d) => d.id === id),
+      defs.find((d) => d.id === id),
       liveById.get(id),
       counts,
     ),
   );
 
-  const missingLabelsets = labelsets.filter((l) => l.shipped && !l.provisioned).map((l) => l.id);
-  const missingAgents = agentsView.agents.filter((a) => a.state === "absent").map((a) => a.key);
+  const missingLabelsets = labelsets.filter((l) => l.defined && !l.provisioned).map((l) => l.id);
+  const missingAgents = agentsView.agents.filter((a) => a.enabled && a.state === "absent").map((a) => a.key);
   const running =
     agentsView.agents.some((a) => a.state === "running") ||
     rt.jobs.list({ status: "running" }).some((j) => j.kind === "provision");
 
   const lastProvision = rt.jobs.list({ kind: "provision" })[0];
 
+  const enabledAgents = agentConfigs(rt).filter((a) => a.enabled).length;
   let state: ProvisioningState = "provisioned";
   if (running) state = "running";
-  else if (missingLabelsets.length === ALL_LABELSETS.length && missingAgents.length === AGENTS.length)
+  else if (missingLabelsets.length === defs.length && missingAgents.length === enabledAgents)
     state = "absent";
   else if (missingLabelsets.length > 0 || missingAgents.length > 0) state = "partial";
 

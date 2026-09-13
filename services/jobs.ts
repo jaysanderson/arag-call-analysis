@@ -5,8 +5,8 @@
  */
 
 import { estimatedDurationSec, SCENARIOS, transcriptOf } from "@/lib/domain/scenarios";
-import { AGENTS, ALL_LABELSETS } from "@/lib/domain/taxonomy";
 import type { Runtime } from "@/lib/runtime";
+import { agentConfigs, labelsetDefs } from "@/services/taxonomy-store";
 import type { Job } from "@/vendor/arag-platform/src/index.ts";
 import { deleteAllTasks, startAgent } from "./agents";
 import { allSummaries, createCall, getCall, invalidateCall } from "./calls";
@@ -171,7 +171,7 @@ export function registerJobs(rt: Runtime): void {
         "Creating labelsets and starting the agents",
         async () => {
           await provisionLabelsets(rt);
-          for (const def of AGENTS) {
+          for (const def of agentConfigs(rt).filter((a) => a.enabled)) {
             try {
               await startAgent(rt, def);
               await rt.arag.waitTasksIdle({ graceMs: 1_000, timeoutMs: 4 * 60_000, signal: ctx.signal });
@@ -241,7 +241,7 @@ export function registerJobs(rt: Runtime): void {
     result.labelsets =
       ((await ctx.stage(
         "labelsets",
-        `Creating ${ALL_LABELSETS.length} labelsets`,
+        `Creating ${labelsetDefs(rt).length} labelsets`,
         () => provisionLabelsets(rt),
         { progress: 0.25 },
       )) as string[] | undefined) ?? [];
@@ -255,10 +255,13 @@ export function registerJobs(rt: Runtime): void {
           })) as number | undefined) ?? 0;
       }
       // One running task per operation type: start each agent, then wait for the KB to go idle.
+      // A disabled agent is skipped rather than started with `on: 0` — an agent switched off in
+      // Taxonomy should leave no task behind at all.
+      const enabled = agentConfigs(rt).filter((a) => a.enabled);
       let i = 0;
-      for (const def of AGENTS) {
+      for (const def of enabled) {
         i++;
-        const progress = 0.35 + (0.6 * i) / AGENTS.length;
+        const progress = 0.35 + (0.6 * i) / enabled.length;
         try {
           const taskId = (await ctx.stage(
             `agent:${def.key}`,

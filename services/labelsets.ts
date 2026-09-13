@@ -1,9 +1,10 @@
 /** Labelset reads (facet definitions for the calls explorer) and provisioning helpers. */
 
-import { ALL_LABELSETS, type LabelsetDef } from "@/lib/domain/taxonomy";
+import type { LabelsetDef } from "@/lib/domain/taxonomy";
 import type { Runtime } from "@/lib/runtime";
 import type { Labelset } from "@/vendor/arag-platform/src/arag/types.ts";
 import { cacheKeys } from "./cache";
+import { labelsetDefs } from "./taxonomy-store";
 
 export interface LabelsetView {
   id: string;
@@ -50,7 +51,13 @@ export async function listLabelsets(rt: Runtime): Promise<LabelsetView[]> {
   });
 }
 
-/** Create/replace one labelset from the product taxonomy (idempotent). */
+/**
+ * Create/replace one labelset from the product taxonomy (idempotent).
+ *
+ * The cached labelset list is dropped here rather than only by the bulk provisioner: without it a
+ * labelset created a second ago reads back as "not provisioned" for the rest of the cache window,
+ * and the Taxonomy screen contradicts the request that had just succeeded.
+ */
 export async function putLabelset(rt: Runtime, def: LabelsetDef): Promise<void> {
   await rt.arag.putLabelset(def.id, {
     title: def.title,
@@ -59,15 +66,28 @@ export async function putLabelset(rt: Runtime, def: LabelsetDef): Promise<void> 
     kind: [def.kind],
     labels: def.labels.map((l) => ({ title: l.label })),
   });
+  rt.cache.delete(cacheKeys.labelsets());
 }
 
-/** Create/replace every labelset in the taxonomy. */
+/** Create/replace every labelset in the taxonomy as it currently stands in the store. */
 export async function provisionLabelsets(rt: Runtime): Promise<string[]> {
   const done: string[] = [];
-  for (const def of ALL_LABELSETS) {
+  for (const def of labelsetDefs(rt)) {
     await putLabelset(rt, def);
     done.push(def.id);
   }
   rt.cache.delete(cacheKeys.labelsets());
   return done;
+}
+
+/** Remove a labelset from the Knowledge Box. Tolerates one that was never provisioned. */
+export async function unprovisionLabelset(rt: Runtime, id: string): Promise<void> {
+  try {
+    await rt.arag.deleteLabelset(id);
+  } catch (err) {
+    // A 404 means the Knowledge Box never had it, which is the state the caller asked for.
+    const status = (err as { status?: number }).status;
+    if (status !== 404) throw err;
+  }
+  rt.cache.delete(cacheKeys.labelsets());
 }

@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { openapi, type RouteAuth } from "@/lib/openapi";
 import { getRuntime, type Runtime } from "@/lib/runtime";
+import { apiKeysEnforced, verifyApiKey } from "@/services/apikeys";
 import {
   AragError,
   constantTimeEqual,
@@ -29,9 +30,19 @@ import {
 
 export interface AuthInfo {
   admin: boolean;
+  /** The id of the managed API key that authenticated this request, not the key itself. */
   apiKey: string | null;
+  /** Human-readable name of that key, for the audit trail. */
+  apiKeyName?: string;
   session: boolean;
   via: "admin-token" | "api-key" | "session" | "anonymous";
+}
+
+/** How the audit trail names this caller. */
+export function actorOf(auth: AuthInfo): string {
+  if (auth.admin) return "operator";
+  if (auth.apiKey) return `api-key:${auth.apiKeyName ?? auth.apiKey}`;
+  return auth.session ? "session" : "anonymous";
 }
 
 export interface ApiContext {
@@ -66,7 +77,7 @@ export interface CookieOptions {
 export interface RouteSpec {
   /** OpenAPI path, e.g. `/api/v1/calls/{id}`. Used to look up the operation's schemas. */
   path: string;
-  method: "get" | "post" | "delete";
+  method: "get" | "post" | "put" | "delete";
   auth?: RouteAuth;
   /** Body handling. `auto` parses JSON when the content type says so. */
   body?: "auto" | "json" | "multipart" | "none";
@@ -84,8 +95,12 @@ export interface RouteSpec {
    * media route pinned to a hard-coded value, and tests and the showcase need no special cases.
    */
   rateLimitMultiplier?: number;
-  /** Byte cap for this route's body (defaults to MAX_BODY_BYTES). */
-  bodyLimit?: number;
+  /**
+   * Byte cap for this route's body (defaults to `MAX_BODY_BYTES`). A function is resolved per
+   * request, so a limit an operator edits in Settings applies to the next upload rather than to
+   * the next deploy.
+   */
+  bodyLimit?: number | ((rt: Runtime) => number);
 }
 
 export type Handler = (ctx: ApiContext) => Promise<Response | unknown> | Response | unknown;
@@ -122,13 +137,12 @@ export function authenticate(rt: Runtime, req: Request): AuthInfo {
   ) {
     return { admin: true, apiKey: null, session: true, via: "admin-token" };
   }
-  for (const key of rt.env.apiKeys) {
-    if (
-      (bearer && constantTimeEqual(bearer, key)) ||
-      (apiKeyHeader && constantTimeEqual(apiKeyHeader, key))
-    ) {
-      return { admin: false, apiKey: key, session: false, via: "api-key" };
-    }
+  // Managed keys are stored hashed (services/apikeys.ts); `API_KEYS` is seeded into that store at
+  // boot, so an environment-configured deployment authenticates through exactly the same path.
+  for (const presented of [bearer, apiKeyHeader]) {
+    if (!presented) continue;
+    const doc = verifyApiKey(rt, presented);
+    if (doc) return { admin: false, apiKey: doc.id, apiKeyName: doc.name, session: false, via: "api-key" };
   }
   if (rt.app.verifySession(cookies.arag_session))
     return { admin: false, apiKey: null, session: true, via: "session" };
@@ -149,7 +163,7 @@ function enforceAuth(rt: Runtime, auth: AuthInfo, mode: RouteAuth): void {
     // exception is a deployment with NO credentials configured at all, which can only be a local
     // mock/demo run — and even that is refused in production.
     if (auth.admin || auth.apiKey) return;
-    const unconfigured = rt.env.apiKeys.length === 0 && !rt.env.adminToken;
+    const unconfigured = !apiKeysEnforced(rt) && !rt.env.adminToken;
     if (unconfigured && rt.env.nodeEnv !== "production") return;
     if (unconfigured)
       throw forbidden(
@@ -157,7 +171,7 @@ function enforceAuth(rt: Runtime, auth: AuthInfo, mode: RouteAuth): void {
       );
     throw unauthorized("An API key (X-API-Key) or the admin token is required for this operation");
   }
-  if (rt.env.apiKeys.length === 0) return; // open API
+  if (!apiKeysEnforced(rt)) return; // open API
   if (auth.admin || auth.apiKey || auth.session) return;
   throw unauthorized("API key required (X-API-Key or Authorization: Bearer)");
 }
@@ -236,7 +250,7 @@ export function corsOrigin(origin: string | null, allowed: string[]): string | n
 }
 
 const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key, X-Request-Id, Range",
   "Access-Control-Expose-Headers": "X-Request-Id, Content-Range, Location, Retry-After",
   "Access-Control-Max-Age": "600",
@@ -435,7 +449,8 @@ export function route(spec: RouteSpec, handler: Handler) {
       const mode = spec.body ?? "auto";
       const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
       const declared = Number(req.headers.get("content-length") ?? 0);
-      const limit = spec.bodyLimit ?? rt.env.maxBodyBytes;
+      const limit =
+        (typeof spec.bodyLimit === "function" ? spec.bodyLimit(rt) : spec.bodyLimit) ?? rt.env.maxBodyBytes;
       if (declared > limit) throw new HttpError(413, "Payload too large", `Body exceeds ${limit} bytes`);
       if (mode === "multipart") {
         if (!contentType.startsWith("multipart/form-data"))

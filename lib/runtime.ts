@@ -27,18 +27,55 @@ export type CallsEnv = PlatformEnv & {
   cacheTtlMs: number;
   /** Maximum length of a question accepted by POST /calls/{id}/ask. */
   maxQuestionChars: number;
+  /** Largest recording accepted by POST /calls, in bytes. */
+  maxUploadBytes: number;
   /** Number of demo calls seeded into the mock ARAG server at boot (mock mode only). */
   mockSeedCalls: number;
 };
 
+/**
+ * The values the settings store may override, captured as the environment supplied them.
+ *
+ * Kept so "Reset to environment defaults" is a real operation rather than a restart: without this
+ * snapshot the original value is gone the moment the first override is applied.
+ */
+export interface EnvDefaults {
+  maxQuestionChars: number;
+  maxUploadBytes: number;
+  rateLimitRps: number;
+  rateLimitBurst: number;
+  cacheTtlMs: number;
+  generativeModel: string;
+  reranker: string;
+  timeoutMs: number;
+}
+
 export interface Runtime {
   env: CallsEnv;
-  /** White-label identity, read from the environment at boot (see lib/branding.ts). */
+  /**
+   * White-label identity currently in force: the environment at boot, then whatever the settings
+   * store overrides (see services/config.ts). Mutable by design — a branding edit must show on the
+   * next render, not on the next deploy.
+   */
   branding: Branding;
+  /** The environment's branding, kept so a reset can restore it. */
+  envBranding: Branding;
+  /** The environment's overridable scalars, kept for the same reason. */
+  envDefaults: EnvDefaults;
   log: Logger;
+  /** Replaced wholesale when the connection settings change. */
   arag: AragClient;
+  /** The request hook the client was built with, so a replacement keeps the same counters. */
+  aragOnRequest: (info: {
+    method: string;
+    path: string;
+    status?: number;
+    ms: number;
+    error?: string;
+  }) => void;
   store: Store;
   jobs: JobManager;
+  /** Replaced when the cache TTL setting changes. */
   cache: TtlCache;
   /** Signing helper for the demo session cookie (platform HMAC implementation). */
   app: App;
@@ -83,6 +120,7 @@ function readCallsEnv(): CallsEnv {
     ...base,
     cacheTtlMs: num("CALLS_CACHE_TTL_MS", 60_000),
     maxQuestionChars: num("CALLS_MAX_QUESTION_CHARS", 500),
+    maxUploadBytes: num("CALLS_MAX_UPLOAD_BYTES", 100 * 1024 * 1024),
     mockSeedCalls: num("CALLS_MOCK_SEED", 12),
   };
 }
@@ -138,23 +176,31 @@ async function buildRuntime(): Promise<Runtime> {
     );
   }
 
+  const aragOnRequest = (info: {
+    method: string;
+    path: string;
+    status?: number;
+    ms: number;
+    error?: string;
+  }) => {
+    usage.aragCalls++;
+    usage.aragMs += info.ms;
+    if (info.error || (info.status ?? 200) >= 400) usage.aragErrors++;
+    log.debug("arag", {
+      method: info.method,
+      path: info.path,
+      status: info.status,
+      ms: Math.round(info.ms),
+    });
+  };
+
   const arag = new AragClient({
     kbId,
     apiKey,
     region: env.arag.region,
     baseUrl: baseUrl || undefined,
     timeoutMs: env.arag.timeoutMs,
-    onRequest: (info) => {
-      usage.aragCalls++;
-      usage.aragMs += info.ms;
-      if (info.error || (info.status ?? 200) >= 400) usage.aragErrors++;
-      log.debug("arag", {
-        method: info.method,
-        path: info.path,
-        status: info.status,
-        ms: Math.round(info.ms),
-      });
-    },
+    onRequest: aragOnRequest,
   });
 
   const store = new Store(env.dataDir);
@@ -162,11 +208,24 @@ async function buildRuntime(): Promise<Runtime> {
   const cache = new TtlCache(env.cacheTtlMs);
   const app = new App({ env, log });
 
+  const envBranding = readBranding(process.env);
   const runtime: Runtime = {
     env,
-    branding: readBranding(process.env),
+    branding: envBranding,
+    envBranding,
+    envDefaults: {
+      maxQuestionChars: env.maxQuestionChars,
+      maxUploadBytes: env.maxUploadBytes,
+      rateLimitRps: env.rateLimitRps,
+      rateLimitBurst: env.rateLimitBurst,
+      cacheTtlMs: env.cacheTtlMs,
+      generativeModel: env.arag.generativeModel,
+      reranker: env.arag.reranker,
+      timeoutMs: env.arag.timeoutMs,
+    },
     log,
     arag,
+    aragOnRequest,
     store,
     jobs,
     cache,
@@ -175,6 +234,16 @@ async function buildRuntime(): Promise<Runtime> {
     startedAt: Date.now(),
     mock,
   };
+
+  // Saved settings are applied before anything else can read the runtime, so the very first
+  // request after a restart sees the same configuration the last one did.
+  const { applyToRuntime } = await import("@/services/config");
+  applyToRuntime(runtime);
+
+  // API keys issued in the product are stored hashed; the API_KEYS environment variable is a seed
+  // for a fresh deployment, imported once so an operator is never locked out of their own API.
+  const { seedApiKeys } = await import("@/services/apikeys");
+  seedApiKeys(runtime);
 
   // Registering job runners needs the runtime, so it happens after construction.
   const { registerJobs } = await import("@/services/jobs");

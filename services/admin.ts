@@ -3,9 +3,9 @@
 import type { Branding } from "@/lib/branding";
 import { AGENTS, ALL_LABELSETS } from "@/lib/domain/taxonomy";
 import type { Runtime } from "@/lib/runtime";
-import { APP_VERSION } from "@/lib/version";
+import { APP_VERSION, PLATFORM_VERSION } from "@/lib/version";
 import type { LogLevel } from "@/vendor/arag-platform/src/config/env.ts";
-import { describeEnv, PLATFORM_VERSION } from "@/vendor/arag-platform/src/index.ts";
+import { describeEnv } from "@/vendor/arag-platform/src/index.ts";
 
 export interface HealthView {
   ok: boolean;

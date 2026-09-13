@@ -32,7 +32,7 @@ const err = standardResponses;
 export type RouteAuth = "none" | "api" | "write" | "admin";
 
 export interface RouteDef {
-  method: "get" | "post" | "delete";
+  method: "get" | "post" | "put" | "delete";
   /** OpenAPI path (with `{id}` placeholders). */
   path: string;
   auth: RouteAuth;
@@ -520,10 +520,30 @@ const schemas: Record<string, unknown> = {
           kbId: { type: "string", description: "Truncated." },
           region: { type: "string" },
           baseUrl: { type: "string" },
+          generativeModel: { type: "string" },
+          reranker: { type: "string" },
+          timeoutMs: { type: "integer" },
+          apiKeySet: { type: "boolean", description: "A service-account token is configured." },
+          apiKeyOverridden: {
+            type: "boolean",
+            description: "The settings store, not the environment, supplies the token.",
+          },
           seededCalls: { type: "integer", description: "Calls in the sample dataset (mock mode only)." },
         },
       },
       limits: { type: "object", additionalProperties: true },
+      retention: {
+        type: "object",
+        properties: {
+          days: { type: "integer", description: "0 means no retention limit." },
+          enabled: { type: "boolean" },
+        },
+      },
+      overridden: {
+        type: "array",
+        items: { type: "string" },
+        description: "Sections the settings store is currently overriding the environment for.",
+      },
       features: {
         type: "object",
         additionalProperties: true,
@@ -533,15 +553,288 @@ const schemas: Record<string, unknown> = {
         type: "object",
         required: ["configured", "managed"],
         properties: {
-          configured: { type: "integer", description: "How many keys `API_KEYS` declares. Never the keys." },
+          configured: { type: "integer", description: "Keys in the store, revoked ones included." },
+          active: { type: "integer", description: "Keys that can currently authenticate." },
           managed: {
             type: "boolean",
-            description:
-              "False: keys are configured by environment; in-product key management is not implemented yet.",
+            description: "True: keys are issued and revoked in the product (`/api/v1/api-keys`).",
           },
         },
       },
       taxonomy: { type: "object", additionalProperties: true },
+    },
+  },
+  SettingsUpdateRequest: {
+    type: "object",
+    description:
+      "A patch for one settings section. Only the keys present are changed; the rest of the section keeps its current value. Unknown keys are rejected so a typo in a partner's automation fails loudly instead of silently doing nothing.",
+    additionalProperties: false,
+    properties: {
+      productName: { type: "string", maxLength: 200 },
+      tagline: { type: "string", maxLength: 200 },
+      footerText: { type: "string", maxLength: 200 },
+      poweredBy: { type: "boolean" },
+      primaryColor: { type: "string", maxLength: 64 },
+      accentColor: { type: "string", maxLength: 64 },
+      logoUrl: { type: "string", maxLength: 500 },
+      docsUrl: { type: "string", maxLength: 500 },
+      supportUrl: { type: "string", maxLength: 500 },
+      kbId: { type: "string", maxLength: 64 },
+      region: { type: "string", maxLength: 64 },
+      baseUrl: { type: "string", maxLength: 300 },
+      generativeModel: { type: "string", maxLength: 100 },
+      reranker: { type: "string", enum: ["predict", "noop", ""] },
+      timeoutMs: { type: "integer", minimum: 1000, maximum: 300000 },
+      apiKey: {
+        type: "string",
+        maxLength: 500,
+        description: "Write-only. An empty string leaves the stored credential untouched.",
+      },
+      maxQuestionChars: { type: "integer", minimum: 40, maximum: 4000 },
+      maxUploadBytes: { type: "integer", minimum: 1024 },
+      rateLimitRps: { type: "integer", minimum: 0, maximum: 10000 },
+      rateLimitBurst: { type: "integer", minimum: 1, maximum: 100000 },
+      cacheTtlMs: { type: "integer", minimum: 0, maximum: 3600000 },
+      days: { type: "integer", minimum: 0, maximum: 3650 },
+      enabled: { type: "boolean" },
+    },
+  },
+  ApiKey: {
+    type: "object",
+    required: ["id", "name", "preview", "createdISO", "revoked", "fromEnv"],
+    properties: {
+      id: { type: "string" },
+      name: { type: "string" },
+      preview: {
+        type: "string",
+        description:
+          "`ca_live_` plus the first 8 characters. The key itself is stored hashed and is never returned after creation.",
+      },
+      createdISO: { type: "string" },
+      lastUsedISO: { type: "string", description: "Recorded at most once a minute per key." },
+      revoked: { type: "boolean" },
+      fromEnv: { type: "boolean", description: "Imported from the `API_KEYS` seed." },
+      createdBy: { type: "string" },
+    },
+  },
+  ApiKeyList: {
+    type: "object",
+    required: ["items"],
+    properties: { items: { type: "array", items: ref("ApiKey") } },
+  },
+  ApiKeyCreateRequest: {
+    type: "object",
+    required: ["name"],
+    additionalProperties: false,
+    properties: { name: { type: "string", minLength: 1, maxLength: 80 } },
+  },
+  ApiKeyCreated: {
+    type: "object",
+    required: ["key", "secret"],
+    properties: {
+      key: ref("ApiKey"),
+      secret: {
+        type: "string",
+        description: "The key material, returned exactly once. It cannot be recovered afterwards.",
+      },
+    },
+  },
+  ApiKeyUpdateRequest: {
+    type: "object",
+    required: ["name"],
+    additionalProperties: false,
+    properties: { name: { type: "string", minLength: 1, maxLength: 80 } },
+  },
+  LabelsetDefinition: {
+    type: "object",
+    required: ["id", "title", "labels"],
+    description: "A labelset as the product defines it: the vocabulary the labeler agent is told to apply.",
+    properties: {
+      id: {
+        type: "string",
+        pattern: "^[a-z][a-z0-9_]{1,48}$",
+        description: "Stable identifier; also the Knowledge Box labelset id. Never changes after creation.",
+      },
+      title: { type: "string", minLength: 1, maxLength: 80 },
+      color: { type: "string", pattern: "^#[0-9a-fA-F]{3,8}$" },
+      multiple: { type: "boolean", description: "May several labels from this set apply to one call?" },
+      kind: { type: "string", enum: ["RESOURCES", "PARAGRAPHS"] },
+      labels: {
+        type: "array",
+        minItems: 1,
+        maxItems: 60,
+        items: {
+          type: "object",
+          required: ["label", "description"],
+          properties: {
+            label: { type: "string", minLength: 1, maxLength: 80 },
+            description: {
+              type: "string",
+              minLength: 1,
+              maxLength: 500,
+              description:
+                "Required: this is the instruction the agent reads when deciding to apply the label.",
+            },
+            examples: { type: "array", items: { type: "string", maxLength: 300 }, maxItems: 10 },
+          },
+        },
+      },
+    },
+  },
+  LabelsetWriteResult: {
+    type: "object",
+    required: ["labelset", "provisioned"],
+    properties: {
+      labelset: ref("LabelsetDefinition"),
+      provisioned: { type: "boolean", description: "The Knowledge Box was updated in the same request." },
+      provisionError: {
+        type: "string",
+        description: "Set when the definition was saved but the Knowledge Box write failed.",
+      },
+    },
+  },
+  AgentConfig: {
+    type: "object",
+    required: ["key", "type", "description", "enabled"],
+    properties: {
+      key: { type: "string" },
+      type: { type: "string", enum: ["labeler", "ask"] },
+      description: { type: "string" },
+      enabled: { type: "boolean" },
+      model: { type: "string" },
+      state: { type: "string", enum: ["running", "completed", "failed", "configured", "absent"] },
+      taskId: { type: "string" },
+      operations: { type: "integer" },
+      prompts: {
+        type: "object",
+        additionalProperties: { type: "string" },
+        description: "Editable instructions, keyed by the resource field the operation writes.",
+      },
+      labelsets: {
+        type: "array",
+        items: { type: "string" },
+        description: "Labelsets this agent applies (labeler agents only). Derived from the taxonomy.",
+      },
+    },
+  },
+  AgentList: {
+    type: "object",
+    required: ["items"],
+    properties: { items: { type: "array", items: ref("AgentConfig") } },
+  },
+  AgentUpdateRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      enabled: { type: "boolean" },
+      description: { type: "string", maxLength: 300 },
+      model: { type: "string", maxLength: 100 },
+      prompts: { type: "object", additionalProperties: { type: "string", maxLength: 8000 } },
+    },
+  },
+  SavedView: {
+    type: "object",
+    required: ["id", "name", "query", "href", "createdISO"],
+    properties: {
+      id: { type: "string" },
+      name: { type: "string" },
+      query: { type: "string", description: "Normalised calls-list query string, without the leading `?`." },
+      href: { type: "string" },
+      description: { type: "string" },
+      createdISO: { type: "string" },
+      createdBy: { type: "string" },
+    },
+  },
+  SavedViewList: {
+    type: "object",
+    required: ["items"],
+    properties: { items: { type: "array", items: ref("SavedView") } },
+  },
+  SavedViewRequest: {
+    type: "object",
+    required: ["name", "query"],
+    additionalProperties: false,
+    properties: {
+      name: { type: "string", minLength: 1, maxLength: 80 },
+      query: { type: "string", maxLength: 2000 },
+      description: { type: "string", maxLength: 200 },
+    },
+  },
+  PurgePreview: {
+    type: "object",
+    required: ["days", "enabled", "cutoffISO", "candidates", "total", "retained"],
+    properties: {
+      days: { type: "integer" },
+      enabled: { type: "boolean" },
+      cutoffISO: { type: "string" },
+      total: { type: "integer" },
+      retained: { type: "integer" },
+      candidates: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["id", "title", "ageDays"],
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            createdISO: { type: "string" },
+            ageDays: { type: "integer" },
+          },
+        },
+      },
+    },
+  },
+  PurgeRequest: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      days: {
+        type: "integer",
+        minimum: 0,
+        maximum: 3650,
+        description: "Override the saved policy for this run.",
+      },
+      dryRun: { type: "boolean", description: "Report what would be deleted without deleting it." },
+      ids: { type: "array", items: { type: "string", maxLength: 128 }, maxItems: 200 },
+    },
+  },
+  PurgeResult: {
+    type: "object",
+    required: ["days", "cutoffISO", "deleted", "failed", "dryRun"],
+    properties: {
+      days: { type: "integer" },
+      cutoffISO: { type: "string" },
+      deleted: { type: "array", items: { type: "string" } },
+      failed: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["id", "error"],
+          properties: { id: { type: "string" }, error: { type: "string" } },
+        },
+      },
+      sharesRevoked: { type: "integer" },
+      dryRun: { type: "boolean" },
+    },
+  },
+  AuditPage: {
+    type: "object",
+    required: ["items"],
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["id", "action", "actor", "createdAt"],
+          properties: {
+            id: { type: "string" },
+            action: { type: "string" },
+            actor: { type: "string" },
+            createdAt: { type: "string" },
+            detail: { type: "object", additionalProperties: true },
+          },
+        },
+      },
     },
   },
   CallCreateAccepted: {
@@ -1029,15 +1322,243 @@ const paths: Record<string, Record<string, unknown>> = {
       tags: ["Settings"],
       summary: "Non-sensitive deployment settings for the in-product Settings area",
       description:
-        "Branding, connection mode, limits, which features this deployment allows, and how many API keys are configured. Contains no secrets and no key material; the operator view with the full effective environment is `GET /api/v1/admin/config`.",
+        "Branding, connection, limits, retention, which features this deployment allows, and how many API keys exist. Contains no secrets and no key material; the operator view with the full effective environment is `GET /api/v1/admin/config`.",
       responses: { 200: jsonResponse(ref("SettingsView"), "Settings"), ...problemResponses },
+    },
+  },
+  "/api/v1/settings/{section}": {
+    put: {
+      operationId: "updateSettings",
+      tags: ["Settings"],
+      summary: "Edit one section of the deployment settings",
+      description:
+        "Environment variables are *defaults*; this write is the authority. The patch is validated, persisted to the product's JSON store and applied to the running process, so the change is in force for the very next request without a restart. Colours and URLs go through the same grammar the boot-time reader uses, so a settings form is not a way past them. `connection.apiKey` is write-only: it is never returned by any read model, and an empty value leaves the stored credential alone.",
+      security: [{ AdminToken: [] }],
+      parameters: [
+        {
+          name: "section",
+          in: "path",
+          required: true,
+          schema: { type: "string", enum: ["branding", "connection", "limits", "retention"] },
+        },
+      ],
+      requestBody: jsonBody(ref("SettingsUpdateRequest"), true),
+      responses: {
+        200: jsonResponse(ref("SettingsView"), "The settings after the edit"),
+        ...problemResponses,
+      },
+    },
+    delete: {
+      operationId: "resetSettings",
+      tags: ["Settings"],
+      summary: "Restore one section to its environment defaults",
+      security: [{ AdminToken: [] }],
+      parameters: [
+        {
+          name: "section",
+          in: "path",
+          required: true,
+          schema: { type: "string", enum: ["branding", "connection", "limits", "retention"] },
+        },
+      ],
+      responses: {
+        200: jsonResponse(ref("SettingsView"), "The settings after the reset"),
+        ...problemResponses,
+      },
+    },
+  },
+  "/api/v1/settings/logo": {
+    post: {
+      operationId: "uploadLogo",
+      tags: ["Settings"],
+      summary: "Upload the partner logo",
+      description:
+        "Stores an SVG, PNG, JPEG or WebP under `DATA_DIR/branding/` and points `branding.logoUrl` at it, so a white-label deployment needs no image baked into the container and no volume edited by hand. The file is served by `GET /branding/{path}` with `Content-Security-Policy: sandbox`, because an SVG is a document.",
+      security: [{ AdminToken: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "multipart/form-data": {
+            schema: {
+              type: "object",
+              required: ["logo"],
+              properties: { logo: { type: "string", format: "binary" } },
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse(ref("SettingsView"), "The settings after the upload"),
+        ...problemResponses,
+      },
+    },
+    delete: {
+      operationId: "removeLogo",
+      tags: ["Settings"],
+      summary: "Remove the uploaded partner logo",
+      security: [{ AdminToken: [] }],
+      responses: {
+        200: jsonResponse(ref("SettingsView"), "The settings after the removal"),
+        ...problemResponses,
+      },
+    },
+  },
+  "/api/v1/api-keys": {
+    get: {
+      operationId: "listApiKeys",
+      tags: ["API keys"],
+      summary: "Every API key this deployment has issued",
+      description:
+        "Names, previews, creation and last-used times, and whether each key is revoked. The key material is stored as a SHA-256 digest and is never returned — a leaked store grants nothing.",
+      security: [{ AdminToken: [] }],
+      responses: { 200: jsonResponse(ref("ApiKeyList"), "API keys"), ...problemResponses },
+    },
+    post: {
+      operationId: "createApiKey",
+      tags: ["API keys"],
+      summary: "Issue a new API key",
+      description:
+        "Returns the key material **once**. It cannot be recovered afterwards; a key that is lost is revoked and reissued.",
+      security: [{ AdminToken: [] }],
+      requestBody: jsonBody(ref("ApiKeyCreateRequest"), true),
+      responses: {
+        201: jsonResponse(ref("ApiKeyCreated"), "The new key, with its secret"),
+        ...problemResponses,
+      },
+    },
+  },
+  "/api/v1/api-keys/{id}": {
+    put: {
+      operationId: "renameApiKey",
+      tags: ["API keys"],
+      summary: "Rename an API key",
+      security: [{ AdminToken: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      requestBody: jsonBody(ref("ApiKeyUpdateRequest"), true),
+      responses: { 200: jsonResponse(ref("ApiKey"), "The renamed key"), ...problemResponses },
+    },
+    delete: {
+      operationId: "revokeApiKey",
+      tags: ["API keys"],
+      summary: "Revoke an API key",
+      description:
+        "Revokes rather than deletes: the record of a key that once had access, and when it was last used, is exactly what an incident review needs.",
+      security: [{ AdminToken: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: { 200: jsonResponse(ref("ApiKey"), "The revoked key"), ...problemResponses },
+    },
+  },
+  "/api/v1/views": {
+    get: {
+      operationId: "listViews",
+      tags: ["Views"],
+      summary: "Saved views on the calls list",
+      responses: { 200: jsonResponse(ref("SavedViewList"), "Saved views"), ...problemResponses },
+    },
+    post: {
+      operationId: "createView",
+      tags: ["Views"],
+      summary: "Save the current calls-list filters as a named view",
+      description:
+        "A view is a name for a query string. It is stored on the server rather than in one browser, because a rota of supervisors reviewing the same queue should be looking at the same definition of it. The query is re-parsed through an allowlist on save. Like a share link this writes application state only and grants no access the read API does not already give, so it sits at read-level auth rather than behind the write credential.",
+      requestBody: jsonBody(ref("SavedViewRequest"), true),
+      responses: { 201: jsonResponse(ref("SavedView"), "The saved view"), ...problemResponses },
+    },
+  },
+  "/api/v1/views/{id}": {
+    put: {
+      operationId: "updateView",
+      tags: ["Views"],
+      summary: "Rename a saved view or update its filters",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      requestBody: jsonBody(ref("SavedViewRequest"), true),
+      responses: { 200: jsonResponse(ref("SavedView"), "The updated view"), ...problemResponses },
+    },
+    delete: {
+      operationId: "deleteView",
+      tags: ["Views"],
+      summary: "Delete a saved view",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: { 204: { description: "Deleted" }, ...problemResponses },
+    },
+  },
+  "/api/v1/shares": {
+    get: {
+      operationId: "listShares",
+      tags: ["Shares"],
+      summary: "Every share link this deployment has issued",
+      description:
+        "The whole register, across every call, so links can be reviewed and revoked from one place rather than only from the call they point at.",
+      parameters: [
+        { name: "call_id", in: "query", schema: { type: "string", maxLength: 128 } },
+        {
+          name: "state",
+          in: "query",
+          schema: { type: "string", enum: ["all", "active", "revoked", "expired"], default: "all" },
+        },
+      ],
+      responses: { 200: jsonResponse(ref("ShareList"), "Share links"), ...problemResponses },
+    },
+  },
+  "/api/v1/retention/preview": {
+    get: {
+      operationId: "previewPurge",
+      tags: ["Retention"],
+      summary: "Which calls the retention policy would remove",
+      description:
+        "Always available, whether or not the policy is enabled, so an operator can see the consequence of a policy before saving it. `days=0` means no retention limit and returns no candidates — the destructive reading of a default-valued field is never the right one.",
+      parameters: [
+        {
+          name: "days",
+          in: "query",
+          schema: { type: "integer", minimum: 0, maximum: 3650 },
+          description: "Preview a policy other than the saved one.",
+        },
+      ],
+      responses: {
+        200: jsonResponse(ref("PurgePreview"), "What the policy would remove"),
+        ...problemResponses,
+      },
+    },
+  },
+  "/api/v1/retention/purge": {
+    post: {
+      operationId: "runPurge",
+      tags: ["Retention"],
+      summary: "Delete the calls the retention policy covers",
+      description:
+        "Irreversible: the Knowledge Box resource, its recording and every label and analysis derived from it are removed. Share links pointing at a purged call are revoked in the same pass, so no live URL is left resolving to nothing. `dryRun` returns the same shape without deleting.",
+      security: [{ AdminToken: [] }],
+      requestBody: jsonBody(ref("PurgeRequest"), false),
+      responses: { 200: jsonResponse(ref("PurgeResult"), "What was removed"), ...problemResponses },
     },
   },
   "/api/v1/dashboard": {
     get: {
       operationId: "getDashboard",
       tags: ["Analytics"],
-      summary: "Aggregated analytics across every analysed call",
+      summary: "Aggregated analytics across a date window",
+      description:
+        "Named windows are resolved on the server and snapped to whole UTC days, so a link reproduces the dashboard the sender saw and two people opening it four minutes apart share one cache entry. `from`/`to` override `range`.",
+      parameters: [
+        {
+          name: "range",
+          in: "query",
+          schema: { type: "string", enum: ["7d", "30d", "90d", "12m", "all"], default: "all" },
+        },
+        {
+          name: "from",
+          in: "query",
+          schema: { type: "string", maxLength: 40 },
+          description: "Inclusive ISO-8601 lower bound.",
+        },
+        {
+          name: "to",
+          in: "query",
+          schema: { type: "string", maxLength: 40 },
+          description: "Inclusive ISO-8601 upper bound.",
+        },
+      ],
       responses: { 200: jsonResponse(ref("Dashboard"), "Dashboard aggregation"), ...problemResponses },
     },
   },
@@ -1091,7 +1612,7 @@ const paths: Record<string, Record<string, unknown>> = {
   "/api/v1/labelsets": {
     get: {
       operationId: "listLabelsets",
-      tags: ["Analytics"],
+      tags: ["Taxonomy"],
       summary: "List the Knowledge Box labelsets used as filter facets",
       responses: {
         200: jsonResponse(
@@ -1105,6 +1626,113 @@ const paths: Record<string, Record<string, unknown>> = {
         ...problemResponses,
       },
     },
+    post: {
+      operationId: "createLabelset",
+      tags: ["Taxonomy"],
+      summary: "Define a new labelset",
+      description:
+        "The shipped health-insurance taxonomy is a default, not a constraint: a partner classifying utility calls needs different reasons and different outcomes, and forking the repo to get them is the difference between a product and a sample. Creating a labelset also writes it to the Knowledge Box, so the labeler agent can apply it on the next run.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      requestBody: jsonBody(ref("LabelsetDefinition"), true),
+      responses: {
+        201: jsonResponse(
+          ref("LabelsetWriteResult"),
+          "The labelset, and whether it reached the Knowledge Box",
+        ),
+        ...problemResponses,
+      },
+    },
+  },
+  "/api/v1/labelsets/{id}": {
+    get: {
+      operationId: "getLabelset",
+      tags: ["Taxonomy"],
+      summary: "One labelset definition",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: { 200: jsonResponse(ref("LabelsetDefinition"), "The labelset"), ...problemResponses },
+    },
+    put: {
+      operationId: "updateLabelset",
+      tags: ["Taxonomy"],
+      summary: "Replace a labelset definition",
+      description:
+        "The path id always wins over a body id: renaming it would orphan every label already applied in the Knowledge Box under the old one. Saving also re-provisions the labelset, so the definition and the Knowledge Box cannot drift apart.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      requestBody: jsonBody(ref("LabelsetDefinition"), true),
+      responses: { 200: jsonResponse(ref("LabelsetWriteResult"), "The saved labelset"), ...problemResponses },
+    },
+    delete: {
+      operationId: "deleteLabelset",
+      tags: ["Taxonomy"],
+      summary: "Remove a labelset from the taxonomy",
+      description:
+        "Removes it from the product's vocabulary. Whether the Knowledge Box also drops it is an explicit second choice (`?knowledge_box=true`), because the labels already applied to analysed calls are data, not configuration.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } },
+        {
+          name: "knowledge_box",
+          in: "query",
+          schema: { type: "boolean", default: false },
+          description: "Also delete the labelset — and the labels applied with it — from the Knowledge Box.",
+        },
+      ],
+      responses: { 204: { description: "Deleted" }, ...problemResponses },
+    },
+  },
+  "/api/v1/labelsets/{id}/provision": {
+    post: {
+      operationId: "provisionLabelset",
+      tags: ["Taxonomy"],
+      summary: "Write one labelset to the Knowledge Box",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: { 200: jsonResponse(ref("LabelsetWriteResult"), "Provisioned"), ...problemResponses },
+    },
+  },
+  "/api/v1/agents": {
+    get: {
+      operationId: "listAgents",
+      tags: ["Taxonomy"],
+      summary: "The data-augmentation agents, their configuration and their live state",
+      description:
+        "The labeler agents' operations are derived from the current labelsets rather than stored separately, which is what keeps a labelset edit and the agent that applies it from drifting apart.",
+      responses: { 200: jsonResponse(ref("AgentList"), "Agents"), ...problemResponses },
+    },
+  },
+  "/api/v1/agents/{key}": {
+    put: {
+      operationId: "updateAgent",
+      tags: ["Taxonomy"],
+      summary: "Enable, disable or re-instruct an agent",
+      description:
+        "`enabled` decides whether provisioning starts the agent at all; `prompts` replaces the instruction for one of the agent's outputs, keyed by the resource field it writes. A change takes effect on the next provision — the Knowledge Box holds the running task, and rewriting an agent under a task that is mid-run is how you get half a corpus labelled two different ways.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [{ name: "key", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      requestBody: jsonBody(ref("AgentUpdateRequest"), true),
+      responses: { 200: jsonResponse(ref("AgentConfig"), "The agent after the edit"), ...problemResponses },
+    },
+    delete: {
+      operationId: "stopAgent",
+      tags: ["Taxonomy"],
+      summary: "Stop an agent's Knowledge Box task",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [{ name: "key", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: { 200: jsonResponse(ref("AgentConfig"), "The agent after stopping"), ...problemResponses },
+    },
+  },
+  "/api/v1/agents/{key}/start": {
+    post: {
+      operationId: "startAgent",
+      tags: ["Taxonomy"],
+      summary: "Start one agent against the Knowledge Box",
+      description:
+        "ARAG allows exactly one running task per operation type, so starting an agent that already has one fails rather than silently queueing a second.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [{ name: "key", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: { 200: jsonResponse(ref("AgentConfig"), "The agent after starting"), ...problemResponses },
+    },
   },
   "/api/v1/jobs": {
     get: {
@@ -1112,11 +1740,24 @@ const paths: Record<string, Record<string, unknown>> = {
       tags: ["Jobs"],
       summary: "List background jobs",
       parameters: [
-        { name: "kind", in: "query", schema: { type: "string", enum: ["ingest-call", "provision"] } },
+        {
+          name: "kind",
+          in: "query",
+          schema: {
+            type: "string",
+            enum: ["ingest-call", "provision", "reanalyse-call", "seed-samples"],
+          },
+        },
         {
           name: "status",
           in: "query",
           schema: { type: "string", enum: ["queued", "running", "succeeded", "failed", "cancelled"] },
+        },
+        {
+          name: "ref",
+          in: "query",
+          schema: { type: "string", maxLength: 128 },
+          description: "The object the job is about — a call id for an ingestion.",
         },
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
       ],
@@ -1130,6 +1771,23 @@ const paths: Record<string, Record<string, unknown>> = {
       summary: "Get one job",
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
       responses: { 200: jsonResponse(ref("Job"), "The job"), ...problemResponses },
+    },
+    delete: {
+      operationId: "cancelJob",
+      tags: ["Jobs"],
+      summary: "Cancel a queued or running job",
+      description:
+        "Signals the job's abort controller and marks it cancelled. Work already committed upstream is not rolled back — a cancelled ingestion leaves the Knowledge Box resource it had already created, which the call list then shows as incomplete rather than pretending it never existed. A job that has already finished returns 409.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: {
+        200: jsonResponse(ref("Job"), "The cancelled job"),
+        409: {
+          description: "The job had already finished",
+          content: { "application/problem+json": { schema: ref("Problem") } },
+        },
+        ...problemResponses,
+      },
     },
   },
   "/api/v1/jobs/{id}/events": {
@@ -1228,6 +1886,21 @@ const paths: Record<string, Record<string, unknown>> = {
       responses: { 202: jsonResponse(ref("Job"), "Provisioning job accepted"), ...problemResponses },
     },
   },
+  "/api/v1/admin/audit": {
+    get: {
+      operationId: "adminAudit",
+      tags: ["Admin"],
+      summary: "Who changed what, and when",
+      description:
+        "Every settings edit, key issue or revocation, taxonomy change and purge, with the actor and the values that changed. Secrets are reduced to `true`: an audit trail that quotes the credential is a second place to leak it.",
+      security: [{ AdminToken: [] }],
+      parameters: [
+        { name: "action", in: "query", schema: { type: "string", maxLength: 64 } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 500, default: 100 } },
+      ],
+      responses: { 200: jsonResponse(ref("AuditPage"), "Audit records"), ...problemResponses },
+    },
+  },
   "/api/v1/admin/cache": {
     get: {
       operationId: "adminCache",
@@ -1262,7 +1935,11 @@ export const openapi: Record<string, unknown> = buildOpenApi({
   },
   tags: [
     { name: "Calls", description: "Upload, browse, stream and question analysed calls." },
-    { name: "Analytics", description: "Aggregated metrics and the label taxonomy." },
+    { name: "Analytics", description: "Aggregated metrics over a date window." },
+    { name: "Taxonomy", description: "Labelsets and the data-augmentation agents that apply them." },
+    { name: "Views", description: "Saved, shared filter sets on the calls list." },
+    { name: "API keys", description: "Issue, name, revoke and audit the keys that authenticate the API." },
+    { name: "Retention", description: "What the retention policy would remove, and removing it." },
     { name: "Shares", description: "Revocable, expiring links to a single call's read-only view." },
     { name: "Onboarding", description: "First-run state and the sample dataset." },
     { name: "Settings", description: "Non-sensitive deployment settings shown in the product." },
@@ -1331,6 +2008,87 @@ export const API_ROUTES: RouteDef[] = [
     file: "app/api/v1/calls/[id]/export/route.ts",
   },
   { method: "get", path: "/api/v1/settings", auth: "none", file: "app/api/v1/settings/route.ts" },
+  {
+    method: "put",
+    path: "/api/v1/settings/{section}",
+    auth: "admin",
+    file: "app/api/v1/settings/[section]/route.ts",
+  },
+  {
+    method: "delete",
+    path: "/api/v1/settings/{section}",
+    auth: "admin",
+    file: "app/api/v1/settings/[section]/route.ts",
+  },
+  { method: "post", path: "/api/v1/settings/logo", auth: "admin", file: "app/api/v1/settings/logo/route.ts" },
+  {
+    method: "delete",
+    path: "/api/v1/settings/logo",
+    auth: "admin",
+    file: "app/api/v1/settings/logo/route.ts",
+  },
+  { method: "get", path: "/api/v1/api-keys", auth: "admin", file: "app/api/v1/api-keys/route.ts" },
+  { method: "post", path: "/api/v1/api-keys", auth: "admin", file: "app/api/v1/api-keys/route.ts" },
+  { method: "put", path: "/api/v1/api-keys/{id}", auth: "admin", file: "app/api/v1/api-keys/[id]/route.ts" },
+  {
+    method: "delete",
+    path: "/api/v1/api-keys/{id}",
+    auth: "admin",
+    file: "app/api/v1/api-keys/[id]/route.ts",
+  },
+  { method: "get", path: "/api/v1/views", auth: "none", file: "app/api/v1/views/route.ts" },
+  { method: "post", path: "/api/v1/views", auth: "api", file: "app/api/v1/views/route.ts" },
+  { method: "put", path: "/api/v1/views/{id}", auth: "api", file: "app/api/v1/views/[id]/route.ts" },
+  { method: "delete", path: "/api/v1/views/{id}", auth: "api", file: "app/api/v1/views/[id]/route.ts" },
+  { method: "get", path: "/api/v1/shares", auth: "none", file: "app/api/v1/shares/route.ts" },
+  {
+    method: "get",
+    path: "/api/v1/retention/preview",
+    auth: "none",
+    file: "app/api/v1/retention/preview/route.ts",
+  },
+  {
+    method: "post",
+    path: "/api/v1/retention/purge",
+    auth: "admin",
+    file: "app/api/v1/retention/purge/route.ts",
+  },
+  { method: "post", path: "/api/v1/labelsets", auth: "write", file: "app/api/v1/labelsets/route.ts" },
+  { method: "get", path: "/api/v1/labelsets/{id}", auth: "none", file: "app/api/v1/labelsets/[id]/route.ts" },
+  {
+    method: "put",
+    path: "/api/v1/labelsets/{id}",
+    auth: "write",
+    file: "app/api/v1/labelsets/[id]/route.ts",
+  },
+  {
+    method: "delete",
+    path: "/api/v1/labelsets/{id}",
+    auth: "write",
+    file: "app/api/v1/labelsets/[id]/route.ts",
+  },
+  {
+    method: "post",
+    path: "/api/v1/labelsets/{id}/provision",
+    auth: "write",
+    file: "app/api/v1/labelsets/[id]/provision/route.ts",
+  },
+  { method: "get", path: "/api/v1/agents", auth: "none", file: "app/api/v1/agents/route.ts" },
+  { method: "put", path: "/api/v1/agents/{key}", auth: "write", file: "app/api/v1/agents/[key]/route.ts" },
+  {
+    method: "delete",
+    path: "/api/v1/agents/{key}",
+    auth: "write",
+    file: "app/api/v1/agents/[key]/route.ts",
+  },
+  {
+    method: "post",
+    path: "/api/v1/agents/{key}/start",
+    auth: "write",
+    file: "app/api/v1/agents/[key]/start/route.ts",
+  },
+  { method: "delete", path: "/api/v1/jobs/{id}", auth: "write", file: "app/api/v1/jobs/[id]/route.ts" },
+  { method: "get", path: "/api/v1/admin/audit", auth: "admin", file: "app/api/v1/admin/audit/route.ts" },
   { method: "get", path: "/api/v1/taxonomy", auth: "none", file: "app/api/v1/taxonomy/route.ts" },
   { method: "get", path: "/api/v1/onboarding", auth: "none", file: "app/api/v1/onboarding/route.ts" },
   { method: "post", path: "/api/v1/samples", auth: "write", file: "app/api/v1/samples/route.ts" },

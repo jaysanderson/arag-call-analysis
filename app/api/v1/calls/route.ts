@@ -28,7 +28,11 @@ const ALLOWED_RECORDING_TYPES = [
   "video/quicktime",
 ];
 
-const MAX_RECORDING_BYTES = 100 * 1024 * 1024;
+/**
+ * The recording cap is a *setting*, not a constant: `CALLS_MAX_UPLOAD_BYTES` seeds it and Settings
+ * → Limits overrides it, so it is read from the runtime on every request rather than baked in.
+ */
+const recordingLimit = (rt: { env: { maxUploadBytes: number } }) => rt.env.maxUploadBytes;
 
 function field(form: FormData, name: string, max = 200): string | undefined {
   const v = form.get(name);
@@ -49,7 +53,7 @@ export const POST = route(
     method: "post",
     auth: "write",
     body: "multipart",
-    bodyLimit: MAX_RECORDING_BYTES,
+    bodyLimit: recordingLimit,
   },
   async (ctx) => {
     const form = ctx.form!;
@@ -77,8 +81,8 @@ export const POST = route(
           "Unsupported media type",
           `recording must be one of: ${ALLOWED_RECORDING_TYPES.join(", ")}`,
         );
-      if (file.size > MAX_RECORDING_BYTES)
-        throw new HttpError(413, "Payload too large", `recording exceeds ${MAX_RECORDING_BYTES} bytes`);
+      const max = recordingLimit(ctx.rt);
+      if (file.size > max) throw new HttpError(413, "Payload too large", `recording exceeds ${max} bytes`);
       recordingInput = {
         bytes: new Uint8Array(await file.arrayBuffer()),
         filename: file.name || "recording",
