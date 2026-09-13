@@ -24,7 +24,7 @@ though `.env` holds live credentials?**
 > fetches it **at runtime** so the list is provably what the deployment serves (D-CA-41); used by
 > `operationSchemas()` inside `route()` to validate every request; and used by the contract tests
 > (`lintSpec`, `checkResponse`, and the `API_ROUTES` parity checks in both directions). It
-> currently declares 60 operations across 13 tags.
+> currently declares 62 operations across 13 tags.
 
 ---
 
@@ -111,8 +111,15 @@ does that close?**
 > It is the **seed**. `seedTaxonomy()` (`services/taxonomy-store.ts`) copies `ALL_LABELSETS` and
 > `AGENTS` into `DATA_DIR/taxonomy.json` the first time anything reads it, writes a `seeded`
 > marker, and never runs again (D-CA-37). From then on the store is the authority, and the labeler
-> agents' `operations` are derived from it on every read. A source edit therefore changes nothing
-> on a deployment whose store already exists — there is no re-seed endpoint.
+> agents' `operations` are derived from it on every read. A source edit therefore changes nothing, by
+> itself, on a deployment whose store already exists.
+>
+> Crossing that seam is operator-initiated, never automatic, and there are two ways over it:
+> `POST /api/v1/admin/reseed` adds every shipped labelset the store does not hold and edits none
+> that it does (`reseedMissing()`), and `POST /api/v1/labelsets/{id}/reset` puts one shipped
+> labelset back to its shipped definition and re-provisions it (`restoreLabelset()`). Neither runs on
+> boot, because a re-seed on every boot would resurrect a labelset an operator deleted on purpose —
+> which is also why a re-seed called explicitly *does* bring such a labelset back: a person asked.
 
 ---
 
@@ -206,13 +213,25 @@ No answers supplied. These have real disagreement in them.
 What would you need to add to this product before you would let a customer edit descriptions on a
 deployment with 8,000 analysed calls?
 
-**S2.** Every clickable number on the dashboard is computed from `call_metrics` and every
-drill-through filters on labels. Propose the fix, then write the single property a test should
-assert to stop it recurring.
+**S2.** `lib/drilldown.ts` declares every dashboard figure together with the filter that reproduces
+it, and `test/integration/dashboard-drilldown.test.ts` asserts each figure equals the count its own
+link returns. Read both, then argue the other side: what does this design cost, what does it stop
+anyone from doing, and is a declaration the right mechanism or would you have preferred the two
+tiles that cannot be filtered (compliance, CSAT) to be linked some other way? Then find the half
+that is not done: the calls **table** still drops the metric filters, so the link is right and the
+list is not.
 
-**S3.** `GET /api/v1/shares/{token}` is public and unauthenticated, and `POST` on shares is `api`
-rather than `write` — the one deliberate exception to D-CA-13. Argue the exception is sound, then
-argue it is not, and say which argument you would put in front of a customer's security reviewer.
+**S3.** Share tokens are now stored as SHA-256 digests, and the argument that used to justify
+storing them in clear — a share grants no access the open read API does not — is *also* the argument
+for `POST` on shares being `api` rather than `write`, the one deliberate exception to D-CA-13. So:
+if that argument was not good enough to keep the tokens in clear, is it good enough to keep the
+carve-out? Argue both sides, then say which you would put in front of a customer's security
+reviewer, and whether your answer changes on a deployment that enforces `API_KEYS`.
 
-**S4.** Deleting a call writes no audit entry; purging one under a retention policy does. Is that a
-defect or a scoping decision? What would you change, and what would it cost?
+**S4.** `call.delete`, `call.bulk-delete`, `share.create` and `share.revoke` are audited; creating a
+saved view is deliberately not. Defend the exclusion, then attack it. (The defence in the code: a
+view is a named query over data the reader can already see and it destroys nothing, and the trail is
+capped at 5,000 rows. The attack worth taking seriously: a view is how a reader tells you what they
+were looking for, and on a PHI deployment that may be exactly the evidence you want.) Then work out
+what `call.bulk-delete`'s `callIds: done.slice(0, 50)` and `truncated` flag cost you when the
+selection was five hundred, and whether you would have made the same trade.

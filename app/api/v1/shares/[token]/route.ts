@@ -1,4 +1,5 @@
-import { preflight, route } from "@/lib/api";
+import { actorOf, preflight, route } from "@/lib/api";
+import { audit } from "@/services/config";
 import { resolveShare, revokeShare } from "@/services/shares";
 import { notFound } from "@/vendor/arag-platform/src/index.ts";
 
@@ -19,6 +20,7 @@ export const DELETE = route(
   { path: "/api/v1/shares/{token}", method: "delete", auth: "api" },
   async (ctx) => {
     const share = revokeShare(ctx.rt, ctx.params.token!);
+    audit(ctx.rt, "share.revoke", actorOf(ctx.auth), { id: share.id, callId: share.callId });
     ctx.log.info("shares.revoked", { callId: share.callId });
     return share;
   },

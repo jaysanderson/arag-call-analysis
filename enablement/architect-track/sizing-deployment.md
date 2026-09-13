@@ -125,7 +125,7 @@ It is no longer "job records". It is the **deployment's own state**, in seven JS
 | `apikeys` | `apikeys.json` | 500 | Every issued API key's digest and revocation state. Losing it does **not** leak keys (they are SHA-256 digests) but it does silently reopen the API, because `apiKeysEnforced()` reads this file |
 | `taxonomy` | `taxonomy.json` | 200 | Every labelset and agent customisation. Recreated from the shipped seed on next boot — so a partner's whole vocabulary silently reverts to health insurance |
 | `views` | `views.json` | 100 | Every shared saved view |
-| `shares` | `shares.json` | 2,000 | Every live share link — and these are **stored as plaintext tokens** |
+| `shares` | `shares.json` | 2,000 | Every live share link. The tokens are **SHA-256 digests**, as API keys are, so a leaked copy of this file is a register of what was shared and to when — not a set of working links. Losing it silently breaks every live link — `resolveShare()` looks the digest up and finds nothing, which is indistinguishable from revoked or expired — and takes the record of who was given what with it |
 | `audit` | `audit.json` | 5,000 | The audit trail |
 
 Still true: **no call content lives here.** Every transcript, recording and generated analysis is in
@@ -137,7 +137,16 @@ customer explicitly —
 1. **Losing `apikeys.json` reopens the API**, because enforcement is derived from the presence of
    rows, not from a config flag.
 2. **Losing `taxonomy.json` reverts the taxonomy to the shipped default** on the next boot, without
-   an error, because `seedTaxonomy()` will find no `seeded` marker and re-seed.
+   an error, because `seedTaxonomy()` will find no `seeded` marker and re-seed. That `seeded`
+   marker is load-bearing in both directions: it is also why a labelset an operator deliberately
+   deleted does not come back on every restart, and why a labelset added to
+   `lib/domain/taxonomy.ts` in a later release cannot reach an already-seeded deployment on its
+   own. `POST /api/v1/admin/reseed` ("Add missing shipped labelsets", operator-only) is the
+   explicit way across that seam: it adds every shipped labelset the store does not hold and edits
+   none that it does, reporting `added` and `skipped` by id. Note the consequence — it adds back a
+   shipped labelset the operator deleted on purpose, because "add the ones that are missing" is
+   exactly what it was asked to do. That is a considered button-press, not a boot-time surprise,
+   but say so to an operator who has pruned the vocabulary.
 3. **`settings.json` may hold a secret**, so it belongs in whatever the customer's policy says about
    credential-bearing files — backups, disk encryption, snapshot retention.
 

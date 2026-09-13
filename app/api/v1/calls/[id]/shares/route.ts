@@ -1,5 +1,6 @@
-import { jsonResponse, preflight, route } from "@/lib/api";
+import { actorOf, jsonResponse, preflight, route } from "@/lib/api";
 import { getCall } from "@/services/calls";
+import { audit } from "@/services/config";
 import { createShare, listShares } from "@/services/shares";
 
 export const runtime = "nodejs";
@@ -20,8 +21,14 @@ export const POST = route({ path: "/api/v1/calls/{id}/shares", method: "post", a
     ttlDays: body.ttlDays,
     note: body.note,
   });
-  // The token itself is never logged: it is the only secret in the link.
+  // The token itself is never logged or audited: it is the only secret in the link, and the
+  // digest is enough to tie the entry to the row the register shows.
   ctx.log.info("shares.created", { callId: call.id, expiresISO: share.expiresISO });
+  audit(ctx.rt, "share.create", actorOf(ctx.auth), {
+    id: share.id,
+    callId: call.id,
+    expiresISO: share.expiresISO,
+  });
   return jsonResponse(share, 201, { Location: share.url });
 });
 

@@ -63,6 +63,23 @@ export interface ListOptions {
   complaint?: boolean;
   fcr?: boolean;
   escalated?: boolean;
+  /**
+   * Filters on the generated `call_metrics` field — the same values the dashboard aggregates.
+   *
+   * They exist because the dashboard's numbers and its drill-throughs must be computed from the
+   * same thing. Every tile and chart is a tally over `call_metrics` (written by the `call-insights`
+   * ask agent), but the drill-throughs used to filter on ARAG *labels* (written by the labeler
+   * agent). The two agents read the same transcript and often disagree, so "Cross-sell accepted
+   * 0%" linked to ten calls and "Complaint rate 23%" linked to none. Filtering on the metric
+   * closes the loop: a figure and the list behind it are now the same predicate.
+   */
+  callReason?: string;
+  outcome?: string;
+  sentiment?: string;
+  lineOfBusiness?: string;
+  complaintCategory?: string;
+  crossSellOffered?: boolean;
+  crossSellAccepted?: boolean;
   lifecycle?: CallLifecycle;
 }
 
@@ -187,6 +204,23 @@ export function filterByAttributes(calls: CallSummary[], opts: ListOptions): Cal
     if (opts.complaint !== undefined && Boolean(c.metrics?.complaint) !== opts.complaint) return false;
     if (opts.fcr !== undefined && Boolean(c.metrics?.first_call_resolution) !== opts.fcr) return false;
     if (opts.escalated !== undefined && Boolean(c.metrics?.escalated) !== opts.escalated) return false;
+    if (
+      opts.crossSellOffered !== undefined &&
+      Boolean(c.metrics?.cross_sell_offered) !== opts.crossSellOffered
+    )
+      return false;
+    if (
+      opts.crossSellAccepted !== undefined &&
+      Boolean(c.metrics?.cross_sell_accepted) !== opts.crossSellAccepted
+    )
+      return false;
+    // Compared exactly: these are enum values `sanitizeMetrics` has already validated against the
+    // taxonomy, so a near-miss is a value the product would not have charted either.
+    if (opts.callReason && c.metrics?.call_reason !== opts.callReason) return false;
+    if (opts.outcome && c.metrics?.outcome !== opts.outcome) return false;
+    if (opts.sentiment && c.metrics?.sentiment !== opts.sentiment) return false;
+    if (opts.lineOfBusiness && c.metrics?.line_of_business !== opts.lineOfBusiness) return false;
+    if (opts.complaintCategory && c.metrics?.complaint_category !== opts.complaintCategory) return false;
     if (opts.lifecycle && (c.lifecycle ?? deriveLifecycle(c)) !== opts.lifecycle) return false;
     return true;
   });

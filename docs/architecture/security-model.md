@@ -14,7 +14,7 @@ and what the MVP honestly does not cover yet.
 | Job records | `DATA_DIR/jobs.json` | Operational metadata only — no recording bytes are ever written to `DATA_DIR` (D-CA-05 keeps the job input to `{callId, title, transcribed}`) |
 | Deployment settings | `DATA_DIR/settings.json` | Now the *authority* over the environment: branding, connection, limits and retention. It can hold a service-account token (`connection.apiKey`), which is why it is a secret-bearing file and why no read model ever returns that field |
 | API-key store | `DATA_DIR/apikeys.json` | SHA-256 digests only. A leaked store grants nothing — but it does disclose how many keys exist, their names and their last-used times |
-| Taxonomy, saved views, share links | `DATA_DIR/taxonomy.json`, `views.json`, `shares.json` | Configuration and application state. A share token is the only secret among them, and it grants read-only access to one call |
+| Taxonomy, saved views, share links | `DATA_DIR/taxonomy.json`, `views.json`, `shares.json` | Configuration and application state. A share token grants read-only access to one call, and is the only secret among them — so `shares.json` holds a SHA-256 digest of it, never the token. The token is returned exactly once, when the link is created, exactly as an API key is |
 | Audit trail | `DATA_DIR/audit.json` | Who changed what, and when. Capped at 5,000 records; secrets appear only as `true` |
 
 ## Trust boundaries

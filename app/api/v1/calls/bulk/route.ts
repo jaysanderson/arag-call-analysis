@@ -1,5 +1,6 @@
-import { preflight, route } from "@/lib/api";
+import { actorOf, preflight, route } from "@/lib/api";
 import { deleteCall } from "@/services/calls";
+import { audit } from "@/services/config";
 import { JOB_REANALYSE, jobView } from "@/services/jobs";
 import type { Job } from "@/vendor/arag-platform/src/index.ts";
 
@@ -25,12 +26,14 @@ export const POST = route({ path: "/api/v1/calls/bulk", method: "post", auth: "w
   const unique = [...new Set(ids)];
   const failed: Array<{ id: string; error: string }> = [];
   const jobs: Job[] = [];
+  const done: string[] = [];
   let succeeded = 0;
 
   for (const id of unique) {
     try {
       if (action === "delete") {
         await deleteCall(ctx.rt, id);
+        done.push(id);
       } else {
         jobs.push(ctx.rt.jobs.submit(JOB_REANALYSE, { callId: id }, { ref: id }));
       }
@@ -41,6 +44,18 @@ export const POST = route({ path: "/api/v1/calls/bulk", method: "post", auth: "w
   }
 
   ctx.log.info("calls.bulk", { action, requested: unique.length, succeeded, failed: failed.length });
+  // Only a bulk *delete* is audited, and it records the ids: a re-analysis is repeatable and
+  // destroys nothing, while fifty calls leaving the Knowledge Box at once is exactly the event a
+  // reviewer will come looking for. The ids are capped so one enormous selection cannot make the
+  // audit row unreadable — the count is always exact even when the list is truncated.
+  if (action === "delete" && done.length > 0) {
+    audit(ctx.rt, "call.bulk-delete", actorOf(ctx.auth), {
+      deleted: done.length,
+      failed: failed.length,
+      callIds: done.slice(0, 50),
+      truncated: done.length > 50,
+    });
+  }
   return {
     action,
     requested: unique.length,

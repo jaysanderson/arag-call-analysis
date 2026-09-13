@@ -32,8 +32,9 @@ drills through, a calls table with facets, sort, saved views, a column picker, b
 browse mode, a call workspace with a moments track, transcript, scorecard, cited ask and share
 links, an upload pipeline with live progress and history, an editable taxonomy and agent
 configuration, a settings area where every setting is editable and persisted, a real API-key store,
-retention preview and purge, an audit trail, job cancellation, and an in-product API explorer over
-**60 operations in 13 tags**. `DECISIONS.md` runs to D-CA-48.
+retention preview and purge, an audit trail over configuration *and* over the data events that
+destroy or publish, job cancellation, and an in-product API explorer over **62 operations in 13
+tags**. `DECISIONS.md` runs to D-CA-48.
 
 ---
 
@@ -90,11 +91,6 @@ browser → route() → getCall() [404 pre-check, cached]
                        → one extra {"item":{"type":"quality",...}} line appended
 ```
 
-Point out: the **server-rendered pages and the versioned API call the same service functions**
-(`services/calls.ts`, `services/dashboard.ts`, …) — there is exactly one code path that talks to
-ARAG (`DECISIONS.md` D-CA-01). A server component and `GET /api/v1/calls` can never drift in what
-they show, because they're the same function call.
-
 **Dashboard (`/`, `GET /api/v1/dashboard`):**
 ```
 browser → route() → dashboard(rt, window)  [services/dashboard.ts]
@@ -108,24 +104,46 @@ Point out: the **server-rendered pages and the versioned API call the same servi
 ARAG (`DECISIONS.md` D-CA-01). A server component and `GET /api/v1/calls` can never drift in what
 they show, because they are the same function call.
 
-**And then show where that guarantee stops.** The dashboard's numbers come from `aggregate()`,
-which reads each call's `call_metrics` — written by the `call-insights` **ask** agent. Every
-drill-through link on that page filters on **labels** — written by the `resource-labeler`
-**labeler** agent. Two independent data-augmentation agents answering the same question separately,
-with nothing reconciling them. On the sample corpus:
+**And then show where that guarantee used to stop, because it is the best five minutes in this
+segment.** The dashboard's numbers come from `aggregate()`, which reads each call's `call_metrics` —
+written by the `call-insights` **ask** agent. Every drill-through link on that page *used to* filter
+on **labels** — written by the `resource-labeler` **labeler** agent. Two independent
+data-augmentation agents answering the same question separately, with nothing reconciling them. On
+the sample corpus, as found by the enablement run:
 
-| Tile | Number shown | Calls the drill-through returns |
+| Tile | Number shown | Calls the drill-through returned |
 |---|---|---|
 | First-call resolution | 10 of 13 | 3 |
 | Complaint rate | 3 of 13 | 0 |
 | Cross-sell accepted | **0 of 13** | **10** |
 
-This is a live defect, not a teaching device (`enablement/developer-track/LAB.md`, *Known defects*).
-It is the right one to show an architect early, because it is the failure mode of every
-click-through dashboard and the lesson generalises: *one query behind the number and the list, or
-they will drift.* The product already has the pieces for the stat strip —
-`GET /api/v1/calls?complaint=true|fcr=true|escalated=true` filters on the metrics and agrees with
-the tiles exactly — so the fix is small and the missing **test** is the real deliverable.
+Note what makes it nasty: nothing errors, nothing looks broken, and the reader has no way to tell
+which of the two numbers is lying. A figure that contradicts the list behind it is worse than no
+link at all.
+
+**The fix, which is the part to whiteboard.** `GET /api/v1/calls` now accepts the metric filters
+(`call_reason`, `outcome`, `sentiment`, `line_of_business`, `complaint_category`,
+`cross_sell_offered`, `cross_sell_accepted`, alongside the `complaint`/`fcr`/`escalated` booleans it
+already had), and `lib/drilldown.ts` declares each figure *together with* the filter that reproduces
+it — `dashboardFigures()` returns `{ id, label, count, filters }` and `callsHref()` turns the filter
+into the URL the tile links to. `Dashboard.counts` carries the numerators behind the rates, because
+a percentage cannot be compared with the length of a list.
+`test/integration/dashboard-drilldown.test.ts` then walks the whole enumeration against the live
+API, asserting each figure equals the `total` its own link returns.
+
+Two details worth drawing out with an architect:
+
+- The **averages are excluded on purpose**. Compliance and CSAT are means, so there is no subset of
+  calls a mean could be checked against; those two tiles sort the list ascending ("show me the
+  worst") rather than pretending to a predicate they have not got.
+- The mechanism is **a declaration, not a convention**. A tile added without an entry in
+  `dashboardFigures()` is merely untested; a tile added with the wrong filter fails the test. That
+  is the difference between a fix and a fix that survives the next contributor.
+
+The lesson generalises past this product: *one predicate behind the number and the list, declared in
+one place, or they will drift.* When reviewing any click-through dashboard, ask which query produced
+the figure and which produces the list, and make the answer be the same object in the source — not
+two similarly named things maintained in parallel.
 
 **Whiteboard it:** draw the three box-and-arrow paths above from memory, then check them against
 `docs/architecture/architecture.md`'s Mermaid diagram and `docs/architecture/data-flow.md`.
@@ -158,8 +176,9 @@ Three layers, each with one job:
    have: `jobs`, `settings`, `apikeys`, `taxonomy`, `views`, `shares`, `audit`. This is the
    deployment's own state, distinct from the Knowledge Box, which still holds every transcript,
    recording and generated analysis. What is in `DATA_DIR` is what a customer loses if they lose
-   the volume — configuration, credentials, saved views, live share links and the audit trail; not
-   one byte of call content.
+   the volume — configuration, credentials, saved views, the share register and the audit trail; not
+   one byte of call content. **It still has no backup story in this repo**, which is the one thing
+   from this segment that belongs in writing on any go-live review.
 
 **Why this shape, not a queue/worker split:** call volume for a contact-centre analytics tool is
 naturally bursty but modest (thousands, not millions, of calls/month per tenant — see
@@ -260,9 +279,9 @@ it isn't:
 | **Transcription lag** | Tracked as an `ingest-call` job stage (`waitProcessed`, 10-minute timeout), pollable via `GET /api/v1/jobs/{id}` or its SSE stream | A caller who doesn't poll and instead immediately lists calls will see the resource but possibly `status: PENDING` and no metrics yet — correct, but worth setting UX expectations on. |
 | **Cache staleness** | Bounded by `CALLS_CACHE_TTL_MS` (60 s default); every write path invalidates outright rather than letting entries age out | With serve-stale (D-CA-40) a reader can be handed a value up to `ttlMs + graceMs` — ten TTLs — old. Multi-machine deployments cache per-machine, so that window applies on each independently. |
 | **An operator edits a label description** | The edit is validated, stored, provisioned and audited; nothing is reclassified until the labeler is re-run | There is **no way to test a wording change before it applies**, no evaluation set, and no diff of which calls changed label. On a corpus of thousands this is a one-way door taken blind. The strongest gap in the product for a taxonomy-owning customer. |
-| **An operator edits a shipped labelset and wants it back** | — | Nothing. Every settings section has `DELETE /api/v1/settings/{section}`; the taxonomy has no equivalent. `restoreLabelset()` exists in the service layer, unit-tested, unreachable from any route or button. |
-| **A share link is created for a sensitive call** | 256-bit token, 1–90 day expiry, revocable, revoked/expired/unknown all return an identical 404, revoked automatically when the call is purged | The token is stored **in plaintext** (it is the document id in `shares.json`), and creation/revocation is **not audited**. On a deployment that enforces API keys, a share link grants access nothing else grants — and the trail cannot say who published it. |
-| **A call is deleted** | The Knowledge Box resource, its recording and everything derived from it go; the cache is invalidated | **Not audited.** A retention purge is recorded; the `DELETE /api/v1/calls/{id}` that removes the same recording is not — and it is reachable with an API key, not just the operator token. |
+| **An operator edits a shipped labelset and wants it back** | `POST /api/v1/labelsets/{id}/reset` restores the shipped definition and re-provisions in the same request, with a row action in Agents & Taxonomy — the taxonomy equivalent of `DELETE /api/v1/settings/{section}`, which is what it was modelled on | Only *shipped* labelsets can be reset; a partner's own vocabulary has nothing to go back to and gets a `404`. And a reset re-provisions but does not re-label: calls already analysed keep their labels until the labeler is re-run. Say both before an operator presses it. |
+| **A share link is created for a sensitive call** | 256-bit token stored as a **SHA-256 digest** and returned exactly once; 1–90 day expiry; revocable; revoked/expired/unknown all return an identical 404; revoked automatically when the call is purged; `share.create` and `share.revoke` are audited by digest | `GET /api/v1/shares/{token}` is unauthenticated by necessity — the token *is* the credential — so on a deployment that enforces API keys a share link remains the one egress path with no deployment-level credential. That is the `auth: "api"` carve-out (D-CA-27), and it is **still open** for re-evaluation; the at-rest question is closed. |
+| **A call is deleted** | The Knowledge Box resource, its recording and everything derived from it go; the cache is invalidated; `call.delete` is audited with the title captured *before* the delete, so the row is still legible a month later, and `call.bulk-delete` records the ids (capped at fifty, `truncated: true` when the cap bites, count always exact) | It is reachable with an API key, not just the operator token — which is correct under D-CA-13 but worth stating, because the audit entry's actor is then the key, not a person. Map keys to owners in the customer's runbook or the trail names a credential rather than a colleague. |
 | **A generated field fails its enum/shape check** | `sanitizeMetrics()` drops (not renders) invalid values; `readJsonField()` tries multiple candidate fields and tolerates a code-fenced JSON body | A call whose generated JSON is entirely unparseable simply has no `analysis`/`metrics` — visible in the dashboard's `withMetrics` count, not silently wrong. |
 
 Close with: **what in this table would you put in a customer-facing SLA, and what would you put in
@@ -290,9 +309,11 @@ names a file, so every answer is checkable rather than remembered.
 **Close the workshop by picking the three limitations you would put on the first slide of a
 go-live review for this specific customer.** Different customers should get different threes, and
 if they do not, the group has not engaged with the deployment in front of them. For a
-contact-centre customer handling PHI the usual three are: the audit trail covers configuration but
-not data, share tokens are stored in plaintext, and a taxonomy edit is a one-way door with no
-preview.
+contact-centre customer handling PHI the usual three are: `DATA_DIR` has no backup story, a taxonomy
+edit cannot be rehearsed before it applies, and retention is a policy rather than a sweeper. Note
+what is *not* on that list any more — the audit gap and plaintext share tokens were the first two
+until the enablement run reported them and they were fixed, which is itself the point to make: this
+list is meant to be re-derived against the build in front of you, not recited.
 
 ---
 
@@ -300,8 +321,9 @@ preview.
 
 - [`configuration-cache-and-sharing.md`](configuration-cache-and-sharing.md) — §4, standalone.
 - [`sizing-deployment.md`](sizing-deployment.md), [`design-review-checklist.md`](design-review-checklist.md).
-- [`knowledge-check.md`](knowledge-check.md) — 15 questions with answers.
+- [`knowledge-check.md`](knowledge-check.md) — 18 questions with answers.
 - `enablement/developer-track/LAB.md` — the hands-on half day, if you want to verify any of this
-  yourself rather than take it on trust. Its *Known defects and gaps* section is the same list as
-  §7's right-hand column, with reproduction steps.
+  yourself rather than take it on trust. Its *Known defects and gaps* section records what the
+  enablement run found, which of the eight were fixed in response and what each fix was; §7's
+  right-hand column is the same material from the evaluator's side.
 - `DECISIONS.md` (48 entries), `docs/architecture/`, `docs/developer/extension-points.md`.

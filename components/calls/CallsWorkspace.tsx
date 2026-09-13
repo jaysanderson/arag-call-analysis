@@ -84,6 +84,33 @@ const PRIMARY_FACETS = ["call_reason", "call_outcome", "sentiment", "line_of_bus
 
 const DEBOUNCE_MS = 250;
 
+/**
+ * Filters on the generated `call_metrics` field, which is what every dashboard figure is computed
+ * from and therefore what every drill-through carries. Listed once so the chip row, `clearAll` and
+ * the saved-view allowlist cannot drift apart.
+ */
+const METRIC_TEXT_FILTERS = [
+  { param: "call_reason", label: "Reason" },
+  { param: "outcome", label: "Outcome" },
+  { param: "sentiment", label: "Sentiment" },
+  { param: "line_of_business", label: "Line of business" },
+  { param: "complaint_category", label: "Complaint" },
+] as const;
+
+/** Every metric parameter, in one place: the chip row, the request and the saved-view allowlist. */
+const METRIC_FLAG_FILTERS = [
+  { param: "complaint", on: "Complaint raised", off: "No complaint" },
+  { param: "fcr", on: "Resolved first time", off: "Not resolved first time" },
+  { param: "escalated", on: "Escalated", off: "Not escalated" },
+  { param: "cross_sell_offered", on: "Cross-sell offered", off: "No cross-sell offered" },
+  { param: "cross_sell_accepted", on: "Cross-sell accepted", off: "Cross-sell not accepted" },
+] as const;
+
+const METRIC_PARAMS: readonly string[] = [
+  ...METRIC_TEXT_FILTERS.map((f) => f.param),
+  ...METRIC_FLAG_FILTERS.map((f) => f.param),
+];
+
 export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -206,8 +233,26 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
       .catch(() => setLabelsets([]));
   }, []);
 
-  const query = useMemo(() => {
+  /**
+   * The metric filters, read straight from the URL.
+   *
+   * Serialised to a string so the request memo below can depend on a value rather than on a fresh
+   * object every render. They are read generically from `METRIC_PARAMS` rather than destructured
+   * one by one, because the failure this guards against is a *silent* one: a filter the table
+   * forgets to send produces the whole list under a chip that claims otherwise — the dashboard
+   * pointing at a correct URL and the table quietly ignoring half of it.
+   */
+  const metricQuery = useMemo(() => {
     const s = new URLSearchParams();
+    for (const param of METRIC_PARAMS) {
+      const value = params.get(param);
+      if (value) s.set(param, value);
+    }
+    return s.toString();
+  }, [params]);
+
+  const query = useMemo(() => {
+    const s = new URLSearchParams(metricQuery);
     if (q) s.set("q", q);
     for (const l of labels) s.append("label", l);
     if (agent) s.set("agent", agent);
@@ -221,7 +266,7 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
     s.set("page", String(page));
     s.set("page_size", String(pageSize));
     return s.toString();
-  }, [q, labels, agent, queue, mediaType, lifecycle, from, to, sortKey, order, page, pageSize]);
+  }, [q, labels, agent, queue, mediaType, lifecycle, from, to, sortKey, order, page, pageSize, metricQuery]);
 
   /**
    * The URL as a saved view would store it: the allowlisted parameters only, in a fixed order, so
@@ -336,6 +381,27 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
     selected.size > 0 ? [...selected].map((id) => `ids=${encodeURIComponent(id)}`).join("&") : query
   }`;
 
+  /**
+   * The dashboard's metric filters, as removable chips.
+   *
+   * A drill-through arrives as `?complaint=true` or `?call_reason=Claims`, and without a chip the
+   * reader would land on a filtered list with nothing saying what filtered it and no way back to
+   * the whole queue — the same complaint the label chips exist to answer. The wording names the
+   * generated metric rather than the label of a similar name, because that is the difference the
+   * dashboard now depends on.
+   */
+  const metricChips: Array<{ label: string; clear: () => void }> = [
+    ...METRIC_TEXT_FILTERS.flatMap(({ param, label }) => {
+      const value = params.get(param);
+      return value ? [{ label: `${label}: ${value}`, clear: () => setParams({ [param]: null }) }] : [];
+    }),
+    ...METRIC_FLAG_FILTERS.flatMap(({ param, on, off }) => {
+      const value = params.get(param);
+      if (value !== "true" && value !== "false") return [];
+      return [{ label: value === "true" ? on : off, clear: () => setParams({ [param]: null }) }];
+    }),
+  ];
+
   const activeFilters: Array<{ label: string; clear: () => void }> = [
     ...labels.map((l) => ({ label: l.split("/").slice(1).join("/") || l, clear: () => toggleLabel(l) })),
     ...(agent ? [{ label: `Agent: ${agent}`, clear: () => setParams({ agent: null }) }] : []),
@@ -353,6 +419,7 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
     // other: a drill-through from the dashboard usually needs loosening, not discarding.
     ...(from ? [{ label: `From ${formatBound(from)}`, clear: () => setParams({ from: null }) }] : []),
     ...(to ? [{ label: `To ${formatBound(to)}`, clear: () => setParams({ to: null }) }] : []),
+    ...metricChips,
     ...(q ? [{ label: `Search: ${q}`, clear: () => setSearch("") }] : []),
   ];
 

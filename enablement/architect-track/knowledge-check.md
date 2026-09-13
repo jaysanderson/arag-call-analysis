@@ -91,10 +91,14 @@ it?**
 >
 > What changed is the **importance**, not the size. It now holds the deployment's configuration
 > (possibly including the Knowledge Box credential, D-CA-45), every API-key digest, the taxonomy,
-> live share tokens **in plaintext**, and the audit trail. Two loss modes are silent and worth
-> naming: losing `apikeys.json` **reopens** the API, because enforcement is derived from row
-> presence rather than a flag; losing `taxonomy.json` reverts a partner's whole vocabulary to the
-> shipped health-insurance default on the next boot. This repo ships no backup story for it.
+> the share register and the audit trail. Share tokens used to sit in that list in plaintext and no
+> longer do — they are SHA-256 digests, like API keys (Q17) — which lowers what a *stolen* copy is
+> worth without changing what a *lost* one costs. Three loss modes are silent and worth naming:
+> losing `apikeys.json` **reopens** the API, because enforcement is derived from row presence rather
+> than a flag; losing `taxonomy.json` reverts a partner's whole vocabulary to the shipped
+> health-insurance default on the next boot; losing `shares.json` makes every live link `404`,
+> indistinguishable from revoked. **This repo still ships no backup story for it, and that remains
+> open** — it is the single follow-up to put in writing on any go-live review.
 
 ---
 
@@ -204,13 +208,18 @@ observable," and what would you check on each?**
 > - **Taxonomy & Agents** — all three agents `completed`/`configured`/`running`, none stuck or
 >   `absent`, and the labelsets reporting `provisioned: true`. This answers "did provisioning
 >   actually succeed", which nothing else does.
-> - **Audit** — the change history. And this is where to be honest rather than impressive: it
->   records **configuration** only. It will show who changed a limit or issued a key; it will not
->   show who deleted a call or published a share link.
+> - **Audit** — the change history, of **configuration and of the data events that destroy or
+>   publish**: settings, API keys, labelsets, agents, purges and job cancellations, plus
+>   `call.delete`, `call.bulk-delete`, `share.create` and `share.revoke`. It used to record
+>   configuration only, which meant it could show who changed a rate limit but not who deleted a
+>   recording — the wrong half for a compliance reviewer. The one deliberate exclusion left is the
+>   saved view: a view is a named query over data the reader can already see, and it destroys
+>   nothing, so auditing it would add volume to a capped trail (5,000 rows) without adding evidence.
+>   Say that as a choice, not as an oversight.
 >
 > Together: "is it up", "is it being used and is the cache earning its keep", "did provisioning
-> succeed", "who changed what". The fourth is the one a customer's compliance reviewer asks about,
-> and the one with a gap to disclose.
+> succeed", "who changed or removed what". The fourth is the one a customer's compliance reviewer
+> asks about; the thing to disclose there now is the 5,000-row cap, not the coverage.
 
 ---
 
@@ -245,17 +254,29 @@ one thing that would change your answer.**
 > `404`, so there is no oracle for "was this ever valid"; and a retention purge revokes every live
 > link for a purged call in the same pass, so no URL survives its recording (D-CA-38).
 >
-> **Two things to volunteer rather than wait to be asked.** The token is stored **in plaintext** —
-> it is the document id in `shares.json` — unlike API keys, which are SHA-256 digests. And creation
-> and revocation are **not audited**.
+> **Two more controls to volunteer rather than wait to be asked.** The token is stored as a
+> **SHA-256 digest**, exactly as an API key is: `ShareDoc.id` is the digest, `createShare()` returns
+> the token and its `/s/<token>` URL exactly once, and `resolveShare()` hashes before looking up.
+> The register can list, audit and revoke a link it cannot reconstruct. And creation and revocation
+> are **audited** — `share.create` and `share.revoke`, recorded by digest, never by token.
 >
-> **What would change the answer:** whether the deployment enforces API keys. The justification for
-> both the plaintext storage and the `auth: "api"` carve-out (D-CA-27, the one deliberate exception
-> to D-CA-13) is that a share grants no access the open read API already grants to anyone. That is a
-> statement about a *configuration*, not about the code — and it stops being true the moment keys
-> are enforced, at which point a share link becomes the one way data leaves this product with no
-> deployment credential at all, stored in the clear, with no record of who published it. On an open
-> demo: a documented trade-off. On a key-enforced PHI deployment: a finding.
+> **Both of those used to be the other way round, and the reasoning is the part worth carrying into
+> other reviews.** The old justification for plaintext storage was the same as the justification for
+> the `auth: "api"` carve-out (D-CA-27, the one deliberate exception to D-CA-13): a share grants no
+> access the open read API already grants to anyone, so the token is worth less than an API key. The
+> flaw is not that the argument was wrong — it is that it is a statement about a *configuration*
+> rather than about the code. On a deployment that enforces `API_KEYS` the read API is not open, and
+> the share token becomes the one way data leaves the product with no deployment credential at all.
+> A security property that holds only in some configurations is not one a store should depend on, so
+> the store stopped depending on it. The visible price is that the UI can no longer offer "Copy" for
+> an existing link: a lost link is revoked and reissued, which is the bargain already accepted for
+> API keys.
+>
+> **What still changes the answer:** whether the deployment enforces API keys — but now only for the
+> `auth: "api"` carve-out, not for storage. `GET /api/v1/shares/{token}` is unauthenticated by
+> necessity (the token *is* the credential), so on a key-enforced deployment a share link remains
+> the one egress path with no deployment-level credential. Re-evaluate the carve-out there; the
+> at-rest question is closed.
 
 ---
 
@@ -263,19 +284,33 @@ one thing that would change your answer.**
 `lib/domain/taxonomy.ts`, and redeploys to a cluster that has run for six months. What do their
 users see?**
 
-> **The old health-insurance taxonomy, unchanged.** `seedTaxonomy()` copied the shipped definitions
-> into `DATA_DIR/taxonomy.json` on that cluster's first boot and wrote a `seeded` marker; it returns
-> at that guard on every later read, and there is no re-seed operation (D-CA-37). Calls keep being
-> classified as *Claims* and *Prior Authorization*. In sample mode it is worse than nothing: the
-> mock Knowledge Box **is** re-seeded from source at boot, so labelsets appear
-> `provisioned: true, defined: false` — present upstream, unknown to the product, excluded from the
-> labeler's derived operations.
+> **The old health-insurance taxonomy, unchanged — until an operator asks for the new one.**
+> `seedTaxonomy()` copied the shipped definitions into `DATA_DIR/taxonomy.json` on that cluster's
+> first boot and wrote a `seeded` marker; it returns at that guard on every later read (D-CA-37), so
+> a redeploy on its own changes nothing and calls keep being classified as *Claims* and *Prior
+> Authorization*. In sample mode it is worse than nothing: the mock Knowledge Box **is** re-seeded
+> from source at boot, so labelsets appear `provisioned: true, defined: false` — present upstream,
+> unknown to the product, excluded from the labeler's derived operations.
 >
-> The seed-once behaviour is correct — it is what stops a redeploy silently reverting a partner's
-> own customisations. The gap is that there is no supported migration path beside it: no re-seed,
-> and no way to restore a shipped labelset (`restoreLabelset()` exists in the service layer,
-> unit-tested, reachable from no route and no button), while every settings section has
-> `DELETE /api/v1/settings/{section}`. The partner's options are a deliberate migration through
-> `POST`/`DELETE /api/v1/labelsets`, or resetting the store and losing every operator
-> customisation with it. That belongs in their release notes, and the missing reset belongs in
-> yours to the product owner.
+> The seed-once behaviour is correct, and that is the point to hold on to: it is what stops a
+> redeploy silently reverting a partner's own customisations. What was missing was a supported way
+> *across* that seam, and there are now two, both deliberately operator-initiated rather than
+> automatic:
+>
+> - **`POST /api/v1/admin/reseed`** — "Add missing shipped labelsets". Adds every shipped labelset
+>   the store does not hold, edits none that it does, and returns `added` and `skipped` by id. A
+>   customised definition survives it. Note the boundary honestly: a shipped labelset the operator
+>   *deleted* is added back, because adding the missing ones is exactly what was asked for
+>   (`test/integration/settings-api.test.ts`, "re-seeds a deleted shipped labelset without touching
+>   an edited one"). The protection against resurrection is that this never runs by itself.
+> - **`POST /api/v1/labelsets/{id}/reset`** — one labelset back to its shipped definition,
+>   re-provisioned in the same request, with a row action in Agents & Taxonomy. The taxonomy
+>   equivalent of `DELETE /api/v1/settings/{section}`, which is what it was modelled on. Only
+>   shipped labelsets can be reset; a partner's own vocabulary has nothing to go back to and gets a
+>   `404`.
+>
+> So the answer to the partner is: redeploy, then re-seed, then reconcile by hand what neither
+> covers — a *changed* shipped definition is neither missing nor reset-worthy, so a rewrite of an
+> existing labelset still goes through `PUT /api/v1/labelsets/{id}`. That belongs in their release
+> notes. And neither operation re-labels: calls already analysed keep the labels they have until the
+> labeler is re-run.

@@ -71,8 +71,11 @@ function labelsetDocs(rt: Runtime): LabelsetDoc[] {
 }
 
 /**
- * Seed the store from the shipped taxonomy the first time anything reads it. Idempotent, and never
- * re-adds a labelset the operator has deleted (a delete writes a tombstone; see `deleteLabelset`).
+ * Seed the store from the shipped taxonomy the first time anything reads it.
+ *
+ * Idempotent, and — importantly — it never runs again: the `seeded` marker, not any per-labelset
+ * tombstone, is what stops a restart resurrecting a labelset the operator deleted. `reseedMissing`
+ * is the deliberate way to cross that line.
  */
 export function seedTaxonomy(rt: Runtime): void {
   const c = collection(rt);
@@ -189,6 +192,35 @@ export function deleteLabelsetDef(rt: Runtime, id: string): void {
   seedTaxonomy(rt);
   if (!collection(rt).get(`${LABELSET_DOC_PREFIX}${id}`)) throw notFound("Labelset");
   collection(rt).delete(`${LABELSET_DOC_PREFIX}${id}`);
+}
+
+/**
+ * Add shipped labelsets the store does not hold, leaving everything it does hold alone.
+ *
+ * `seedTaxonomy` runs exactly once per deployment, which is what stops *every boot* resurrecting a
+ * labelset an operator deleted — but it also means a labelset added to `lib/domain/taxonomy.ts` in
+ * a later release can never reach a deployment that has already been seeded. This is the explicit,
+ * operator-initiated other half.
+ *
+ * It only ever *adds*, so a customised definition survives it untouched. A deliberately deleted one
+ * does **not**: it is missing, so it comes back. That is the honest reading of a button called "add
+ * the shipped labelsets this deployment does not hold", and it is why this is an action someone
+ * takes rather than something that happens on restart. The result names every id it brought in, so
+ * an operator who did not want one can delete it again knowing exactly what arrived.
+ */
+export function reseedMissing(rt: Runtime): { added: string[]; skipped: string[] } {
+  seedTaxonomy(rt);
+  const c = collection(rt);
+  const added: string[] = [];
+  const skipped: string[] = [];
+  for (const def of ALL_LABELSETS) {
+    if (c.get(`${LABELSET_DOC_PREFIX}${def.id}`)) skipped.push(def.id);
+    else {
+      c.put({ id: `${LABELSET_DOC_PREFIX}${def.id}`, def, shipped: true });
+      added.push(def.id);
+    }
+  }
+  return { added, skipped };
 }
 
 /** Restore the shipped definition of one labelset (or re-create it after a delete). */

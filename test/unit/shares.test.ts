@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Runtime } from "@/lib/runtime";
 import {
   createShare,
+  hashShareToken,
   listShares,
   MAX_SHARE_TTL_DAYS,
+  migrateShares,
   newShareToken,
   resolveShare,
   revokeShare,
@@ -24,7 +26,12 @@ beforeEach(() => {
   // In-memory only: the platform Store flushes on a deferred timer, so a disk-backed store in a
   // unit test writes after the temp directory has already been removed and throws out of band.
   dir = mkdtempSync(join(tmpdir(), "ca-shares-"));
-  rt = { store: new Store(dir, { persist: false }) } as unknown as Runtime;
+  rt = {
+    store: new Store(dir, { persist: false }),
+    // `migrateShares` runs on every read and logs when it re-keys a row, so the fixture needs a
+    // logger as well as a store.
+    log: { info() {}, warn() {}, error() {}, debug() {} },
+  } as unknown as Runtime;
 });
 
 afterEach(() => {
@@ -93,13 +100,14 @@ describe("resolveShare", () => {
     revokeShare(rt, revokedLink.token);
     expect(resolveShare(rt, revokedLink.token)).toBeNull();
 
+    const expiredToken = "expired-token";
     const expired = rt.store.collection<ShareDoc>(SHARES_COLLECTION).put({
-      id: "expired-token",
+      id: hashShareToken(expiredToken),
       callId: "c1",
       callTitle: "A",
       expiresISO: new Date(Date.now() - 1000).toISOString(),
     });
-    expect(resolveShare(rt, expired.id)).toBeNull();
+    expect(resolveShare(rt, expiredToken)).toBeNull();
     // …but the owner's own list still shows it, flagged.
     expect(toShareView(expired).expired).toBe(true);
   });
@@ -124,5 +132,54 @@ describe("revokeShare", () => {
     expect(revokeShare(rt, share.token).revoked).toBe(true);
     expect(revokeShare(rt, share.token).revoked).toBe(true);
     expect(() => revokeShare(rt, "unknown")).toThrow(/not found/i);
+  });
+});
+
+describe("tokens are stored as digests", () => {
+  it("never writes the token to the store, and returns it exactly once", () => {
+    const created = createShare(rt, { callId: "c1", callTitle: "A call" });
+    expect(created.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(created.url).toBe(`/s/${created.token}`);
+    expect(created.id).toBe(hashShareToken(created.token));
+
+    const stored = JSON.stringify(rt.store.collection(SHARES_COLLECTION).list());
+    expect(stored).not.toContain(created.token);
+    // The register carries the digest and no way back to the link.
+    const listed = listShares(rt, "c1")[0];
+    expect(JSON.stringify(listed)).not.toContain(created.token);
+    expect(listed?.id).toBe(created.id);
+  });
+
+  it("refuses to resolve the digest, which the register does publish", () => {
+    // Otherwise the management view would be a page of working links.
+    const created = createShare(rt, { callId: "c1", callTitle: "A call" });
+    expect(resolveShare(rt, created.token)).not.toBeNull();
+    expect(resolveShare(rt, created.id)).toBeNull();
+  });
+
+  it("revokes by the stored id or by the token", () => {
+    const a = createShare(rt, { callId: "c1", callTitle: "A" });
+    expect(revokeShare(rt, a.id).revoked).toBe(true);
+    const b = createShare(rt, { callId: "c1", callTitle: "B" });
+    expect(revokeShare(rt, b.token).revoked).toBe(true);
+  });
+
+  it("re-keys rows written before hashing, so existing links keep working", () => {
+    // The migration is what lets this ship without invalidating every link a customer already has.
+    const legacyToken = "legacy-plaintext-token";
+    rt.store.collection<ShareDoc>(SHARES_COLLECTION).put({
+      id: legacyToken,
+      callId: "c9",
+      callTitle: "An older call",
+      expiresISO: new Date(Date.now() + 86_400_000).toISOString(),
+    });
+
+    expect(migrateShares(rt)).toBe(1);
+    const stored = JSON.stringify(rt.store.collection(SHARES_COLLECTION).list());
+    expect(stored).not.toContain(legacyToken);
+    // The link in someone's inbox still opens.
+    expect(resolveShare(rt, legacyToken)?.callId).toBe("c9");
+    // Idempotent: a second pass finds nothing to do.
+    expect(migrateShares(rt)).toBe(0);
   });
 });

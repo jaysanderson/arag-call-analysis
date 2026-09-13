@@ -83,13 +83,41 @@ test.describe("the workspace", () => {
     // The per-agent breakdown is the "who is driving this" answer.
     await expect(page.getByRole("group", { name: "Break down by" })).toBeVisible();
 
-    // Every stat tile is a drill-through into the filtered table, not a dead number.
+    // The tile states its numerator as well as its rate — "3 of 13 analysed" — which is what makes
+    // the number checkable against the list it opens.
+    const sub = await strip.locator("a", { hasText: "Complaint rate" }).locator(".sub").innerText();
+    const complaints = Number(sub.match(/^(\d+)/)?.[1] ?? "-1");
+    expect(complaints).toBeGreaterThanOrEqual(0);
+
+    // Every stat tile drills into the predicate its own number was computed from — the metric the
+    // `call-insights` agent wrote, not the labeler's label of a similar name. The two disagree,
+    // and the dashboard used to show one and link to the other.
     await strip.getByText("Complaint rate").click();
-    await expect(page).toHaveURL(/\/calls\?label=disposition_flags/);
+    await expect(page).toHaveURL(/\/calls\?complaint=true/);
     // The click is a soft navigation, so wait for the transition to commit before asserting on the
     // destination — otherwise the locator can match the dashboard's outgoing tree as well.
     await settled(page);
-    await expect(onScreen(page, "filter-chips")).toBeVisible();
+
+    // The whole point of the drill-through: the list is *narrowed*, says what narrowed it, and can
+    // be undone. A URL the table then ignored would leave the reader looking at the entire queue
+    // under a chip claiming a filter — the same lie as before, moved one screen along. The count is
+    // compared against the tile's own sub-line rather than a number written down here, so this
+    // holds whatever the sample corpus happens to contain.
+    await expect(onScreen(page, "filter-chips")).toContainText("Complaint raised");
+    const rows = await onScreen(page, "calls-table").locator("tbody tr").count();
+    expect(rows).toBe(complaints);
+
+    if (complaints === 0) {
+      await expect(page.getByTestId("empty-state")).toBeVisible();
+    } else {
+      await page.goto("/calls");
+      await settled(page);
+      // The table fetches its rows after mount, so the unfiltered count has to be waited for
+      // rather than sampled — otherwise this compares three rows against an empty tbody.
+      const all = onScreen(page, "calls-table").locator("tbody tr");
+      await expect.poll(() => all.count()).toBeGreaterThan(0);
+      expect(rows).toBeLessThanOrEqual(await all.count());
+    }
   });
 
   test("the calls list is a data table with search, facets, sorting and pagination", async ({ page }) => {

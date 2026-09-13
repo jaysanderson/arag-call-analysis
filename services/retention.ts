@@ -149,7 +149,7 @@ export async function runPurge(
     result.deleted.push(c.id);
     for (const share of listShares(rt, c.id)) {
       if (share.revoked) continue;
-      revokeShare(rt, share.token);
+      revokeShare(rt, share.id);
       result.sharesRevoked++;
     }
   }

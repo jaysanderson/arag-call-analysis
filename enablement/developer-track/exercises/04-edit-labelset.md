@@ -27,6 +27,9 @@ Keep these separate in your head; the exercise fails confusingly if you conflate
 Provisioning creates the vocabulary. It does **not** retroactively reclassify anything. Only step 3
 does that.
 
+The same three-way split applies to the undo: `POST /api/v1/labelsets/{id}/reset` covers steps 1 and
+2 in one request and does **not** cover step 3. You will use it in *Put it back*.
+
 ## Task
 
 Rewrite the `Escalated` label in the `call_outcome` labelset so the labeler starts recognising the
@@ -133,19 +136,26 @@ pick **Escalated**. Then open <http://localhost:3000/taxonomy> — the `call_out
 
 ## Put it back
 
-There is no "restore the shipped definition" endpoint (see *What you should have noticed*, below),
-so the reset is another `PUT` with the original description:
+The undo is one request — you do not have to know what the original said:
 
 ```bash
-curl -s -X PUT "$B/api/v1/labelsets/call_outcome" \
-  -H "Authorization: Bearer $T" -H 'Content-Type: application/json' -d '{
-    "id":"call_outcome","title":"Outcome","color":"#16a34a","multiple":false,"kind":"RESOURCES",
-    "labels":[
-      {"label":"Resolved","description":"Member'\''s issue was fully resolved on this call."},
-      {"label":"Follow-up Required","description":"Resolution pending a callback, document, or future action."},
-      {"label":"Escalated","description":"Routed to a supervisor, specialist team, or grievance process."},
-      {"label":"Transferred","description":"Handed to another department without resolution."},
-      {"label":"Unresolved","description":"Call ended without resolving the member'\''s issue."}]}' > /dev/null
+curl -s -X POST "$B/api/v1/labelsets/call_outcome/reset" \
+  -H "Authorization: Bearer $T" | python3 -m json.tool
+```
+
+`200`, and the same `LabelsetWriteResult` shape as the `PUT`: the shipped definition is back in the
+store **and** re-provisioned to the Knowledge Box in the one request. Check the description came
+back:
+
+```bash
+curl -s "$B/api/v1/labelsets/call_outcome" \
+  | python3 -c 'import json,sys;[print(l["description"]) for l in json.load(sys.stdin)["labels"] if l["label"]=="Escalated"]'
+```
+
+Then steps 3 and 5 of the table, which the reset deliberately does **not** do for you — nothing is
+reclassified until the labeler runs again:
+
+```bash
 curl -s -X POST "$B/api/v1/agents/resource-labeler/start" -H "Authorization: Bearer $T" > /dev/null
 sleep 3
 curl -s -X POST "$B/api/v1/admin/cache/invalidate" -H "Authorization: Bearer $T" \
@@ -154,6 +164,10 @@ curl -s -X POST "$B/api/v1/admin/cache/invalidate" -H "Authorization: Bearer $T"
 
 The facet counts should return to `Resolved 10` / `Follow-up Required 3`.
 
+In the product the same thing is the **Reset to the shipped definition** row action in Agents &
+Taxonomy (`components/taxonomy/TaxonomyView.tsx`), behind a confirmation that says what it will and
+will not touch.
+
 ## Acceptance criteria
 
 - `PUT /api/v1/labelsets/call_outcome` returns `200` with `"provisioned": true`.
@@ -161,7 +175,7 @@ The facet counts should return to `Resolved 10` / `Follow-up Required 3`.
   contains `Escalated` with a non-zero count, and both calls with "escalated" in the title are in
   `GET /api/v1/calls?label=call_outcome%2FEscalated`.
 - `GET /api/v1/admin/audit` contains a `labelset.update` entry and an `agent.start` entry, both
-  with `actor: "operator"`.
+  with `actor: "operator"` — and a `labelset.reset` entry once you have put it back.
 - You can state, without looking, which of the three steps creates the vocabulary and which one
   applies it.
 
@@ -181,14 +195,32 @@ The facet counts should return to `Resolved 10` / `Follow-up Required 3`.
 
 ## What you should have noticed
 
-Two things worth carrying out of this exercise:
+Three things worth carrying out of this exercise:
 
-- **Every other configurable section has a reset; this one does not.** `DELETE
-  /api/v1/settings/{section}` restores the environment defaults for branding, connection, limits
-  and retention. A labelset has no equivalent — `restoreLabelset()` exists in
-  `services/taxonomy-store.ts` and is unit-tested, but no route and no button reach it. Once a
-  shipped labelset is edited, the way back is retyping it or deleting `DATA_DIR/taxonomy.json`
-  (which discards *every* customisation). Raised as a finding, not a trap.
+- **The reset exists because every other configurable section had one.** `DELETE
+  /api/v1/settings/{section}` restores the environment defaults for branding, connection, limits and
+  retention; a labelset had no equivalent when this lab was first run, and the way back from an edit
+  was retyping the original from memory or deleting `DATA_DIR/taxonomy.json` and discarding *every*
+  customisation with it. `restoreLabelset()` already existed in `services/taxonomy-store.ts` and was
+  unit-tested — the gap was a route and a button, which is a good reminder that "the logic is
+  there" and "the operator can reach it" are different claims. `POST /api/v1/labelsets/{id}/reset`
+  and the Agents & Taxonomy row action closed it.
+
+  Read the route (`app/api/v1/labelsets/[id]/reset/route.ts`) and notice two decisions. It is
+  `auth: "write"`, not `"admin"`, because editing the vocabulary is the product's job rather than an
+  administrator's privilege (**D-CA-42**) — the same mode as the `PUT` it undoes. And it re-provisions
+  in the same request, with the same split-failure handling as the `PUT`: if the Knowledge Box write
+  fails you get `provisioned: false` and a `provisionError`, and the store still moved. An undo that
+  can half-fail must say so.
+
+- **Only shipped labelsets can be reset.** A labelset you created with `POST /api/v1/labelsets` has
+  nothing to go back to, so `POST /api/v1/labelsets/{id}/reset` returns `404` for it. Try it — the
+  distinction between "this deployment's vocabulary" and "the product's vocabulary" is the same seam
+  Exercise 2 is about, seen from the undo side.
+
 - **The description is a prompt.** If that makes you want a way to test a wording change before it
-  touches 8,000 analysed calls, you have found the right question to ask about this product — see
+  touches 8,000 analysed calls, you have found the right question to ask about this product — **and
+  it is still open.** A reset makes an edit reversible; it does nothing to make one rehearsable.
+  There is no evaluation set and no diff of which calls changed label, so an operator still finds
+  out what an edit did by re-running the labeler and looking. See
   `enablement/architect-track/WORKSHOP.md` §4.

@@ -14,9 +14,13 @@ import { fmtDateTime } from "@/lib/format";
  * a delete names what is being removed before it happens.
  */
 
+/**
+ * A link as the register knows it. There is no `url` and no `token`: the token is stored as a
+ * digest, so a link's address exists exactly once — in the response to creating it, which is the
+ * moment it is copied to the clipboard. Listing it afterwards would mean keeping the credential.
+ */
 interface ShareLink {
-  token: string;
-  url: string;
+  id: string;
   expiresISO: string;
   revoked: boolean;
   expired: boolean;
@@ -228,8 +232,8 @@ function ShareDialog({
     }
   };
 
-  const revoke = async (token: string) => {
-    await fetch(`/api/v1/shares/${token}`, { method: "DELETE" }).catch(() => {});
+  const revoke = async (id: string) => {
+    await fetch(`/api/v1/shares/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
     load();
   };
 
@@ -282,10 +286,14 @@ function ShareDialog({
           {live.length > 0 && (
             <div style={{ marginTop: 18 }}>
               <div className="arag-label">Active links</div>
+              <p className="small" style={{ margin: "4px 0 0", color: "var(--arag-text-subtle)" }}>
+                The address is copied when the link is created and is not kept afterwards — the token is
+                stored as a digest, like a password. Revoke one and create another if it has been lost.
+              </p>
               <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "grid", gap: 8 }}>
                 {live.map((l) => (
                   <li
-                    key={l.token}
+                    key={l.id}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -297,21 +305,12 @@ function ShareDialog({
                     }}
                   >
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <code className="mono" style={{ fontSize: 11 }}>
-                        {l.url.slice(0, 18)}…
-                      </code>
+                      <div>Created {fmtDateTime(l.createdISO)}</div>
                       <div style={{ color: "var(--arag-text-subtle)" }}>
                         Expires {fmtDateTime(l.expiresISO)}
                       </div>
                     </span>
-                    <button
-                      type="button"
-                      className="arag-btn ghost sm"
-                      onClick={() => onCopy(`${window.location.origin}${l.url}`, "Share link copied")}
-                    >
-                      Copy
-                    </button>
-                    <button type="button" className="arag-btn ghost sm" onClick={() => revoke(l.token)}>
+                    <button type="button" className="arag-btn ghost sm" onClick={() => revoke(l.id)}>
                       Revoke
                     </button>
                   </li>

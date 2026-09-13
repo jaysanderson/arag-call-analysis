@@ -12,6 +12,8 @@ product's checklist.
 | Every operation documents its error responses | Same file, `"documents error responses on every operation"` | Every operation's `responses` includes `400` at minimum (via `...problemResponses`) |
 | Responses actually match their schema | `checkResponse` cases in the same file | Add a case for any new endpoint before calling it done (see `enablement/developer-track/exercises/01-add-endpoint.md` for the pattern) |
 | Errors are RFC 9457, never raw exceptions | `lib/api.ts`, `toHttpError()` | `application/problem+json`, no ARAG URL/token/KB id ever in a response body |
+| Every route exports the shared CORS preflight handler | D-CA-14; `grep -L "export const OPTIONS" app/api/v1/**/route.ts` | **Open gap.** The convention is real and every shipped route follows it, but nothing asserts it: the contract tests deliberately ignore `OPTIONS` (it is a CORS mechanism, not an API operation) and only one integration case (`test/integration/api.test.ts`, "answers preflight and echoes an allowlisted origin") exercises one route. A route added without it fails cross-origin at runtime and passes `make check`. Check it by hand on any route a partner contributes |
+| A dashboard figure and its drill-through are the same predicate | `lib/drilldown.ts`, `test/integration/dashboard-drilldown.test.ts` | Every number the dashboard renders as a link is declared in `dashboardFigures()` with the filter that reproduces it, and the test asserts figure `count` equals the `total` its own link returns. A tile added without an entry there is untested; with the wrong filter it fails |
 
 ## Auth and authorisation
 
@@ -44,14 +46,14 @@ product's checklist.
 | Fly secrets are set out of band | `fly.toml` header comment | `fly secrets set ...`, never inlined in `fly.toml` or the Dockerfile |
 | `DATA_DIR/settings.json` is treated as a credential-bearing file | `services/config.ts` `restrictSettingsFile()`, D-CA-45 | If an operator ever rotates the Knowledge Box key **through the product**, the value is written to this file. It is `chmod 0600` on every write, but it is a recorded exception to "secrets only from env" — confirm it is covered by the customer's policy for backups, snapshots and disk encryption, or that they will only rotate via `ARAG_API_KEY` |
 | API-key material is never recoverable | `services/apikeys.ts` `hashKey()`, `POST /api/v1/api-keys` | Only SHA-256 digests are stored; the plaintext is returned exactly once at creation. Confirm the customer's key-distribution process does not assume it can be re-read |
-| Share tokens are **not** hashed at rest | `services/shares.ts` — the raw token is the document id in `shares.json` | Deliberate (the justification is that a share grants no more than the open read API). **Raise this as a finding, not a trade-off, on any deployment that enforces API keys**, where it grants access nothing else does |
+| Share tokens are hashed at rest, like API keys | `services/shares.ts` — `hashShareToken()`, `ShareDoc.id` is a SHA-256 hex digest; `ShareCreated` in `lib/openapi.ts` | Only the digest is stored; the token and its `/s/<token>` URL are returned exactly once, by `POST /api/v1/calls/{id}/shares`. Confirm with a live deployment: `GET /api/v1/calls/{id}/shares` returns `id`, never `token` or `url`. This was a finding at the first review — the token used to *be* the document id, so a leaked `shares.json` was a set of working links. `migrateShares()` re-keys pre-existing rows on first read, so a deployment upgraded in place keeps its live links working and loses the plaintext from disk |
 | The Dockerfile build never requires live credentials | `Dockerfile` | `ENV ARAG_MOCK=1` during `next build` — confirm no build step reaches out to a real KB |
 
 ## Data residency
 
 | Check | Verify against | Pass criteria |
 |---|---|---|
-| All call content lives in the KB, not on the app's volume | `.env.example`, `services/jobs.ts`, `sizing-deployment.md` §"What `DATA_DIR` actually holds" | Still true — no transcript or recording byte is written to `DATA_DIR`. But it now holds seven collections including settings (possibly a credential), API-key digests, the taxonomy, saved views, live **plaintext** share tokens and the audit trail. Confirm it has a backup story; this repo ships none |
+| All call content lives in the KB, not on the app's volume | `.env.example`, `services/jobs.ts`, `sizing-deployment.md` §"What `DATA_DIR` actually holds" | Still true — no transcript or recording byte is written to `DATA_DIR`. But it now holds seven collections including settings (possibly a credential), API-key digests, the taxonomy, saved views, the share register (digests, no live tokens) and the audit trail. **Confirm it has a backup story; this repo still ships none** |
 | `DATA_DIR` loss has been thought through | same | Losing `apikeys.json` silently **reopens** the API (enforcement is derived from row presence); losing `taxonomy.json` silently reverts a partner's vocabulary to the shipped default on next boot. Neither raises an error |
 | App region and KB region are co-located | `fly.toml` (`primary_region = "iad"`, comment ties it to `aws-us-east-2-1`) | Matches the customer's actual KB region, not this repo's default |
 | No cross-region call for every request | Same | If the customer's KB is in a different region than assumed, flag added latency and revisit `primary_region` |
@@ -75,7 +77,7 @@ product's checklist.
 | Admin panel surfaces health, config, usage, logs, agents, cache | `app/admin/*` pages, corresponding `/api/v1/admin/*` routes | All present per the product's Definition of Done; verify each renders with real data against the deployment |
 | Usage counters are wired to a real dashboard/alerting pipeline in production | `services/admin.ts` `usage()` | This product exposes counters via `/api/v1/admin/usage`; it does not itself ship metrics export — confirm the customer has (or doesn't need) a scrape/export step |
 | Errors ≥ 500 are logged server-side with enough detail to debug | `lib/api.ts` `route()` catch block | `rt.log.error("http.error", { requestId, path, message })` — confirm log retention/shipping meets the customer's support SLA |
-| The audit trail covers what the customer thinks it covers | every `audit(` call site: `app/api/v1/{settings,api-keys,labelsets,agents,retention,jobs}`, `services/config.ts` | It records **configuration**: settings, logo, API keys, labelsets, agents, retention purges, job cancellations. It records **no data events at all** — deleting a call, bulk-deleting calls, creating or revoking a share link and creating a saved view write nothing, and the first three are reachable with an API key. For a PHI deployment, raise this first |
+| The audit trail covers what the customer thinks it covers | every `audit(` call site: `app/api/v1/{settings,api-keys,labelsets,agents,retention,jobs,calls,shares}`, `services/config.ts` | It records **configuration** — settings, logo, API keys, labelsets (including `labelset.reset` and `taxonomy.reseed`), agents, retention purges, job cancellations — **and the data events that destroy or publish**: `call.delete` (with the title captured before the delete, so the row is legible a month later), `call.bulk-delete` (with the ids, capped at fifty and `truncated: true` when the cap bites; the count is always exact), `share.create` and `share.revoke` (by digest — the token is never audited). Creating a **saved view** is deliberately not audited: a view is a named query over data the reader can already see, and it destroys nothing. Confirm the customer agrees with that one exclusion rather than assuming it |
 | The audit trail is sized as evidence, not an archive | `services/config.ts` `auditCollection()` (`cap: 5000`) | Oldest rows are dropped past 5,000. Confirm the customer's retention requirement for audit evidence is shorter than the volume of configuration change that fills it, or plan an export |
 
 ## Failure handling
@@ -104,12 +106,14 @@ State these to the customer up front — they are documented trade-offs, not hid
 
 1. **Multi-machine is blocked, not merely caveated.** Cache, rate limiting *and the entire
    `DATA_DIR` store* are per-machine. Since the store grew to seven collections, a second machine
-   means settings, API keys, the taxonomy, saved views, share links and the audit trail all diverge
-   — and none of it errors, it just behaves intermittently. The shipped single-machine `fly.toml`
-   has none of these problems. See `sizing-deployment.md` §"What changes for multi-machine".
+   means settings, API keys, the taxonomy, saved views, the share register and the audit trail all
+   diverge — and none of it errors, it just behaves intermittently. The shipped single-machine
+   `fly.toml` has none of these problems. See `sizing-deployment.md` §"What changes for
+   multi-machine".
 2. **`DATA_DIR` has no backup story**, and it now holds configuration, API-key digests, the
-   taxonomy, live share tokens, the audit trail and — if the operator rotated it in-product — the
-   Knowledge Box credential.
+   taxonomy, the share register, the audit trail and — if the operator rotated it in-product — the
+   Knowledge Box credential. Hashing the share tokens (see below) reduced what a *stolen* copy is
+   worth; it did nothing about a *lost* one. **Still open.**
 3. **`TtlCache`'s 2,000-entry cap is a constructor default**, not an environment variable. Past a
    catalogue of that size the hit rate collapses rather than degrading, because each render evicts
    entries the same render needs. A code change before go-live for any tenant over ~1,500 calls.
@@ -117,43 +121,81 @@ State these to the customer up front — they are documented trade-offs, not hid
    `ttlMs + graceMs` old — ten minutes at the default.
 5. **No offline or degraded read mode during an ARAG outage.** The product is fully dependent on KB
    availability for every read.
-6. **The audit trail covers configuration, not data.** Deleting a call, bulk-deleting calls and
-   creating or revoking a share link are unaudited, and are reachable with an API key.
-7. **Share tokens are stored in plaintext** (the token is the document id in `shares.json`).
-   Acceptable on a deployment whose read API is open; a real finding on one that enforces API keys.
-8. **API-key enforcement is sticky and the way back is non-obvious.** Revoking the last key does
+6. **API-key enforcement is sticky and the way back is non-obvious.** Revoking the last key does
    not reopen the API; only purging the rows does (D-CA-46). Deliberate, and it must be in the
    runbook.
-9. **A taxonomy edit is a one-way door taken blind.** A label's `description` is the instruction
-   the labeler reads, so editing it changes classification — but there is no way to test a wording
-   change before it applies, no evaluation set, no diff of which calls changed, and **no way to
-   restore a shipped labelset** (`restoreLabelset()` exists in the service layer and is
-   unit-tested, but no route or button reaches it). Every settings section has a reset; the
-   taxonomy does not.
-10. **A source-taxonomy change cannot reach an existing deployment.** `seedTaxonomy()` runs once;
-    there is no re-seed operation, so a partner who rewrites `lib/domain/taxonomy.ts` and redeploys
-    changes nothing for existing users.
-11. **Retention is a policy, not a sweeper.** Nothing is deleted until something calls
-    `POST /api/v1/retention/purge`. If the customer needs automatic deletion, they own the
-    scheduler.
-12. **Dashboard drill-throughs disagree with the numbers they come from.** Every tile and chart is
-    computed from `call_metrics` (the ask agent) while every drill-through filters on labels (the
-    labeler agent), with nothing reconciling them. On the sample corpus *Cross-sell accepted* reads
-    0% and links to ten calls. Reproducible in one command; see
-    `enablement/developer-track/exercises/07-dashboard-drill-through.md` Task 9. **This is a live
-    defect, not a trade-off** — list it as such.
-13. **Job cancellation is cooperative and does not roll back.** A cancelled ingestion leaves
+7. **A taxonomy edit still cannot be rehearsed.** A label's `description` is the instruction the
+   labeler reads, so editing it changes classification — and there is no way to test a wording
+   change before it applies, no evaluation set, and no diff of which calls changed. The *reversal*
+   half of this is now solved (`POST /api/v1/labelsets/{id}/reset`, below); the **rehearsal** half
+   is not. An operator still finds out what an edit did by re-running the labeler and looking.
+8. **Retention is a policy, not a sweeper.** Nothing is deleted until something calls
+   `POST /api/v1/retention/purge`. If the customer needs automatic deletion, they own the
+   scheduler.
+9. **The `OPTIONS = preflight` convention is enforced by review only.** D-CA-14 requires every
+   `/api/v1` route module to export it; the contract tests deliberately ignore `OPTIONS`, so
+   nothing fails when a new route omits it. Cross-origin callers are the ones who find out. **Still
+   open** — relevant only to a deployment that sets `ALLOWED_ORIGINS`, which makes it easy to miss
+   until the one customer who needs it arrives.
+10. **Job cancellation is cooperative and does not roll back.** A cancelled ingestion leaves
     whatever Knowledge Box resource it had already created.
-14. **Seeding/demo tooling (`scripts/gen-media.ts`) is macOS-only** for audio rendering —
+11. **Seeding/demo tooling (`scripts/gen-media.ts`) is macOS-only** for audio rendering —
     irrelevant to a production deployment, but worth knowing if the customer wants to regenerate
     demo assets on Linux CI.
 
+### Fixed since this checklist was first run
+
+These were live defects when the enablement tracks were executed against the build, and the
+reasoning is kept because it is what a reviewer should be looking for on *any* deployment of this
+shape. Each now names the mechanism to verify instead of the symptom to report.
+
+12. ~~**The audit trail covers configuration, not data.**~~ **Fixed.** `call.delete`,
+    `call.bulk-delete`, `share.create` and `share.revoke` now write entries, so the trail can
+    answer "who deleted this recording" and "who published this transcript to an unauthenticated
+    URL" — the two questions a PHI customer asks first, and both reachable with an API key.
+    Saved views stay unaudited on purpose: a view is a named query over data the reader can already
+    see, and it destroys nothing. Verify on the deployment, not from this page: delete a call and
+    read `GET /api/v1/admin/audit`.
+13. ~~**Share tokens are stored in plaintext.**~~ **Fixed** — they are SHA-256 digests, like API
+    keys. The old justification was that a share grants no more access than the open read API, so
+    the plaintext was worth less than an API key's. That argument is a statement about a
+    *configuration*: on a deployment enforcing `API_KEYS` the read API is not open, and the share
+    token is then the one credential granting access nothing else grants. A property that holds
+    only in some configurations is not a property worth relying on, so the store stopped relying on
+    it. The visible cost is that an existing link cannot be re-copied from the UI — the product
+    genuinely cannot reconstruct it — which is the same bargain the customer already accepted for
+    API keys. `migrateShares()` re-keys pre-existing rows on first read, so an in-place upgrade
+    keeps live links working.
+14. ~~**No way to restore a shipped labelset.**~~ **Fixed.**
+    `POST /api/v1/labelsets/{id}/reset`, plus a row action in Agents & Taxonomy, matching the
+    `DELETE /api/v1/settings/{section}` pattern. Only labelsets the product ships can be reset —
+    a partner's own vocabulary has nothing to go back to, and gets a `404`. Confirm the customer
+    understands that a reset re-provisions but does not re-label: calls already analysed keep their
+    labels until the labeler is re-run.
+15. ~~**A source-taxonomy change cannot reach an existing deployment.**~~ **Fixed.**
+    `POST /api/v1/admin/reseed` ("Add missing shipped labelsets") adds shipped labelsets the store
+    does not hold and touches nothing it does — so a partner's edit survives it, and so does a
+    deliberate deletion. `seedTaxonomy()` still runs exactly once, which is what stops a re-seed on
+    every boot resurrecting what an operator removed on purpose. The response reports `added` and
+    `skipped` by id, so the operator can see what it did rather than trusting it.
+16. ~~**Dashboard drill-throughs disagree with the numbers they come from.**~~ **Fixed.** Tiles and
+    charts were tallies over `call_metrics` (the `call-insights` **ask** agent) while the links
+    filtered on labels (the `resource-labeler` **labeler** agent) — two agents reading the same
+    transcript with nothing reconciling them, so *Cross-sell accepted* read 0 % above a link to ten
+    calls. `GET /api/v1/calls` now accepts the metric filters, `lib/drilldown.ts` declares each
+    figure together with the filter that reproduces it, and
+    `test/integration/dashboard-drilldown.test.ts` asserts every figure equals the count its own
+    link returns. The general lesson for a review of any analytics screen: **ask which predicate
+    produced the number and which produces the list, and make the reviewer show you that they are
+    the same object in the source**, not merely similarly named.
+
 ## How to use this list
 
-Items 1–5 are sizing and operations; 6–8 are security posture; 9–11 are product-behaviour
-expectations that will otherwise be discovered at the worst moment; 12–13 are defects.
+Items 1–5 are sizing and operations; 6 and 9 are security and contract posture; 7, 8, 10 and 11 are
+product-behaviour expectations that will otherwise be discovered at the worst moment. Items 12–16
+are closed, and are there so a review can verify a mechanism rather than re-discover a symptom.
 
-**Do not present all fourteen.** Pick the three that matter for this customer and put them on the
-first slide of the go-live review. For a contact-centre customer handling PHI those are usually 6,
-7 and 9. For a partner white-labelling the product they are usually 9, 10 and 2. If two different
-customers get the same three, the review has not engaged with either deployment.
+**Do not present all eleven open items.** Pick the three that matter for this customer and put them
+on the first slide of the go-live review. For a contact-centre customer handling PHI those are
+usually 2, 7 and 8. For a partner white-labelling the product they are usually 2, 7 and 9. If two
+different customers get the same three, the review has not engaged with either deployment.

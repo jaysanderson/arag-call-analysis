@@ -73,6 +73,7 @@ export function TaxonomyScreen({
   const [inspect, setInspect] = useState<LabelsetDetail | null>(null);
   const [deletion, setDeletion] = useState<Deletion | null>(null);
   const [confirmProvision, setConfirmProvision] = useState(false);
+  const [resetting, setResetting] = useState<LabelsetDetail | null>(null);
   const [busy, setBusy] = useState(false);
   /** A labelset that was saved but never reached the Knowledge Box, with the reason it did not. */
   const [unprovisioned, setUnprovisioned] = useState<{ id: string; detail: string } | null>(null);
@@ -116,6 +117,53 @@ export function TaxonomyScreen({
       await api(`/api/v1/labelsets/${encodeURIComponent(id)}/provision`, { method: "POST" });
       setUnprovisioned((u) => (u?.id === id ? null : u));
       show(`${id} is now in the Knowledge Box.`);
+      await refresh(true);
+    } catch (e) {
+      show((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Put a shipped labelset back to the definition the product ships.
+   *
+   * The same affordance as "Reset to environment default" on Settings, and for the same reason: an
+   * edit nobody can undo is an edit nobody makes. Only offered for a labelset the product ships —
+   * a partner's own vocabulary has nothing to go back to.
+   */
+  const resetOne = async (ls: LabelsetDetail) => {
+    setBusy(true);
+    try {
+      await api(`/api/v1/labelsets/${encodeURIComponent(ls.id)}/reset`, { method: "POST" });
+      show(`${ls.title} is back to the definition the product ships.`);
+      await refresh(true);
+    } catch (e) {
+      show((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+      setResetting(null);
+    }
+  };
+
+  /**
+   * Add shipped labelsets this deployment does not hold.
+   *
+   * Seeding runs once per deployment, so a labelset added to the product in a later release can
+   * never arrive on its own — and seeding every boot would resurrect whatever an operator had
+   * deleted. This adds only what is missing and says exactly what it added.
+   */
+  const reseed = async () => {
+    setBusy(true);
+    try {
+      const result = await api<{ added: string[]; skipped: string[] }>("/api/v1/admin/reseed", {
+        method: "POST",
+      });
+      show(
+        result.added.length
+          ? `Added ${result.added.length} labelset${result.added.length === 1 ? "" : "s"}: ${result.added.join(", ")}.`
+          : "Nothing missing — every labelset the product ships is already here.",
+      );
       await refresh(true);
     } catch (e) {
       show((e as Error).message, "error");
@@ -270,6 +318,18 @@ export function TaxonomyScreen({
             <IconPlus size={14} /> New labelset
           </button>
         )}
+        {tab === "labelsets" && editable && (
+          <button
+            type="button"
+            className="arag-btn secondary sm"
+            data-testid="reseed-taxonomy"
+            onClick={reseed}
+            disabled={busy}
+            title="Add labelsets the product ships that this deployment does not hold. Never overwrites an edit or undoes a deletion."
+          >
+            <IconPlus size={14} /> Add missing shipped labelsets
+          </button>
+        )}
         {editable && (
           <button
             type="button"
@@ -303,6 +363,7 @@ export function TaxonomyScreen({
             onEdit={(id) => setEditor({ mode: "edit", id })}
             onInspect={setInspect}
             onProvision={provisionOne}
+            onReset={setResetting}
             onDelete={(ls) => setDeletion({ labelset: ls, alsoKnowledgeBox: false })}
           />
         )
@@ -392,6 +453,23 @@ export function TaxonomyScreen({
         />
       )}
 
+      {resetting && (
+        <ConfirmDialog
+          title={`Reset ${resetting.title} to the shipped definition?`}
+          confirmLabel="Reset the labelset"
+          busy={busy}
+          onCancel={() => setResetting(null)}
+          onConfirm={() => resetOne(resetting)}
+          body={
+            <p>
+              Every change made to this labelset in the product is discarded and the definition the product
+              ships is written back, then re-provisioned to the Knowledge Box. Labels already applied to
+              analysed calls are not touched — but a label this reset removes from the vocabulary will stop
+              being applied to new ones.
+            </p>
+          }
+        />
+      )}
       {confirmProvision && (
         <ConfirmDialog
           title="Re-provision the taxonomy?"
@@ -516,6 +594,7 @@ function LabelsetTable({
   onEdit,
   onInspect,
   onProvision,
+  onReset,
   onDelete,
 }: {
   labelsets: LabelsetDetail[];
@@ -524,6 +603,7 @@ function LabelsetTable({
   onEdit: (id: string) => void;
   onInspect: (ls: LabelsetDetail) => void;
   onProvision: (id: string) => void;
+  onReset: (ls: LabelsetDetail) => void;
   onDelete: (ls: LabelsetDetail) => void;
 }) {
   return (
@@ -631,6 +711,20 @@ function LabelsetTable({
                                 >
                                   View labels and usage
                                 </button>
+                                {ls.shipped && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    data-testid={`reset-${ls.id}`}
+                                    disabled={busy}
+                                    onClick={() => {
+                                      close();
+                                      onReset(ls);
+                                    }}
+                                  >
+                                    Reset to the shipped definition
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   role="menuitem"

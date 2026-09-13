@@ -34,6 +34,13 @@ Parameters:
 | `complaint` | query | boolean |  | Only calls with/without a complaint. |
 | `fcr` | query | boolean |  | Only calls resolved first time (or not). |
 | `escalated` | query | boolean |  |  |
+| `cross_sell_offered` | query | boolean |  | Only calls where an additional product was offered (or not). |
+| `cross_sell_accepted` | query | boolean |  | Only calls where an offer was accepted (or not). |
+| `call_reason` | query | string |  | Exact `call_metrics.call_reason`. This filters on the *generated metric*, not on the labeler's label of the same name — which is what makes a dashboard figure and its drill-through the same predicate. |
+| `outcome` | query | string |  | Exact `call_metrics.outcome`. |
+| `sentiment` | query | string |  | Exact `call_metrics.sentiment`. |
+| `line_of_business` | query | string |  | Exact `call_metrics.line_of_business`. |
+| `complaint_category` | query | string |  | Exact `call_metrics.complaint_category`. |
 | `lifecycle` | query | string |  | Only calls in this pipeline state. |
 | `sort` | query | string |  | Table column to sort by. |
 | `order` | query | string |  |  |
@@ -105,6 +112,13 @@ Parameters:
 | `complaint` | query | boolean |  | Only calls with/without a complaint. |
 | `fcr` | query | boolean |  | Only calls resolved first time (or not). |
 | `escalated` | query | boolean |  |  |
+| `cross_sell_offered` | query | boolean |  | Only calls where an additional product was offered (or not). |
+| `cross_sell_accepted` | query | boolean |  | Only calls where an offer was accepted (or not). |
+| `call_reason` | query | string |  | Exact `call_metrics.call_reason`. This filters on the *generated metric*, not on the labeler's label of the same name — which is what makes a dashboard figure and its drill-through the same predicate. |
+| `outcome` | query | string |  | Exact `call_metrics.outcome`. |
+| `sentiment` | query | string |  | Exact `call_metrics.sentiment`. |
+| `line_of_business` | query | string |  | Exact `call_metrics.line_of_business`. |
+| `complaint_category` | query | string |  | Exact `call_metrics.complaint_category`. |
 | `lifecycle` | query | string |  | Only calls in this pipeline state. |
 | `sort` | query | string |  | Table column to sort by. |
 | `order` | query | string |  |  |
@@ -317,6 +331,8 @@ Auth: ApiKey
 
 **Create a revocable, expiring link to one call** — Share links are application state, not a Knowledge Box mutation, and they grant no access the read API does not already give — so they need only the same credentials a read does. Revoking one is the control that matters, and it is available to every caller who can create one.
 
+Returns the token and its URL **once**: the store keeps only a SHA-256 digest, exactly as it does for an API key, so a lost link is revoked and reissued rather than looked up.
+
 Parameters:
 
 | Name | In | Type | Required | Description |
@@ -328,7 +344,7 @@ Request body (`application/json`): [ShareCreateRequest](#sharecreaterequest)
 
 Responses:
 
-- `201` The link — `application/json` [ShareLink](#sharelink)
+- `201` The link, with its token — `application/json` [ShareCreated](#sharecreated)
 - `400` Validation failed — `application/problem+json` [Problem](#problem)
 - `401` Authentication required — `application/problem+json` [Problem](#problem)
 - `403` Forbidden — `application/problem+json` [Problem](#problem)
@@ -341,7 +357,7 @@ Auth: ApiKey
 
 ### `GET /api/v1/shares/{token}`
 
-**Resolve a share token to the call it points at** — 404 for an unknown, revoked or expired token — the three are indistinguishable to the caller by design.
+**Resolve a share token to the call it points at** — 404 for an unknown, revoked or expired token — the three are indistinguishable to the caller by design. Only a plaintext token resolves: the digest the register lists is deliberately not a working credential.
 
 Parameters:
 
@@ -969,6 +985,29 @@ Responses:
 Auth: ApiKey or AdminToken
 
 
+### `POST /api/v1/labelsets/{id}/reset`
+
+**Restore a labelset to the definition the product ships** — The taxonomy equivalent of `DELETE /api/v1/settings/{section}`: an edit is reversible without the operator having to know what the original was, which is the difference between a configuration surface people will experiment with and one they will not touch. Re-provisions in the same request. Only shipped labelsets can be reset — a partner's own vocabulary has nothing to be reset to, and returns 404.
+
+Parameters:
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `id` | path | string | yes |  |
+
+Responses:
+
+- `200` The restored labelset — `application/json` [LabelsetWriteResult](#labelsetwriteresult)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: ApiKey or AdminToken
+
+
 ### `GET /api/v1/agents`
 
 **The data-augmentation agents, their configuration and their live state** — The labeler agents' operations are derived from the current labelsets rather than stored separately, which is what keeps a labelset edit and the agent that applies it from drifting apart.
@@ -1297,6 +1336,23 @@ Request body (`application/json`): [ProvisionRequest](#provisionrequest)
 Responses:
 
 - `202` Provisioning job accepted — `application/json` [Job](#job)
+- `400` Validation failed — `application/problem+json` [Problem](#problem)
+- `401` Authentication required — `application/problem+json` [Problem](#problem)
+- `403` Forbidden — `application/problem+json` [Problem](#problem)
+- `404` Not found — `application/problem+json` [Problem](#problem)
+- `429` Rate limited — `application/problem+json` [Problem](#problem)
+- `502` Upstream (ARAG) error — `application/problem+json` [Problem](#problem)
+
+Auth: AdminToken
+
+
+### `POST /api/v1/admin/reseed`
+
+**Add shipped labelsets this deployment does not hold** — The taxonomy store seeds itself once, so a labelset added to the product in a later release cannot reach a deployment that has already been seeded — and seeding on every boot would resurrect anything an operator deliberately deleted. This is the deliberate way to cross that line: it only ever *adds*, so an edited definition survives untouched, but a labelset that was deleted is by definition missing and does come back. The response names every id it added and every id it left alone, so an operator can undo exactly what arrived.
+
+Responses:
+
+- `200` What the re-seed did — `application/json` object
 - `400` Validation failed — `application/problem+json` [Problem](#problem)
 - `401` Authentication required — `application/problem+json` [Problem](#problem)
 - `403` Forbidden — `application/problem+json` [Problem](#problem)
@@ -1646,17 +1702,22 @@ Per-agent or per-queue roll-up. Rates are computed over the calls in the group t
 
 ### ShareLink
 
+A share link as the register knows it. It carries no token and no URL: the token is stored as a SHA-256 digest, exactly as an API key is, so a leaked `shares.json` grants nothing. The address exists once, in the response to creating the link.
+
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `token` | string | yes | Opaque 256-bit token; the only secret in the link. |
+| `id` | string | yes | The stored digest. Safe to list, and what a revoke is addressed to — not a credential. |
 | `callId` | string | yes |  |
 | `callTitle` | string |  |  |
-| `url` | string | yes | Path to the read-only call view, e.g. `/s/<token>`. |
 | `createdISO` | string | yes |  |
 | `expiresISO` | string | yes |  |
 | `revoked` | boolean | yes |  |
 | `expired` | boolean | yes |  |
 | `note` | string |  |  |
+
+### ShareCreated
+
+_object_
 
 ### ShareCreateRequest
 
@@ -1873,8 +1934,8 @@ A labelset as the product defines it: the vocabulary the labeler agent is told t
 | `days` | integer | yes |  |
 | `enabled` | boolean | yes |  |
 | `cutoffISO` | string | yes |  |
-| `total` | integer | yes |  |
-| `retained` | integer | yes |  |
+| `total` | integer | yes | How many calls the policy covers — the number a purge would remove. |
+| `retained` | integer | yes | How many calls the policy keeps. |
 | `candidates` | array of object | yes |  |
 
 ### PurgeRequest

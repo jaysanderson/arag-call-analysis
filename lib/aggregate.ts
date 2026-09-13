@@ -27,6 +27,21 @@ export interface Rollup {
 export interface Dashboard {
   total: number;
   withMetrics: number;
+  /**
+   * The raw counts behind the rates above them.
+   *
+   * A rate cannot be compared with the length of a filtered list, so the drill-through contract
+   * test — which asserts every figure equals the count its own link returns — needs the numerator
+   * as well as the ratio. Keeping both here means the screen and the test read the same value
+   * rather than one of them recovering it by multiplying and rounding.
+   */
+  counts: {
+    fcr: number;
+    complaint: number;
+    escalated: number;
+    crossSellOffered: number;
+    crossSellAccepted: number;
+  };
   fcrRate: number;
   complaintRate: number;
   crossSellOfferRate: number;
@@ -102,9 +117,18 @@ export function aggregate(calls: CallSummary[], recentLimit = 8): Dashboard {
   };
   const byCreated = [...calls].sort((a, b) => (b.createdISO ?? "").localeCompare(a.createdISO ?? ""));
 
+  const counts = {
+    fcr: count((m) => m.first_call_resolution),
+    complaint: count((m) => m.complaint),
+    escalated: count((m) => m.escalated),
+    crossSellOffered: count((m) => m.cross_sell_offered),
+    crossSellAccepted: count((m) => m.cross_sell_accepted),
+  };
+
   return {
     total: calls.length,
     withMetrics: metrics.length,
+    counts,
     fcrRate: count((m) => m.first_call_resolution) / n,
     complaintRate: count((m) => m.complaint) / n,
     crossSellOfferRate: count((m) => m.cross_sell_offered) / n,

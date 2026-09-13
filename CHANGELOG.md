@@ -5,6 +5,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed — defects found by the enablement run (13 September 2026)
+
+- **Dashboard drill-throughs agreed with nothing.** Every tile and chart is a tally over
+  `call_metrics` (the `call-insights` ask agent) while every drill-through filtered on labels (the
+  labeler agent), so "Cross-sell accepted 0 %" linked to ten calls and "Complaint rate 23 %" to
+  none. `GET /api/v1/calls` gains metric filters, `lib/drilldown.ts` defines each figure with the
+  filter that reproduces it, and a contract test asserts every figure equals the count its own link
+  returns. The metric filters render as removable chips and can be saved in a view.
+- **Share tokens are stored as a SHA-256 digest**, not in clear, and returned exactly once at
+  creation — as API keys already were. Existing rows are re-keyed on first read, so links already
+  in circulation keep working.
+- **`POST /api/v1/labelsets/{id}/reset`** restores a shipped labelset, matching the settings-reset
+  pattern; `restoreLabelset()` had existed with no route and no button.
+- **`POST /api/v1/admin/reseed`** adds shipped labelsets a deployment does not hold, so a labelset
+  added in a later release can reach an existing install without resurrecting a deliberate
+  deletion.
+- **The audit trail covers data**: `call.delete`, `call.bulk-delete`, `share.create`,
+  `share.revoke`.
+- `PurgePreview.total` and `retained` say what they count; an unused import is gone.
+
 ### Added — full-implementation pass (13 September 2026)
 
 - **Every setting is editable in the product.** `PUT /api/v1/settings/{section}` and

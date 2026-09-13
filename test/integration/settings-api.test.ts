@@ -415,6 +415,126 @@ describe("taxonomy writes", () => {
   });
 });
 
+describe("a taxonomy edit is reversible, and a release's additions can reach a deployment", () => {
+  const id = "call_reason";
+
+  it("resets a shipped labelset to the definition the product ships", async () => {
+    const original = await api.get<{ labels: unknown[] }>(`/api/v1/labelsets/${id}`);
+    const originalCount = original.json.labels.length;
+    expect(originalCount).toBeGreaterThan(1);
+
+    const edit = await api.put(
+      `/api/v1/labelsets/${id}`,
+      { id, title: "Butchered", labels: [{ label: "Only", description: "All that is left." }] },
+      { admin: true },
+    );
+    expect(edit.status, edit.text).toBe(200);
+    expect((await api.get<{ labels: unknown[] }>(`/api/v1/labelsets/${id}`)).json.labels).toHaveLength(1);
+
+    const reset = await api.post<{ labelset: { title: string; labels: unknown[] }; provisioned: boolean }>(
+      `/api/v1/labelsets/${id}/reset`,
+      {},
+      { admin: true },
+    );
+    expect(reset.status).toBe(200);
+    expect(reset.json.labelset.labels).toHaveLength(originalCount);
+    expect(reset.json.provisioned).toBe(true);
+    // Read back through a different endpoint: the reset is only real if the store moved.
+    expect((await api.get<{ labels: unknown[] }>(`/api/v1/labelsets/${id}`)).json.labels).toHaveLength(
+      originalCount,
+    );
+  });
+
+  it("404s a reset of something the product does not ship", async () => {
+    await api.post(
+      "/api/v1/labelsets",
+      { id: "partner_only", title: "Partner only", labels: [{ label: "A", description: "a" }] },
+      { admin: true },
+    );
+    // There is nothing to reset a partner's own vocabulary *to*.
+    expect((await api.post("/api/v1/labelsets/partner_only/reset", {}, { admin: true })).status).toBe(404);
+    await api.del("/api/v1/labelsets/partner_only", { admin: true });
+  });
+
+  it("re-seeds a deleted shipped labelset without touching an edited one", async () => {
+    // The gap this closes: seeding runs once, so a labelset added in a later release could never
+    // arrive — while seeding every boot would resurrect a deliberate deletion.
+    const edit = await api.put(
+      "/api/v1/labelsets/sentiment",
+      {
+        id: "sentiment",
+        title: "Sentiment",
+        labels: [{ label: "Positive", description: "Edited, and must survive a re-seed." }],
+      },
+      { admin: true },
+    );
+    expect(edit.status, edit.text).toBe(200);
+    expect((await api.del("/api/v1/labelsets/call_outcome", { admin: true })).status).toBe(204);
+
+    const res = await api.post<{ added: string[]; skipped: string[] }>(
+      "/api/v1/admin/reseed",
+      {},
+      { admin: true },
+    );
+    expect(res.status).toBe(200);
+    expect(res.json.added).toContain("call_outcome");
+    expect(res.json.skipped).toContain("sentiment");
+    // The edit survived; the deletion was undone, because that is what was asked for.
+    expect((await api.get<{ labels: unknown[] }>("/api/v1/labelsets/sentiment")).json.labels).toHaveLength(1);
+    expect((await api.get("/api/v1/labelsets/call_outcome")).status).toBe(200);
+
+    // Idempotent: a second run adds nothing.
+    const again = await api.post<{ added: string[] }>("/api/v1/admin/reseed", {}, { admin: true });
+    expect(again.json.added).toEqual([]);
+
+    await api.post("/api/v1/labelsets/sentiment/reset", {}, { admin: true });
+  });
+
+  it("keeps the re-seed behind the operator token", async () => {
+    expect((await api.post("/api/v1/admin/reseed", {})).status).toBe(401);
+  });
+});
+
+describe("data operations are audited, not only configuration", () => {
+  it("records deleting a call, and a bulk delete", async () => {
+    const upload = async (title: string) => {
+      const form = new FormData();
+      form.set("title", title);
+      form.set("transcript", "Agent: Hello. Member: This one exists only to be deleted.");
+      const res = await api.request<{ call: { id: string } }>("POST", "/api/v1/calls", {
+        body: form,
+        admin: true,
+      });
+      expect(res.status).toBe(202);
+      return res.json.call.id;
+    };
+
+    const single = await upload("Audited single delete");
+    expect((await api.del(`/api/v1/calls/${single}`, { admin: true })).status).toBe(204);
+
+    const a = await upload("Audited bulk delete A");
+    const b = await upload("Audited bulk delete B");
+    const bulk = await api.post<{ succeeded: number }>(
+      "/api/v1/calls/bulk",
+      { action: "delete", ids: [a, b] },
+      { admin: true },
+    );
+    expect(bulk.json.succeeded).toBe(2);
+
+    const audit = await api.get<{
+      items: Array<{ action: string; detail: Record<string, unknown> }>;
+    }>("/api/v1/admin/audit?limit=200", { admin: true });
+    const single_ = audit.json.items.find((i) => i.action === "call.delete");
+    expect(single_?.detail.callId).toBe(single);
+    // The title is captured before the delete, so the entry is legible a month later.
+    expect(single_?.detail.title).toBe("Audited single delete");
+
+    const bulk_ = audit.json.items.find((i) => i.action === "call.bulk-delete");
+    expect(bulk_?.detail.deleted).toBe(2);
+    expect(bulk_?.detail.callIds).toEqual([a, b]);
+  });
+});
+
 describe("saved views", () => {
   let viewId = "";
 
@@ -461,31 +581,43 @@ describe("the share register", () => {
   it("lists every link across every call, filterable by state", async () => {
     const calls = await api.get<{ items: Array<{ id: string }> }>("/api/v1/calls?page_size=1");
     const id = calls.json.items[0]?.id as string;
-    const created = await api.post<{ token: string }>(
+    const created = await api.post<{ id: string; token: string; url: string }>(
       `/api/v1/calls/${id}/shares`,
       { ttlDays: 3 },
       { admin: true },
     );
     expect(created.status).toBe(201);
+    // The token comes back once, with the URL built from it; the register only ever sees a digest.
+    expect(created.json.token).toBeTruthy();
+    expect(created.json.url).toBe(`/s/${created.json.token}`);
+    expect(created.json.id).not.toBe(created.json.token);
 
     // The register carries the tokens, so it needs whatever a read needs on this deployment — it
     // is not as public as the token resolver, which the token itself authenticates.
     expect((await api.get("/api/v1/shares")).status).toBe(401);
 
-    const all = await api.get<{ items: Array<{ token: string; revoked: boolean }> }>("/api/v1/shares", {
+    const all = await api.get<{ items: Array<{ id: string; revoked: boolean }> }>("/api/v1/shares", {
       admin: true,
     });
-    expect(all.json.items.some((s) => s.token === created.json.token)).toBe(true);
+    expect(all.json.items.some((s) => s.id === created.json.id)).toBe(true);
+    // A leaked register is not a set of working links.
+    expect(all.text).not.toContain(created.json.token);
 
-    await api.del(`/api/v1/shares/${created.json.token}`, { admin: true });
-    const active = await api.get<{ items: Array<{ token: string }> }>("/api/v1/shares?state=active", {
+    // The token resolves; the digest deliberately does not.
+    expect((await api.get(`/api/v1/shares/${created.json.token}`)).status).toBe(200);
+    expect((await api.get(`/api/v1/shares/${created.json.id}`)).status).toBe(404);
+
+    // Revoked by the id the register lists, which is all an operator has.
+    await api.del(`/api/v1/shares/${created.json.id}`, { admin: true });
+    const active = await api.get<{ items: Array<{ id: string }> }>("/api/v1/shares?state=active", {
       admin: true,
     });
-    expect(active.json.items.some((s) => s.token === created.json.token)).toBe(false);
-    const revoked = await api.get<{ items: Array<{ token: string }> }>("/api/v1/shares?state=revoked", {
+    expect(active.json.items.some((s) => s.id === created.json.id)).toBe(false);
+    const revoked = await api.get<{ items: Array<{ id: string }> }>("/api/v1/shares?state=revoked", {
       admin: true,
     });
-    expect(revoked.json.items.some((s) => s.token === created.json.token)).toBe(true);
+    expect(revoked.json.items.some((s) => s.id === created.json.id)).toBe(true);
+    expect((await api.get(`/api/v1/shares/${created.json.token}`)).status).toBe(404);
   });
 });
 
@@ -672,6 +804,10 @@ describe("the audit trail", () => {
     expect(actions).toContain("settings.branding");
     expect(actions).toContain("apikey.create");
     expect(actions).toContain("apikey.revoke");
+    // Data operations, not only configuration: the audit was silent on the things that actually
+    // remove a customer's calls or hand out access to them.
+    expect(actions).toContain("share.create");
+    expect(actions).toContain("share.revoke");
     for (const i of res.json.items) expect(i.actor).toBeTruthy();
     expect(res.text).not.toContain("ca_live_");
     await api.del("/api/v1/settings/branding", { admin: true });

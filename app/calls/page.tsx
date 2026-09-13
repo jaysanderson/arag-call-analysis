@@ -4,7 +4,6 @@ import { CallsWorkspace } from "@/components/calls/CallsWorkspace";
 import { TableSkeleton } from "@/components/kit";
 import { ApiMeta, PageHeader } from "@/components/shell/AppShell";
 import { canWrite } from "@/lib/session";
-import { settings } from "@/services/settings";
 
 export const dynamic = "force-dynamic";
 

@@ -28,6 +28,18 @@ export const VIEW_PARAMS = [
   "queue",
   "media_type",
   "lifecycle",
+  // The metric filters the dashboard drills through with. Without them a view saved straight after
+  // a drill-through would silently drop the very filter it was saved for.
+  "call_reason",
+  "outcome",
+  "sentiment",
+  "line_of_business",
+  "complaint_category",
+  "complaint",
+  "fcr",
+  "escalated",
+  "cross_sell_offered",
+  "cross_sell_accepted",
   "from",
   "to",
   "sort",

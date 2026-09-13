@@ -64,9 +64,14 @@ paths and fill in the blanks, or write the files from scratch; both are fine.
 - `services/calls.ts` already exports `getCall(rt, id): Promise<CallDetail>` — your function should
   call it and re-shape `call.paragraphs`, not re-fetch from `rt.arag`.
 - The route handler needs no `auth` field (defaults to `"none"`, same as `GET /api/v1/calls/{id}`).
-- Do not forget `export const OPTIONS = preflight;`. No contract test catches its absence today —
-  the convention is enforced by review, which is exactly why it is easy to miss.
-- The spec currently declares **60 operations across 13 tags**; yours makes 61. The in-product API
+- Do not forget `export const OPTIONS = preflight;`. **No contract test catches its absence today**
+  — the contract tests deliberately ignore `OPTIONS`, since it is a CORS mechanism rather than an
+  API operation (D-CA-14), and the one integration case that exercises a preflight covers a single
+  route. The convention is enforced by review, which is exactly why it is easy to miss, and this
+  remains the **smallest open gap in the repo**: a test that walks `API_ROUTES`, imports each
+  handler file and asserts it exports `OPTIONS` would close it in about fifteen lines. That is a
+  real contribution if you want one after the exercise.
+- The spec currently declares **62 operations across 13 tags**; yours makes 63. The in-product API
   explorer at <http://localhost:3000/api> reads `/api/v1/openapi.json` at runtime, so your new
   operation appears there — filterable, deep-linkable at `/api?op=getCallMoments`, and callable
   from the try-it panel — the moment the spec entry exists. That is the fastest way to check your
@@ -76,7 +81,7 @@ paths and fill in the blanks, or write the files from scratch; both are fine.
 
 - `make check` passes (lint + typecheck + audit + `vitest run --coverage`, which includes the
   contract test you added).
-- `GET /api/v1/openapi.json` declares 61 operations, and `/api?op=getCallMoments` renders yours
+- `GET /api/v1/openapi.json` declares 63 operations, and `/api?op=getCallMoments` renders yours
   with its parameter table and a working **Send**.
 - `curl -s http://localhost:3000/api/v1/calls/<id>/moments` returns `200` with the shape above for
   a real call id, and `404` (`application/problem+json`) for an unknown one.

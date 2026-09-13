@@ -54,7 +54,7 @@ export function SharesPanel({ initial }: { initial: SettingsView }) {
   async function revoke(share: ShareView) {
     setBusy(true);
     try {
-      await apiJson<ShareView>(`/api/v1/shares/${encodeURIComponent(share.token)}`, { method: "DELETE" });
+      await apiJson<ShareView>(`/api/v1/shares/${encodeURIComponent(share.id)}`, { method: "DELETE" });
       setRevoking(null);
       await load(state);
       show("The link no longer resolves.");
@@ -120,7 +120,7 @@ export function SharesPanel({ initial }: { initial: SettingsView }) {
                   {items.map((s) => {
                     const live = !s.revoked && !s.expired;
                     return (
-                      <tr key={s.token} data-testid="share-row">
+                      <tr key={s.id} data-testid="share-row">
                         <td>
                           <Link className="cell-title" href={`/calls/${s.callId}`}>
                             {s.callTitle || s.callId}

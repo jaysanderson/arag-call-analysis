@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { type CallFilters, callsHref } from "@/lib/drilldown";
 import { Card, SectionTitle } from "./ui";
 
 type Datum = { name: string; value: number };
@@ -190,30 +191,32 @@ export function DashboardCharts({
    */
   scope?: string;
 }) {
-  const link = (labelset: string, label: string) =>
-    `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}${scope}`;
+  // Every chart is a tally over `call_metrics`, so every drill-through filters on `call_metrics`.
+  // These used to link to the labeler's labels of similar names, which is how a chart bar could
+  // disagree with the list it opened — see lib/drilldown.ts.
+  const link = (filters: CallFilters) => callsHref(filters, scope);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <Card className="p-4">
         <SectionTitle>Calls by reason</SectionTitle>
-        <HBar data={byReason} hrefFor={(n) => link("call_reason", n)} />
+        <HBar data={byReason} hrefFor={(n) => link({ call_reason: n })} />
       </Card>
       <Card className="p-4">
         <SectionTitle>Sentiment mix</SectionTitle>
-        <Donut data={bySentiment} hrefFor={(n) => link("sentiment", n)} />
+        <Donut data={bySentiment} hrefFor={(n) => link({ sentiment: n })} />
       </Card>
       <Card className="p-4">
         <SectionTitle>Outcomes</SectionTitle>
-        <HBar data={byOutcome} hrefFor={(n) => link("call_outcome", n)} />
+        <HBar data={byOutcome} hrefFor={(n) => link({ outcome: n })} />
       </Card>
       <Card className="p-4">
         <SectionTitle>Line of business</SectionTitle>
-        <HBar data={byLob} hrefFor={(n) => link("line_of_business", n)} />
+        <HBar data={byLob} hrefFor={(n) => link({ line_of_business: n })} />
       </Card>
       <Card className="p-4">
         <SectionTitle>Complaints by category</SectionTitle>
-        {/* category is not a label; drill into all complaint calls */}
-        <HBar data={complaintsByCategory} hrefFor={() => link("disposition_flags", "Complaint Raised")} />
+        {/* The tally is computed over complaints only, so the filter carries both halves. */}
+        <HBar data={complaintsByCategory} hrefFor={(n) => link({ complaint: true, complaint_category: n })} />
       </Card>
       <Card className="p-4">
         <SectionTitle>Cross-sell funnel</SectionTitle>
@@ -223,14 +226,14 @@ export function DashboardCharts({
             value={crossSell.offered}
             max={Math.max(crossSell.offered, 1)}
             color="var(--arag-brand-600, #2b2bb2)"
-            href={link("disposition_flags", "Cross-sell Offered")}
+            href={link({ cross_sell_offered: true })}
           />
           <Funnel
             label="Accepted"
             value={crossSell.accepted}
             max={Math.max(crossSell.offered, 1)}
             color="var(--arag-accent-500, #00b563)"
-            href={link("disposition_flags", "Cross-sell Accepted")}
+            href={link({ cross_sell_accepted: true })}
           />
           <div className="ml-auto text-right">
             <div className="font-display text-3xl font-semibold text-ink-950">

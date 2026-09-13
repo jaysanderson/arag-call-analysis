@@ -28,6 +28,15 @@ export function listOptionsFrom(query: Record<string, unknown>): ListOptions {
     complaint: bool("complaint"),
     fcr: bool("fcr"),
     escalated: bool("escalated"),
+    // Wire names match the `call_metrics` field names exactly, so a reader of the URL can see
+    // which generated value a filter is testing.
+    callReason: str("call_reason"),
+    outcome: str("outcome"),
+    sentiment: str("sentiment"),
+    lineOfBusiness: str("line_of_business"),
+    complaintCategory: str("complaint_category"),
+    crossSellOffered: bool("cross_sell_offered"),
+    crossSellAccepted: bool("cross_sell_accepted"),
     lifecycle: str("lifecycle") as ListOptions["lifecycle"],
     sort: str("sort") as CallSort | undefined,
     order: str("order") as "asc" | "desc" | undefined,

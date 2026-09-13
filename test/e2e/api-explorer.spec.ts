@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openapi } from "@/lib/openapi";
 
 /**
  * The in-product API explorer at `/api`.
@@ -8,7 +9,17 @@ import { expect, test } from "@playwright/test";
  * for this browser, which is what the problem-document case needs).
  */
 
-const DECLARED = 60;
+/**
+ * Counted from the document the explorer itself renders, not written down here.
+ *
+ * A hard-coded number turns "the explorer lists every operation" into "the explorer lists sixty
+ * things", so adding an operation failed this test for the wrong reason — which is exactly what
+ * happened when the metric-filter work added two. Deriving it keeps the assertion about coverage.
+ */
+const DECLARED = Object.values(openapi.paths as Record<string, Record<string, unknown>>).reduce(
+  (n, ops) => n + Object.keys(ops).length,
+  0,
+);
 
 test.describe("the API explorer", () => {
   test("lists every declared operation, grouped by tag", async ({ page }) => {

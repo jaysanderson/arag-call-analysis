@@ -387,18 +387,38 @@ const schemas: Record<string, unknown> = {
   },
   ShareLink: {
     type: "object",
-    required: ["token", "callId", "url", "createdISO", "expiresISO", "revoked", "expired"],
+    required: ["id", "callId", "createdISO", "expiresISO", "revoked", "expired"],
+    description:
+      "A share link as the register knows it. It carries no token and no URL: the token is stored as a SHA-256 digest, exactly as an API key is, so a leaked `shares.json` grants nothing. The address exists once, in the response to creating the link.",
     properties: {
-      token: { type: "string", description: "Opaque 256-bit token; the only secret in the link." },
+      id: {
+        type: "string",
+        description: "The stored digest. Safe to list, and what a revoke is addressed to — not a credential.",
+      },
       callId: { type: "string" },
       callTitle: { type: "string" },
-      url: { type: "string", description: "Path to the read-only call view, e.g. `/s/<token>`." },
       createdISO: { type: "string" },
       expiresISO: { type: "string" },
       revoked: { type: "boolean" },
       expired: { type: "boolean" },
       note: { type: "string" },
     },
+  },
+  ShareCreated: {
+    allOf: [
+      ref("ShareLink"),
+      {
+        type: "object",
+        required: ["token", "url"],
+        properties: {
+          token: {
+            type: "string",
+            description: "The 256-bit token, returned exactly once. It cannot be recovered afterwards.",
+          },
+          url: { type: "string", description: "Path to the read-only call view, e.g. `/s/<token>`." },
+        },
+      },
+    ],
   },
   ShareCreateRequest: {
     type: "object",
@@ -768,8 +788,11 @@ const schemas: Record<string, unknown> = {
       days: { type: "integer" },
       enabled: { type: "boolean" },
       cutoffISO: { type: "string" },
-      total: { type: "integer" },
-      retained: { type: "integer" },
+      total: {
+        type: "integer",
+        description: "How many calls the policy covers — the number a purge would remove.",
+      },
+      retained: { type: "integer", description: "How many calls the policy keeps." },
       candidates: {
         type: "array",
         items: {
@@ -1055,6 +1078,49 @@ const CALL_FILTER_PARAMS = [
   },
   { name: "escalated", in: "query", schema: { type: "boolean" } },
   {
+    name: "cross_sell_offered",
+    in: "query",
+    description: "Only calls where an additional product was offered (or not).",
+    schema: { type: "boolean" },
+  },
+  {
+    name: "cross_sell_accepted",
+    in: "query",
+    description: "Only calls where an offer was accepted (or not).",
+    schema: { type: "boolean" },
+  },
+  {
+    name: "call_reason",
+    in: "query",
+    description:
+      "Exact `call_metrics.call_reason`. This filters on the *generated metric*, not on the labeler's label of the same name — which is what makes a dashboard figure and its drill-through the same predicate.",
+    schema: { type: "string", maxLength: 120 },
+  },
+  {
+    name: "outcome",
+    in: "query",
+    description: "Exact `call_metrics.outcome`.",
+    schema: { type: "string", maxLength: 120 },
+  },
+  {
+    name: "sentiment",
+    in: "query",
+    description: "Exact `call_metrics.sentiment`.",
+    schema: { type: "string", enum: ["Positive", "Neutral", "Negative", "Mixed"] },
+  },
+  {
+    name: "line_of_business",
+    in: "query",
+    description: "Exact `call_metrics.line_of_business`.",
+    schema: { type: "string", maxLength: 120 },
+  },
+  {
+    name: "complaint_category",
+    in: "query",
+    description: "Exact `call_metrics.complaint_category`.",
+    schema: { type: "string", maxLength: 120 },
+  },
+  {
     name: "lifecycle",
     in: "query",
     description: "Only calls in this pipeline state.",
@@ -1305,10 +1371,10 @@ const paths: Record<string, Record<string, unknown>> = {
       summary: "Create a revocable, expiring link to one call",
       security: [{ ApiKey: [] }],
       description:
-        "Share links are application state, not a Knowledge Box mutation, and they grant no access the read API does not already give — so they need only the same credentials a read does. Revoking one is the control that matters, and it is available to every caller who can create one.",
+        "Share links are application state, not a Knowledge Box mutation, and they grant no access the read API does not already give — so they need only the same credentials a read does. Revoking one is the control that matters, and it is available to every caller who can create one.\n\nReturns the token and its URL **once**: the store keeps only a SHA-256 digest, exactly as it does for an API key, so a lost link is revoked and reissued rather than looked up.",
       parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
       requestBody: jsonBody(ref("ShareCreateRequest"), false),
-      responses: { 201: jsonResponse(ref("ShareLink"), "The link"), ...problemResponses },
+      responses: { 201: jsonResponse(ref("ShareCreated"), "The link, with its token"), ...problemResponses },
     },
   },
   "/api/v1/shares/{token}": {
@@ -1317,7 +1383,7 @@ const paths: Record<string, Record<string, unknown>> = {
       tags: ["Shares"],
       summary: "Resolve a share token to the call it points at",
       description:
-        "404 for an unknown, revoked or expired token — the three are indistinguishable to the caller by design.",
+        "404 for an unknown, revoked or expired token — the three are indistinguishable to the caller by design. Only a plaintext token resolves: the digest the register lists is deliberately not a working credential.",
       parameters: [{ name: "token", in: "path", required: true, schema: { type: "string", maxLength: 128 } }],
       responses: { 200: jsonResponse(ref("ShareLink"), "The link"), ...problemResponses },
     },
@@ -1718,6 +1784,21 @@ const paths: Record<string, Record<string, unknown>> = {
       responses: { 200: jsonResponse(ref("LabelsetWriteResult"), "Provisioned"), ...problemResponses },
     },
   },
+  "/api/v1/labelsets/{id}/reset": {
+    post: {
+      operationId: "resetLabelset",
+      tags: ["Taxonomy"],
+      summary: "Restore a labelset to the definition the product ships",
+      description:
+        "The taxonomy equivalent of `DELETE /api/v1/settings/{section}`: an edit is reversible without the operator having to know what the original was, which is the difference between a configuration surface people will experiment with and one they will not touch. Re-provisions in the same request. Only shipped labelsets can be reset — a partner's own vocabulary has nothing to be reset to, and returns 404.",
+      security: [{ ApiKey: [] }, { AdminToken: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      responses: {
+        200: jsonResponse(ref("LabelsetWriteResult"), "The restored labelset"),
+        ...problemResponses,
+      },
+    },
+  },
   "/api/v1/agents": {
     get: {
       operationId: "listAgents",
@@ -1913,6 +1994,34 @@ const paths: Record<string, Record<string, unknown>> = {
       responses: { 202: jsonResponse(ref("Job"), "Provisioning job accepted"), ...problemResponses },
     },
   },
+  "/api/v1/admin/reseed": {
+    post: {
+      operationId: "adminReseedTaxonomy",
+      tags: ["Admin"],
+      summary: "Add shipped labelsets this deployment does not hold",
+      description:
+        "The taxonomy store seeds itself once, so a labelset added to the product in a later release cannot reach a deployment that has already been seeded — and seeding on every boot would resurrect anything an operator deliberately deleted. This is the deliberate way to cross that line: it only ever *adds*, so an edited definition survives untouched, but a labelset that was deleted is by definition missing and does come back. The response names every id it added and every id it left alone, so an operator can undo exactly what arrived.",
+      security: [{ AdminToken: [] }],
+      responses: {
+        200: jsonResponse(
+          {
+            type: "object",
+            required: ["added", "skipped"],
+            properties: {
+              added: { type: "array", items: { type: "string" }, description: "Labelset ids brought in." },
+              skipped: {
+                type: "array",
+                items: { type: "string" },
+                description: "Already present, and therefore untouched.",
+              },
+            },
+          },
+          "What the re-seed did",
+        ),
+        ...problemResponses,
+      },
+    },
+  },
   "/api/v1/admin/audit": {
     get: {
       operationId: "adminAudit",
@@ -2100,6 +2209,13 @@ export const API_ROUTES: RouteDef[] = [
     auth: "write",
     file: "app/api/v1/labelsets/[id]/provision/route.ts",
   },
+  {
+    method: "post",
+    path: "/api/v1/labelsets/{id}/reset",
+    auth: "write",
+    file: "app/api/v1/labelsets/[id]/reset/route.ts",
+  },
+  { method: "post", path: "/api/v1/admin/reseed", auth: "admin", file: "app/api/v1/admin/reseed/route.ts" },
   { method: "get", path: "/api/v1/agents", auth: "none", file: "app/api/v1/agents/route.ts" },
   { method: "put", path: "/api/v1/agents/{key}", auth: "write", file: "app/api/v1/agents/[key]/route.ts" },
   {

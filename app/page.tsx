@@ -6,6 +6,7 @@ import { RangePicker } from "@/components/dashboard/RangePicker";
 import { RollupTable } from "@/components/dashboard/RollupTable";
 import { ErrorState } from "@/components/kit";
 import { ApiMeta, PageHeader } from "@/components/shell/AppShell";
+import { callsHref, SORT_ONLY_TILES } from "@/lib/drilldown";
 import { pct } from "@/lib/format";
 import { getRuntime } from "@/lib/runtime";
 import { DASHBOARD_RANGES, type DashboardRange, dashboard } from "@/services/dashboard";
@@ -27,10 +28,15 @@ function scopeOf(w: { from?: string; to?: string }): string {
   return q ? `&${q}` : "";
 }
 
-/** Drill-down link into the filtered calls table, inside the current window. */
-function lc(labelset: string, label: string, scope: string) {
-  return `/calls?label=${encodeURIComponent(`${labelset}/${label}`)}${scope}`;
-}
+/**
+ * Every tile links to the list filtered by the predicate its own number was computed from.
+ *
+ * They used to link to a *label* of a similar name — `disposition_flags/Complaint Raised` for the
+ * complaint rate, and so on. Labels come from the labeler agent and the tiles come from the
+ * `call-insights` metrics, and the two agents disagree often enough that the dashboard could show
+ * 0 % above a link to ten calls. `lib/drilldown.ts` defines the figure and its filter together,
+ * and a contract test asserts each one equals the count its link returns.
+ */
 
 export default async function DashboardPage({
   searchParams,
@@ -94,7 +100,7 @@ export default async function DashboardPage({
             >
               Export
             </a>
-            <Link href={`/calls?${scope.slice(1)}`} className="arag-btn sm">
+            <Link href={callsHref({}, scope)} className="arag-btn sm">
               Browse calls
             </Link>
           </>
@@ -110,37 +116,39 @@ export default async function DashboardPage({
             label="Calls"
             value={String(d.total)}
             sub={`${d.withMetrics} analysed`}
-            href={`/calls?${scope.slice(1)}`}
+            href={callsHref({}, scope)}
           />
           <Stat
             label="First-call resolution"
             value={pct(d.fcrRate)}
-            sub="of analysed calls"
-            href={lc("disposition_flags", "First-Call Resolution", scope)}
+            sub={`${d.counts.fcr} of ${d.withMetrics} analysed`}
+            href={callsHref({ fcr: true }, scope)}
           />
           <Stat
             label="Complaint rate"
             value={pct(d.complaintRate)}
-            sub="of analysed calls"
-            href={lc("disposition_flags", "Complaint Raised", scope)}
+            sub={`${d.counts.complaint} of ${d.withMetrics} analysed`}
+            href={callsHref({ complaint: true }, scope)}
           />
           <Stat
             label="Cross-sell accepted"
             value={pct(d.crossSellAcceptRate)}
-            sub={`${pct(d.crossSellOfferRate)} offered`}
-            href={lc("disposition_flags", "Cross-sell Accepted", scope)}
+            sub={`${d.counts.crossSellAccepted} of ${d.counts.crossSellOffered} offered`}
+            href={callsHref({ cross_sell_accepted: true }, scope)}
           />
+          {/* An average has no subset of calls behind it, so these two sort rather than filter —
+              "show me the worst" — instead of a link that would imply a predicate it has not got. */}
           <Stat
             label="Avg compliance"
             value={String(d.avgCompliance)}
-            sub="out of 100"
-            href={`/calls?sort=compliance&order=asc${scope}`}
+            sub="out of 100 · lowest first"
+            href={callsHref(SORT_ONLY_TILES.compliance, scope)}
           />
           <Stat
             label="Avg CSAT"
             value={d.avgCsat ? `${d.avgCsat}` : "n/a"}
-            sub={d.avgCsat ? "out of 5" : "no estimate yet"}
-            href={`/calls?sort=csat&order=asc${scope}`}
+            sub={d.avgCsat ? "out of 5 · lowest first" : "no estimate yet"}
+            href={callsHref(SORT_ONLY_TILES.csat, scope)}
           />
         </div>
 
@@ -165,7 +173,7 @@ export default async function DashboardPage({
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 650, color: "var(--arag-ink-950)" }}>
               Recent calls
             </h2>
-            <Link href={`/calls?${scope.slice(1)}`} className="small" style={{ marginLeft: "auto" }}>
+            <Link href={callsHref({}, scope)} className="small" style={{ marginLeft: "auto" }}>
               View all
             </Link>
           </div>

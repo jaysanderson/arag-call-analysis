@@ -238,6 +238,24 @@ async function main(): Promise<void> {
       ? ok("labelset edit re-provisioned")
       : bad(`labelset edit: ${edited.status} ${edited.text.slice(0, 200)}`);
 
+    // ── 3b. reset and re-seed, against the live taxonomy ────────────────────
+    const reset = await api<{ labelset: { labels: unknown[] } }>(
+      "POST",
+      "/api/v1/labelsets/call_reason/reset",
+      { admin: true },
+    );
+    reset.status === 200 && (reset.json?.labelset.labels.length ?? 0) > 1
+      ? ok("shipped labelset reset and re-provisioned")
+      : bad(`labelset reset: ${reset.status} ${reset.text.slice(0, 200)}`);
+
+    const reseed = await api<{ added: string[]; skipped: string[] }>("POST", "/api/v1/admin/reseed", {
+      admin: true,
+    });
+    // Nothing should be missing on a healthy deployment, which is exactly the answer expected here.
+    reseed.status === 200 && reseed.json?.added.length === 0 && (reseed.json?.skipped.length ?? 0) > 0
+      ? ok(`re-seed found nothing missing (${reseed.json?.skipped.length} already present)`)
+      : bad(`re-seed: ${reseed.status} ${reseed.text.slice(0, 200)}`);
+
     // ── 4. agent configuration: edited and reverted ─────────────────────────
     const agents = await api<{ items: Array<{ key: string; prompts?: Record<string, string> }> }>(
       "GET",
@@ -298,15 +316,22 @@ async function main(): Promise<void> {
       // Credentialed: issuing a key above closed the API to anonymous callers, which is the
       // point of sticky enforcement (D-CA-46). Resolving a token stays public — the token is the
       // credential — so that read is deliberately left unauthenticated.
-      const share = await api<{ token: string }>("POST", `/api/v1/calls/${createdCallId}/shares`, {
-        json: { ttlDays: 1, note: "live write smoke" },
-        admin: true,
-      });
+      const share = await api<{ id: string; token: string }>(
+        "POST",
+        `/api/v1/calls/${createdCallId}/shares`,
+        {
+          json: { ttlDays: 1, note: "live write smoke" },
+          admin: true,
+        },
+      );
       const resolved = await api("GET", `/api/v1/shares/${share.json?.token}`);
-      share.status === 201 && resolved.status === 200
-        ? ok("share link created and resolved")
-        : bad(`share link: create ${share.status}, resolve ${resolved.status}`);
-      await api("DELETE", `/api/v1/shares/${share.json?.token}`, { admin: true });
+      // The digest the register lists must NOT resolve, or the management view would be a page of
+      // working links.
+      const byDigest = await api("GET", `/api/v1/shares/${share.json?.id}`);
+      share.status === 201 && resolved.status === 200 && byDigest.status === 404
+        ? ok("share link created, resolved by token, and not by its digest")
+        : bad(`share link: create ${share.status}, resolve ${resolved.status}, digest ${byDigest.status}`);
+      await api("DELETE", `/api/v1/shares/${share.json?.id}`, { admin: true });
     }
 
     // ── 7. retention preview (read-only; the purge itself is never run live) ─

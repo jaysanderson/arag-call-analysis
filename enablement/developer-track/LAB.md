@@ -78,7 +78,7 @@ Every screen — product and operator alike — lives in one application shell w
 | **Upload** <http://localhost:3000/upload> | Dropzone, metadata form, live pipeline stepper fed by an SSE job stream; **Ingest history** for what ran before |
 | **Agents & Taxonomy** <http://localhost:3000/taxonomy> | Six labelsets and three agents with live state. Read-only until you sign in |
 | **Settings** <http://localhost:3000/settings> | Nine tabs, each its own route (`?tab=`), each naming the endpoint that fed it |
-| **API** <http://localhost:3000/api> | **60 operations across 13 tags**, read from `/api/v1/openapi.json` at runtime, filterable, deep-linkable (`?op=listCalls`), with a try-it panel and a copyable curl |
+| **API** <http://localhost:3000/api> | **62 operations across 13 tags**, read from `/api/v1/openapi.json` at runtime, filterable, deep-linkable (`?op=listCalls`), with a try-it panel and a copyable curl |
 | **Admin** <http://localhost:3000/admin> | Sign in with `dev-admin-token`. Overview, Connection, Taxonomy & Agents, Jobs, Logs, Audit, Usage, Branding, Security |
 
 Then two things from the terminal, because the rest of the lab lives there:
@@ -91,7 +91,7 @@ curl -s -i "http://localhost:3000/api/v1/calls/does-not-exist" | head -5
 A page of JSON, then a `404` with `Content-Type: application/problem+json` — RFC 9457, the shape
 every error in this product has.
 
-**Checkpoint:** dashboard renders with non-zero KPIs; `/api` reports 60 operations; admin health is
+**Checkpoint:** dashboard renders with non-zero KPIs; `/api` reports 62 operations; admin health is
 green and says `mock: true`; you have run one successful and one failing `curl`.
 
 ---
@@ -109,7 +109,7 @@ Read it in three passes:
   `LabelsetDefinition`, `AgentUpdateRequest`, `ApiKeyCreated`, `ShareLink`, `PurgePreview`.
 - **Paths** — each operation carries an `operationId`, `tags`, parameters/body, and spreads
   `...problemResponses` so every operation documents 400/401/403/404/429/502 without repeating it.
-- **`API_ROUTES`** at the bottom — 60 entries of `{ method, path, auth, file }`. The contract tests
+- **`API_ROUTES`** at the bottom — 62 entries of `{ method, path, auth, file }`. The contract tests
   assert this against both the spec and the filesystem, in both directions.
 
 The `auth` field is worth ten minutes on its own. Four modes, enforced by `enforceAuth()` in
@@ -189,36 +189,62 @@ and the shared state (views, shares) that turns a screen into a team's tool.
 
 ## Known defects and gaps
 
-Found while writing and executing this lab, against the sample deployment. Reported to the product
-owner; listed here so nobody spends an afternoon assuming they broke it.
+Found while writing and executing this lab, against the sample deployment, and reported to the
+product owner.
 
-1. **Dashboard drill-throughs disagree with the numbers they come from.** Every KPI tile and chart
-   is computed from `call_metrics` (the `call-insights` **ask** agent) while every drill-through
-   link filters on labels (the `resource-labeler` **labeler** agent). Two agents, no reconciliation.
-   On the sample corpus *Cross-sell accepted* reads 0% and links to ten calls, and *Complaint rate*
-   reads 23% and links to none. Reproduce it in [Exercise 7, Task 9](exercises/07-dashboard-drill-through.md);
-   the fix and the test that should have caught it are in [its solution](solutions/07-dashboard-drill-through.md).
-2. **A labelset cannot be reset to its shipped definition.** Every settings section has
-   `DELETE /api/v1/settings/{section}`; the taxonomy has no equivalent. `restoreLabelset()` exists
-   in `services/taxonomy-store.ts` and is unit-tested, but no route and no button reach it, so
-   undoing an edit means retyping the original or deleting `DATA_DIR/taxonomy.json` and losing
-   every other customisation with it. See [Exercise 4](exercises/04-edit-labelset.md).
-3. **A source-taxonomy change cannot reach an existing deployment.** `seedTaxonomy()` runs once,
-   guarded by a `seeded` marker, and there is no re-seed operation — so a partner who rewrites
-   `lib/domain/taxonomy.ts` and redeploys changes nothing for existing users. In sample mode it is
-   worse than nothing: the mock Knowledge Box *is* re-seeded from source at boot, leaving labelsets
-   that are `provisioned: true, defined: false`. See [Exercise 2](exercises/02-extend-taxonomy.md).
-4. **The audit trail covers configuration but not data.** Every call site of `audit()` lives in
-   `settings`, `api-keys`, `labelsets`, `agents`, `retention/purge`, `settings/logo` and
-   `jobs/{id}` (cancel). Nothing under `/api/v1/calls`, `/api/v1/views` or `/api/v1/shares` records
-   anything — so **deleting a call, bulk-deleting forty calls, creating a share link and creating
-   a shared saved view are all unaudited**, and all four are reachable with an API key rather than
-   the operator token. A retention purge is recorded; the `DELETE /api/v1/calls/{id}` that removes
-   the same recording is not. Verified by creating a view and a share and watching the trail stay
-   at thirteen entries, and by grepping every `audit(` call site.
+**Seven of the eight were fixed in response to this run.** They are kept here — struck through,
+with what the fix was — because the exercises walk you into the code that used to be wrong, and
+because "this was found by running the lab and then fixed" is the more useful thing for a partner
+to know than a clean list. Each exercise still reproduces the *reasoning*; only the broken
+behaviour is gone.
+
+1. ~~**Dashboard drill-throughs disagree with the numbers they come from.**~~ **Fixed.** Every KPI
+   tile and chart was computed from `call_metrics` (the `call-insights` **ask** agent) while every
+   drill-through link filtered on labels (the `resource-labeler` **labeler** agent) — two agents
+   reading the same transcript, no reconciliation, so *Cross-sell accepted* read 0 % and linked to
+   ten calls. `GET /api/v1/calls` now accepts metric filters (`call_reason`, `outcome`, `sentiment`,
+   `line_of_business`, `complaint_category`, `cross_sell_offered`, `cross_sell_accepted`),
+   `lib/drilldown.ts` defines each figure together with the filter that reproduces it, and
+   `test/integration/dashboard-drilldown.test.ts` walks every figure asserting it equals the count
+   its own link returns. [Exercise 7](exercises/07-dashboard-drill-through.md) now *builds* that
+   mechanism instead of reporting its absence.
+2. ~~**A labelset cannot be reset to its shipped definition.**~~ **Fixed.**
+   `POST /api/v1/labelsets/{id}/reset` and a row action in Agents & Taxonomy, matching the
+   `DELETE /api/v1/settings/{section}` pattern. `restoreLabelset()` was already there and
+   unit-tested; it had no route and no button. Only a labelset the product ships can be reset —
+   a partner's own vocabulary has nothing to go back to, and returns 404.
+   See [Exercise 4](exercises/04-edit-labelset.md).
+3. ~~**A source-taxonomy change cannot reach an existing deployment.**~~ **Fixed.**
+   `POST /api/v1/admin/reseed` ("Add missing shipped labelsets") adds shipped labelsets the store
+   does not hold and touches nothing it does — so an edited definition survives untouched. A
+   deliberately *deleted* one is missing, so it comes back: that is the honest reading of the
+   button, and the reason it is a button rather than something that happens on restart.
+   `seedTaxonomy()` still runs once, which is what keeps a boot from crossing that line by itself.
+   See [Exercise 2](exercises/02-extend-taxonomy.md).
+4. ~~**The audit trail covers configuration but not data.**~~ **Fixed.** `call.delete`,
+   `call.bulk-delete` (with the ids, capped at fifty and flagged when truncated), `share.create`
+   and `share.revoke` now write entries. A call's title is captured *before* the delete so the
+   entry is legible a month later. Saved views are still unaudited, deliberately: a view is a named
+   query over data the reader can already see, and it destroys nothing.
 5. **The `OPTIONS = preflight` convention is enforced by review only.** D-CA-14 requires every
    route to export it; no contract test asserts it, and the Exercise 1 scaffold used to omit it.
-6. **`PurgePreview.total` means "candidates", not "calls".** `GET /api/v1/retention/preview?days=90`
-   on a 13-call corpus returns `total: 7, retained: 6`. It is internally consistent
-   (`total` = `candidates.length`) but the field has no `description` in the spec, and "total" next
-   to "retained" reads as the catalogue size. A one-line spec fix.
+   **Still open** — the smallest useful contribution in this repo, and
+   [Exercise 1](exercises/01-add-endpoint.md) is where you would add it.
+6. ~~**`PurgePreview.total` has no description.**~~ **Fixed.** `total` and `retained` now say what
+   they count. It was internally consistent (`total` = `candidates.length`) but "total" next to
+   "retained" read as the catalogue size.
+7. ~~**Share tokens were stored in plaintext**, as the document id in `shares.json`, while API keys
+   were hashed.~~ **Fixed.** The store keeps a SHA-256 digest, the token is returned exactly once
+   at creation (like an API key), the register lists and revokes by the digest, and rows written
+   before the change are re-keyed on first read so links already in someone's inbox keep working.
+   A consequence worth noticing in the UI: the share drawer no longer offers "Copy" for an existing
+   link, because the product genuinely cannot reconstruct it.
+
+### Still open
+
+- Item 5 above.
+- **No backup story for `DATA_DIR`.** It now holds seven collections including the settings store
+  (which may hold a Knowledge Box credential), API-key digests, the taxonomy, saved views, the
+  share register and the audit trail. Nothing in this repo backs it up; on a single Fly volume,
+  losing it loses every customisation. Raised in
+  [`sizing-deployment.md`](../architect-track/sizing-deployment.md).

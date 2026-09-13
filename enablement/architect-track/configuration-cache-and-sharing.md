@@ -190,12 +190,18 @@ ever reappears, the stall is back.
 
 ### What one is
 
-`POST /api/v1/calls/{id}/shares` with `{ ttlDays?, note? }` returns a `ShareLink`:
+`POST /api/v1/calls/{id}/shares` with `{ ttlDays?, note? }` returns a `ShareCreated` — the register's
+`ShareLink` plus the token and its URL, which this is the only response in the product ever to carry:
 
 ```json
-{ "token": "aAhCfSr_0G4WiAGDCz8gr7wv9QOU2iPPZNuhiNOlBuk", "callId": "…", "callTitle": "…",
-  "url": "/s/<token>", "createdISO": "…", "expiresISO": "…", "revoked": false, "expired": false }
+{ "id": "9f2c…64 hex chars…", "callId": "…", "callTitle": "…",
+  "token": "aAhCfSr_0G4WiAGDCz8gr7wv9QOU2iPPZNuhiNOlBuk", "url": "/s/<token>",
+  "createdISO": "…", "expiresISO": "…", "revoked": false, "expired": false }
 ```
+
+Every later read — `GET /api/v1/calls/{id}/shares`, the Settings register, the share drawer — returns
+`ShareLink`, which has the `id` and no `token` and no `url`. That is not redaction; the product does
+not hold them (see (a) below).
 
 - **Token:** `randomBytes(32).toString("base64url")` — 256 bits, never derived from the call id, so
   knowing a call gets you no closer to a link for it.
@@ -210,38 +216,77 @@ ever reappears, the stall is back.
 
 ### The two properties a security reviewer will challenge
 
-**(a) The token is stored in plaintext, while API keys are hashed.**
+**(a) The token is stored as a digest — and the argument for why it did not have to be is the
+better teaching material.**
 
-`services/shares.ts` uses the token *as the document id*. A leaked `shares.json` is a set of working
-links; a leaked `apikeys.json` is a set of useless digests. That asymmetry is deliberate, and the
-argument for it is about what each credential is worth: an API key authorises writes against the
-whole deployment, a share token authorises a read-only view of **one call** that the open read API
-already serves to anyone. Whether that argument holds depends entirely on the deployment — and this
-is the point to make to the customer, because on a deployment where `API_KEYS` **is** configured,
-the read API is *not* open, and the share token is then granting access that nothing else grants.
-**Recommendation for a review:** if the customer's deployment enforces API keys, raise plaintext
-share-token storage as a real finding, not a documented trade-off.
+This is the module's best worked example of a security argument that is *valid* and still not worth
+relying on, so present it in the order it actually went.
+
+**The original design.** `services/shares.ts` used the token *as the document id*. A leaked
+`shares.json` was a set of working links; a leaked `apikeys.json` was a set of useless digests. The
+asymmetry was deliberate, and the argument was about what each credential is worth: an API key
+authorises writes against the whole deployment, a share token authorises a read-only view of **one
+call** that the open read API already serves to anyone. Nobody hashes a pointer to a public page.
+
+**Why it was wrong anyway.** "The open read API already serves it to anyone" is a statement about a
+*configuration*, not about the code. On a deployment where `API_KEYS` **is** configured the read API
+is *not* open, and the share token is then granting access nothing else grants — a set of working
+credentials in the clear, in a file that ends up in backups, support bundles and mounted volumes. A
+property that holds in some deployments and not others cannot safely be a storage assumption,
+because the storage code is shared and the deployment is the customer's to change after the review
+is over.
+
+**What it is now.** `ShareDoc.id` is `createHash("sha256").update(token, "utf8").digest("hex")`.
+`createShare()` returns the token and its URL exactly once; `resolveShare()` hashes before lookup
+and **deliberately refuses a digest**, so the register's own listing is not a set of working links;
+`revokeShare()` accepts either, because the register knows only the digest while the person holding
+the link knows only the token, and both are legitimate ways to say "take it back".
+`migrateShares()` re-keys pre-hashing rows on first read — cheap enough on a capped collection to
+run on every read rather than behind a flag nobody would remember to set — so links already in
+someone's inbox keep working and the plaintext leaves disk.
+
+**What it cost, and why the price was payable.** The share drawer no longer offers "Copy" for an
+existing link: the product genuinely cannot reconstruct it, so a lost link is revoked and reissued.
+That is exactly the bargain the customer has already accepted for API keys, which is the argument to
+reach for when they push back.
+
+**The general point to leave a reviewer with:** ask what a security property *depends on*. If the
+answer is a configuration value the customer can change, it is not a property of the system.
 
 **(b) `POST` on shares is `auth: "api"`, not `"write"` — the one deliberate exception to D-CA-13.**
 
 The stated reasoning: a share writes *application* state (a pointer and an expiry), never touches
 the Knowledge Box, and grants no access the open read API does not already grant. A contract test
 pins the exception and requires the spec to explain it, which is the right way to hold a carve-out.
-The counter-argument is the same one as (a): "grants no access the read API does not" is a
-statement about a *configuration*, not about the code, and it stops being true the moment keys are
-enforced. And `GET /api/v1/shares/{token}` is unauthenticated by necessity — the token **is** the
+The counter-argument is the one (a) has just been through: "grants no access the read API does not"
+is a statement about a *configuration*, not about the code, and it stops being true the moment keys
+are enforced. And `GET /api/v1/shares/{token}` is unauthenticated by necessity — the token **is** the
 credential — so a share link is the one way data leaves this product without any deployment-level
-credential at all.
+credential at all. **This half is still open**, and the reason it is worth noting that (a) was fixed
+and (b) was not is that they are not the same kind of question: hashing at rest was a defect with an
+answer that suits every deployment, while the auth mode is a genuine trade-off whose right answer
+depends on whether the read API is open. Re-evaluate (b) on any deployment that enforces `API_KEYS`;
+a contract test pins the carve-out so that re-evaluation is a decision someone has to take
+deliberately rather than a line that quietly drifts.
 
-### The gap to name
+### The gap that was named, and what closed it
 
-**Creating and revoking a share link is not audited.** Settings, API keys, labelsets, agents,
-retention purges and job cancellations all write an `audit()` entry; `/api/v1/shares`,
-`/api/v1/views` and `/api/v1/calls` write none. So the trail can tell an operator who changed the
-rate limit, and cannot tell them who published a call transcript to an unauthenticated URL, or who
-deleted a recording. For a contact-centre product handling PHI, that is the audit gap to raise
-first. It is a small change — the `audit()` helper and `actorOf()` already exist and are called
-fifteen lines away in neighbouring routes.
+**Creating and revoking a share link used to be unaudited**, along with deleting a call. Settings,
+API keys, labelsets, agents, retention purges and job cancellations all wrote an `audit()` entry;
+`/api/v1/shares` and `/api/v1/calls` wrote none. So the trail could tell an operator who changed the
+rate limit and not who published a call transcript to an unauthenticated URL, or who deleted a
+recording — for a contact-centre product handling PHI, exactly the wrong half.
+
+It now records `share.create` and `share.revoke` (by digest — the token is never written to the
+trail, which would have reintroduced in `audit.json` precisely what (a) removed from `shares.json`),
+plus `call.delete` and `call.bulk-delete`. Saved views remain unaudited **on purpose**, and the
+distinction is the one to teach: a view is a named query over data the reader can already see, and
+it destroys nothing, so auditing it spends rows in a capped trail (5,000) without adding evidence.
+"Audit what destroys or publishes" is a sharper rule than "audit everything", and it is the rule to
+hold the next contributor to.
+
+What is still worth naming to a customer: the 5,000-row cap. If their evidence-retention requirement
+is longer than the volume of change that fills it, they need an export.
 
 > **Group exercise (5 min).** The customer asks for share links that expire in 10 minutes and are
 > single-use. What can this product do today, what cannot it do, and which of the two gaps would
@@ -249,8 +294,9 @@ fifteen lines away in neighbouring routes.
 > expressible; single-use has no representation at all — `resolveShare()` is a plain lookup with no
 > use counter. Both are small additions to `ShareDoc`. The interesting part is which they actually
 > need: a short TTL is usually a proxy for "I do not want this forwarded", which single-use serves
-> better, and neither survives a screenshot — so the real answer may be a watermark and an audit
-> entry rather than either.)*
+> better, and neither survives a screenshot — so the real answer may be a watermark rather than
+> either. The audit half of that answer already exists: `share.create` and `share.revoke` mean the
+> product can at least say who published what, and when it was taken back.)*
 
 ---
 
@@ -262,9 +308,11 @@ fifteen lines away in neighbouring routes.
 2. **The stall was a cache-lifetime offset, not a cache-size or TTL problem.** The fix removed a
    cache. When a screen re-reads what another screen is about to need, the warming relationship
    between them is part of the design.
-3. **Share links are the one credential in this product that is worth exactly as much as the
-   deployment's read posture makes them worth.** Review them against the configuration, not against
-   the code.
+3. **A security property that depends on a configuration value is not a property.** Share tokens
+   were stored in clear on a valid argument — a share grants no more than the open read API — that
+   was true only while the read API stayed open. Hashing them removed the dependency; the
+   `auth: "api"` carve-out still has one, which is why that half is reviewed against the customer's
+   configuration and the storage half no longer needs to be.
 
 ## Read next
 

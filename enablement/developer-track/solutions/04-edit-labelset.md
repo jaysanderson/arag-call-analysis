@@ -76,10 +76,30 @@ operator  agent.start      {"agent": "resource-labeler", "taskId": "8e733385-…
 
 ## The reset
 
-The `PUT`-the-original-back block in the exercise was executed verbatim and returned `200`, with
-`Escalated`'s description restored to `"Routed to a supervisor, specialist team, or grievance
-process."`. After a labeler run and a cache invalidation the facets returned to exactly
-`Resolved 10, Follow-up Required 3`.
+```
+POST /api/v1/labelsets/call_outcome/reset   → 200
+  {"labelset": {"id": "call_outcome", …}, "provisioned": true}
+```
+
+One request, and `Escalated`'s description was back to `"Routed to a supervisor, specialist team, or
+grievance process."` — restored in the store *and* re-provisioned to the Knowledge Box. After a
+labeler run and a cache invalidation the facets returned to exactly
+`Resolved 10, Follow-up Required 3`, and the audit trail gained:
+
+```
+operator  labelset.reset   {"id": "call_outcome", "labels": 5}
+```
+
+Two things this makes concrete, both of which the earlier version of this exercise could only
+describe in the negative because the route did not exist:
+
+- **The reset covers the definition and the provisioning, not the labels.** The facet counts do not
+  move until the labeler runs again. That is the same three-way split as the edit, and it is why the
+  exercise's *Put it back* has three commands rather than one.
+- **It only works on shipped labelsets.** `restoreLabelset()` looks the id up in `ALL_LABELSETS` and
+  throws `notFound("Shipped labelset")` if it is not there, so resetting a labelset created through
+  `POST /api/v1/labelsets` is a `404`. There is nothing to restore a partner's own vocabulary *to*,
+  and inventing an empty definition to "reset" it to would be worse than refusing.
 
 ## Answers
 
@@ -102,8 +122,11 @@ leaves the call unfinished) rather than its surrounding vocabulary, re-provision
 re-count. **How you would know you had fixed it is the harder half**, and the honest answer is that
 this product gives you no way to tell beyond eyeballing facet counts: there is no labelled
 evaluation set, no way to try a description against a sample before applying it, and no diff of
-"which calls changed label and why" after a run. For a deployment where the taxonomy is the
-product, that is the gap to raise — see `enablement/architect-track/WORKSHOP.md` §4.
+"which calls changed label and why" after a run. **That gap is still open**, and the reset does not
+close it: reversibility is not rehearsal. Knowing you can undo an edit makes it safe to experiment
+on thirteen sample calls; it does nothing for an operator who has just re-labelled eight thousand
+real ones and has no way to see what moved. For a deployment where the taxonomy is the product, that
+is the gap to raise — see `enablement/architect-track/WORKSHOP.md` §4.
 
 **3. Why does the path `id` always win over a body `id`?**
 
