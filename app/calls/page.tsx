@@ -27,12 +27,13 @@ export default async function CallsPage() {
           ) : undefined
         }
       />
-      <div className="arag-pagebody">
+      <div className="arag-content">
         <Suspense fallback={<TableSkeleton rows={8} cols={8} />}>
           <CallsWorkspace canWrite={features.deletes} />
         </Suspense>
         <ApiMeta>
-          <code>GET /api/v1/calls</code> and <code>GET /api/v1/labelsets</code>
+          <code>GET /api/v1/calls</code>, <code>GET /api/v1/labelsets</code>,{" "}
+          <code>GET|POST|PUT|DELETE /api/v1/views</code> and <code>DELETE /api/v1/jobs/{"{id}"}</code>
         </ApiMeta>
       </div>
     </>

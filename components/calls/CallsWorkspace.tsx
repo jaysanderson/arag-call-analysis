@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CategoryRails } from "@/components/CategoryRails";
-import { IconExport, IconRefresh, IconSearch, IconTrash, MediaIcon } from "@/components/icons";
+import { IconExport, IconRefresh, IconSearch, IconStop, IconTrash, MediaIcon } from "@/components/icons";
 import {
   ConfirmDialog,
   EmptyState,
@@ -22,19 +22,39 @@ import { Chip } from "@/components/ui";
 import { colorFor, fmtTime, SENTIMENT_COLOR } from "@/lib/format";
 import { CALL_LIFECYCLES, LIFECYCLE_COPY } from "@/lib/lifecycle";
 import type { CallSummary } from "@/lib/types";
+import { ColumnsMenu } from "./ColumnsMenu";
+import {
+  type CallColumn,
+  type CallSortKey,
+  COLUMNS_STORAGE_KEY,
+  DEFAULT_COLUMNS,
+  DENSITY_STORAGE_KEY,
+  type Density,
+  describeTable,
+  isSortKey,
+  parseColumns,
+  parseDensity,
+  serialiseColumns,
+  toggleColumn,
+  visibleColumns,
+} from "./columns";
+import { DateRangeFilter, formatBound } from "./DateRangeFilter";
 import { LifecycleChip } from "./LifecycleChip";
+import { SavedViews } from "./SavedViews";
+import { normaliseCallsQuery } from "./view-query";
 
 /**
- * The calls screen: a real data table (search, facet filters, sort, pagination, selection, bulk
- * actions) with the existing category rails kept as a Browse mode.
+ * The calls screen: a real data table (search, facet filters, a date window, sort, pagination,
+ * selection, bulk actions, configurable columns) with the existing category rails kept as a
+ * Browse mode.
  *
  * Every filter lives in the URL, so a view is shareable, back-navigable and bookmarkable, and the
  * dashboard's drill-throughs are ordinary links rather than client-side state hand-offs. Selection
  * deliberately does *not* live in the URL: a link someone sends should carry the question, not a
- * transient set of ticked boxes.
+ * transient set of ticked boxes. Nor do the columns and the row density — those are the reader's
+ * own furniture, so they live in `localStorage` (see `columns.ts`), and a saved view carries the
+ * question to a colleague without also rearranging their table.
  */
-
-type SortKey = "created" | "title" | "duration" | "agent" | "sentiment" | "compliance" | "csat";
 
 interface FacetCount {
   labelset: string;
@@ -86,13 +106,56 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
     }
   }, [mode]);
 
+  /**
+   * Column and density preferences.
+   *
+   * Read after mount rather than during render: the server has no `localStorage`, so reading it
+   * initially would make the first client render disagree with the markup Next.js sent and
+   * hydration would tear the table apart. The default set is therefore what is drawn for one
+   * frame, which is also what a first-time reader gets.
+   */
+  const [columnKeys, setColumnKeys] = useState<string[]>([...DEFAULT_COLUMNS]);
+  const [density, setDensity] = useState<Density>("comfortable");
+
+  useEffect(() => {
+    try {
+      setColumnKeys(parseColumns(localStorage.getItem(COLUMNS_STORAGE_KEY)));
+      setDensity(parseDensity(localStorage.getItem(DENSITY_STORAGE_KEY)));
+    } catch {
+      /* private mode: the defaults stand */
+    }
+  }, []);
+
+  const persistColumns = (next: string[]) => {
+    setColumnKeys(next);
+    try {
+      localStorage.setItem(COLUMNS_STORAGE_KEY, serialiseColumns(next));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const persistDensity = (next: Density) => {
+    setDensity(next);
+    try {
+      localStorage.setItem(DENSITY_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const columns = useMemo(() => visibleColumns(columnKeys), [columnKeys]);
+
   const q = params.get("q") ?? "";
   const labels = useMemo(() => params.getAll("label"), [params]);
   const agent = params.get("agent") ?? "";
   const queue = params.get("queue") ?? "";
   const mediaType = params.get("media_type") ?? "";
   const lifecycle = params.get("lifecycle") ?? "";
-  const sortKey = (params.get("sort") as SortKey | null) ?? "created";
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
+  const rawSort = params.get("sort");
+  const sortKey: CallSortKey = isSortKey(rawSort) ? rawSort : "created";
   const order = (params.get("order") as "asc" | "desc" | null) ?? "desc";
   const page = Number(params.get("page") ?? 1) || 1;
   const pageSize = Number(params.get("page_size") ?? 25) || 25;
@@ -151,12 +214,20 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
     if (queue) s.set("queue", queue);
     if (mediaType) s.set("media_type", mediaType);
     if (lifecycle) s.set("lifecycle", lifecycle);
+    if (from) s.set("from", from);
+    if (to) s.set("to", to);
     s.set("sort", sortKey);
     s.set("order", order);
     s.set("page", String(page));
     s.set("page_size", String(pageSize));
     return s.toString();
-  }, [q, labels, agent, queue, mediaType, lifecycle, sortKey, order, page, pageSize]);
+  }, [q, labels, agent, queue, mediaType, lifecycle, from, to, sortKey, order, page, pageSize]);
+
+  /**
+   * The URL as a saved view would store it: the allowlisted parameters only, in a fixed order, so
+   * "is this a saved view?" is a string comparison rather than a guess.
+   */
+  const viewQuery = useMemo(() => normaliseCallsQuery(params.toString()), [params]);
 
   /**
    * One in-flight list request at a time.
@@ -216,7 +287,7 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
   const toggleLabel = (key: string) =>
     setParams({ label: labels.includes(key) ? labels.filter((l) => l !== key) : [...labels, key] });
 
-  const onSort = (key: SortKey) =>
+  const onSort = (key: CallSortKey) =>
     setParams({ sort: key, order: sortKey === key && order === "desc" ? "asc" : "desc" });
 
   const clearAll = () => {
@@ -278,6 +349,10 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
           },
         ]
       : []),
+    // The two date bounds are separate chips so widening one end of the window does not cost the
+    // other: a drill-through from the dashboard usually needs loosening, not discarding.
+    ...(from ? [{ label: `From ${formatBound(from)}`, clear: () => setParams({ from: null }) }] : []),
+    ...(to ? [{ label: `To ${formatBound(to)}`, clear: () => setParams({ to: null }) }] : []),
     ...(q ? [{ label: `Search: ${q}`, clear: () => setSearch("") }] : []),
   ];
 
@@ -348,6 +423,33 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
               onToggle={(v) => setParams({ lifecycle: lifecycle === v ? null : v })}
               options={CALL_LIFECYCLES.map((l) => ({ value: l, label: LIFECYCLE_COPY[l].label }))}
             />
+            <DateRangeFilter
+              from={from}
+              to={to}
+              onChange={(nextFrom, nextTo) => setParams({ from: nextFrom, to: nextTo })}
+            />
+
+            <span className="spacer" />
+
+            {/* Anyone may open a saved view; creating, renaming and deleting one is gated on the
+                same write capability as the rest of the screen, because a view is shared team
+                state — a reader who cannot delete a call should not be able to delete the
+                definition of the queue their colleagues work from. */}
+            <SavedViews query={viewQuery} canEdit={canWrite} onNotify={show} />
+            <ColumnsMenu
+              columns={columnKeys}
+              onToggle={(key) => persistColumns(toggleColumn(columnKeys, key))}
+              onReset={() => persistColumns([...DEFAULT_COLUMNS])}
+            />
+            <Segmented
+              label="Row density"
+              value={density}
+              onChange={persistDensity}
+              options={[
+                { value: "comfortable" as Density, label: "Comfortable" },
+                { value: "compact" as Density, label: "Compact" },
+              ]}
+            />
           </>
         )}
       </div>
@@ -380,12 +482,12 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
         ) : resolvedMode === "browse" ? (
           <BrowseMode />
         ) : loading && !data ? (
-          <TableSkeleton rows={8} cols={8} />
+          <TableSkeleton rows={8} cols={columns.length + 2} />
         ) : data && data.items.length === 0 ? (
           <EmptyState
             title={
               searchOnly
-                ? `No call mentions \u201c${q}\u201d`
+                ? `No call mentions “${q}”`
                 : activeFilters.length > 0
                   ? "No calls match these filters"
                   : "No calls yet"
@@ -415,7 +517,12 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
             }
           />
         ) : data ? (
-          <div className="arag-datatable" data-testid="calls-table" aria-busy={loading}>
+          <div
+            className={`arag-datatable${density === "compact" ? " compact" : ""}`}
+            data-testid="calls-table"
+            data-density={density}
+            aria-busy={loading}
+          >
             {selected.size > 0 ? (
               <div className="arag-bulkbar" data-testid="bulk-bar">
                 <span className="count">{selected.size} selected</span>
@@ -446,7 +553,7 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
             <div className="scroll">
               <table>
                 <caption className="arag sr-only">
-                  {data.total} call{data.total === 1 ? "" : "s"}, sorted by {sortKey}, {order}ending
+                  {describeTable({ total: data.total, sortKey, order, columns })}
                 </caption>
                 <thead>
                   <tr>
@@ -460,44 +567,17 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
                         }
                       />
                     </th>
-                    <SortableHeader
-                      label="Call"
-                      sortKey="title"
-                      sort={{ key: sortKey, order }}
-                      onSort={onSort}
-                    />
-                    <SortableHeader
-                      label="Date"
-                      sortKey="created"
-                      sort={{ key: sortKey, order }}
-                      onSort={onSort}
-                      width={104}
-                    />
-                    <SortableHeader
-                      label="Duration"
-                      sortKey="duration"
-                      sort={{ key: sortKey, order }}
-                      onSort={onSort}
-                      align="right"
-                      width={84}
-                    />
-                    <SortableHeader
-                      label="Agent / Queue"
-                      sortKey="agent"
-                      sort={{ key: sortKey, order }}
-                      onSort={onSort}
-                      width={136}
-                    />
-                    <SortableHeader label="Reason" width={140} />
-                    <SortableHeader label="Outcome" width={126} />
-                    <SortableHeader
-                      label="Sentiment"
-                      sortKey="sentiment"
-                      sort={{ key: sortKey, order }}
-                      onSort={onSort}
-                      width={104}
-                    />
-                    <SortableHeader label="Status" width={122} />
+                    {columns.map((col) => (
+                      <SortableHeader
+                        key={col.key}
+                        label={col.label}
+                        sortKey={col.sortKey}
+                        sort={col.sortKey ? { key: sortKey, order } : undefined}
+                        onSort={col.sortKey ? onSort : undefined}
+                        align={col.align}
+                        width={col.width}
+                      />
+                    ))}
                     <th scope="col" style={{ width: 44 }}>
                       <span className="arag sr-only">Row actions</span>
                     </th>
@@ -508,6 +588,7 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
                     <CallRow
                       key={c.id}
                       call={c}
+                      columns={columns}
                       canWrite={canWrite}
                       onChanged={load}
                       onCopied={show}
@@ -558,34 +639,34 @@ export function CallsWorkspace({ canWrite }: { canWrite: boolean }) {
   );
 }
 
-function CallRow({
-  call,
-  selected,
-  onSelect,
-  onChanged,
-  onCopied,
-  canWrite,
-}: {
-  call: CallSummary;
-  selected: boolean;
-  onSelect: (on: boolean) => void;
-  onChanged: () => void;
-  onCopied: (message: string, tone?: "error") => void;
-  canWrite: boolean;
-}) {
-  const date = call.createdISO ? new Date(call.createdISO) : null;
-  const flags = call.labels.filter((l) => l.labelset === "disposition_flags").slice(0, 2);
-  return (
-    <tr aria-selected={selected}>
-      <td>
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={(e) => onSelect(e.target.checked)}
-          aria-label={`Select ${call.title}`}
-        />
-      </td>
-      <td>
+/** Sentence case in the cell, lower case on the wire: `media_type=audio` is the filter value. */
+const MEDIA_LABEL: Record<string, string> = {
+  audio: "Audio",
+  video: "Video",
+  transcript: "Transcript",
+};
+
+/** A dash that reads as "nothing here", never a blank cell that reads as a broken one. */
+function Blank() {
+  return <span className="cell-sub">—</span>;
+}
+
+function Flag({ on }: { on?: boolean }) {
+  if (on === undefined) return <Blank />;
+  return on ? (
+    <Chip label="Yes" className="bg-danger-bg text-danger-fg" />
+  ) : (
+    <span className="cell-sub">No</span>
+  );
+}
+
+/** One table cell. Kept as a lookup so adding a column is a row in `CALL_COLUMNS` plus a case. */
+function Cell({ column, call }: { column: CallColumn; call: CallSummary }) {
+  const m = call.metrics;
+  switch (column.key) {
+    case "call": {
+      const flags = call.labels.filter((l) => l.labelset === "disposition_flags").slice(0, 2);
+      return (
         <div style={{ display: "flex", gap: 8 }}>
           <span style={{ color: "var(--arag-text-subtle)", paddingTop: 1 }}>
             <MediaIcon type={call.mediaType} size={16} />
@@ -603,96 +684,219 @@ function CallRow({
             )}
           </div>
         </div>
-      </td>
-      <td>
-        {date ? (
-          <>
-            <div>{date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}</div>
-            <div className="cell-sub">
-              {date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}
-            </div>
-          </>
-        ) : (
-          <span className="cell-sub">Unknown</span>
-        )}
-      </td>
-      <td className="num">{call.durationSec ? fmtTime(call.durationSec) : "—"}</td>
-      <td>
-        <div>{call.agentName ?? "—"}</div>
-        {call.queue && <div className="cell-sub">{call.queue}</div>}
-      </td>
-      <td>
-        {call.metrics?.call_reason ? (
-          <Chip label={call.metrics.call_reason} className={colorFor(call.metrics.call_reason)} />
-        ) : (
-          <span className="cell-sub">—</span>
-        )}
-      </td>
-      <td>
-        {call.metrics?.outcome ? (
-          <Chip label={call.metrics.outcome} className={colorFor(call.metrics.outcome)} />
-        ) : (
-          <span className="cell-sub">—</span>
-        )}
-      </td>
-      <td>
-        {call.metrics?.sentiment ? (
-          <Chip label={call.metrics.sentiment} className={SENTIMENT_COLOR[call.metrics.sentiment]} />
-        ) : (
-          <span className="cell-sub">—</span>
-        )}
-      </td>
-      <td>
-        <LifecycleChip state={call.lifecycle} />
-      </td>
-      <td>
-        <KebabMenu label={`Actions for ${call.title}`}>
-          {(close) => (
-            <>
-              <Link href={`/calls/${call.id}`} onClick={close}>
-                Open the call
-              </Link>
-              <a href={`/api/v1/calls/${call.id}/export?format=json`} download onClick={close}>
-                <IconExport size={15} /> Export this call
-              </a>
-              {canWrite && (
+      );
+    }
+    case "created": {
+      const date = call.createdISO ? new Date(call.createdISO) : null;
+      if (!date) return <span className="cell-sub">Unknown</span>;
+      return (
+        <>
+          <div>{date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}</div>
+          <div className="cell-sub">
+            {date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })}
+          </div>
+        </>
+      );
+    }
+    case "duration":
+      return call.durationSec ? fmtTime(call.durationSec) : "—";
+    case "agent":
+      return (
+        <>
+          <div>{call.agentName ?? "—"}</div>
+          {call.queue && <div className="cell-sub">{call.queue}</div>}
+        </>
+      );
+    case "queue":
+      return call.queue ? call.queue : <Blank />;
+    case "reason":
+      return m?.call_reason ? <Chip label={m.call_reason} className={colorFor(m.call_reason)} /> : <Blank />;
+    case "outcome":
+      return m?.outcome ? <Chip label={m.outcome} className={colorFor(m.outcome)} /> : <Blank />;
+    case "sentiment":
+      return m?.sentiment ? <Chip label={m.sentiment} className={SENTIMENT_COLOR[m.sentiment]} /> : <Blank />;
+    case "status":
+      return <LifecycleChip state={call.lifecycle} />;
+    case "csat":
+      return typeof m?.csat_estimate === "number" ? m.csat_estimate.toFixed(1) : <Blank />;
+    case "compliance":
+      return typeof m?.compliance_score === "number" ? String(Math.round(m.compliance_score)) : <Blank />;
+    case "lob":
+      return m?.line_of_business ? (
+        <Chip label={m.line_of_business} className={colorFor(m.line_of_business)} />
+      ) : (
+        <Blank />
+      );
+    case "media":
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <MediaIcon type={call.mediaType} size={14} />
+          {MEDIA_LABEL[call.mediaType] ?? call.mediaType}
+        </span>
+      );
+    case "complaint":
+      return <Flag on={m?.complaint} />;
+    case "escalated":
+      return <Flag on={m?.escalated} />;
+    default:
+      return <Blank />;
+  }
+}
+
+function CallRow({
+  call,
+  columns,
+  selected,
+  onSelect,
+  onChanged,
+  onCopied,
+  canWrite,
+}: {
+  call: CallSummary;
+  columns: readonly CallColumn[];
+  selected: boolean;
+  onSelect: (on: boolean) => void;
+  onChanged: () => void;
+  onCopied: (message: string, tone?: "error") => void;
+  canWrite: boolean;
+}) {
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  // A call that has not been picked up, or is still being transcribed, still has a live ingest
+  // job behind it. Once it is being labelled the job is done and there is nothing left to stop.
+  const cancellable = call.lifecycle === "queued" || call.lifecycle === "transcribing";
+
+  const cancel = async () => {
+    setCancelling(true);
+    try {
+      // Ingest jobs are keyed by `ref = callId`, so the call's own job is looked up rather than
+      // stored on the call. `ref` is sent for the server that filters on it and the result is
+      // matched here as well, so this works against either.
+      const res = await fetch(`/api/v1/jobs?ref=${encodeURIComponent(call.id)}&kind=ingest-call&limit=200`);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.detail ?? body?.title ?? `Request failed (${res.status})`);
+      const job = ((body.items ?? []) as Array<{ id: string; ref?: string; status: string }>).find(
+        (j) => j.ref === call.id && (j.status === "queued" || j.status === "running"),
+      );
+      if (!job)
+        throw new Error(
+          "No ingest job for this call is still running, so there is nothing left to cancel. Refresh the list to see where it got to.",
+        );
+      const del = await fetch(`/api/v1/jobs/${job.id}`, { method: "DELETE" });
+      if (!del.ok) {
+        const problem = await del.json().catch(() => null);
+        throw new Error(problem?.detail ?? problem?.title ?? `Request failed (${del.status})`);
+      }
+      onCopied("Processing cancelled");
+      setConfirmCancel(false);
+      onChanged();
+    } catch (e) {
+      onCopied((e as Error).message, "error");
+      setConfirmCancel(false);
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  return (
+    <>
+      <tr aria-selected={selected}>
+        <td>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => onSelect(e.target.checked)}
+            aria-label={`Select ${call.title}`}
+          />
+        </td>
+        {columns.map((col) => (
+          <td key={col.key} className={col.align === "right" ? "num" : undefined}>
+            <Cell column={col} call={call} />
+          </td>
+        ))}
+        <td>
+          <KebabMenu label={`Actions for ${call.title}`}>
+            {(close) => (
+              <>
+                <Link href={`/calls/${call.id}`} onClick={close}>
+                  Open the call
+                </Link>
+                <a href={`/api/v1/calls/${call.id}/export?format=json`} download onClick={close}>
+                  <IconExport size={15} /> Export this call
+                </a>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      close();
+                      try {
+                        const res = await fetch(`/api/v1/calls/${call.id}/reanalyze`, { method: "POST" });
+                        if (!res.ok) throw new Error((await res.json())?.detail ?? "Request failed");
+                        onCopied("Re-analysis queued");
+                        onChanged();
+                      } catch (e) {
+                        onCopied((e as Error).message, "error");
+                      }
+                    }}
+                  >
+                    <IconRefresh size={15} /> Re-run analysis
+                  </button>
+                )}
+                {canWrite && cancellable && (
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => {
+                      close();
+                      setConfirmCancel(true);
+                    }}
+                  >
+                    <IconStop size={15} /> Cancel processing
+                  </button>
+                )}
+                <div className="sep" />
                 <button
                   type="button"
                   onClick={async () => {
                     close();
                     try {
-                      const res = await fetch(`/api/v1/calls/${call.id}/reanalyze`, { method: "POST" });
-                      if (!res.ok) throw new Error((await res.json())?.detail ?? "Request failed");
-                      onCopied("Re-analysis queued");
-                      onChanged();
-                    } catch (e) {
-                      onCopied((e as Error).message, "error");
+                      await navigator.clipboard.writeText(`${window.location.origin}/calls/${call.id}`);
+                      onCopied("Link copied");
+                    } catch {
+                      onCopied("Your browser refused clipboard access.", "error");
                     }
                   }}
                 >
-                  <IconRefresh size={15} /> Re-run analysis
+                  Copy link to this call
                 </button>
-              )}
-              <div className="sep" />
-              <button
-                type="button"
-                onClick={async () => {
-                  close();
-                  try {
-                    await navigator.clipboard.writeText(`${window.location.origin}/calls/${call.id}`);
-                    onCopied("Link copied");
-                  } catch {
-                    onCopied("Your browser refused clipboard access.", "error");
-                  }
-                }}
-              >
-                Copy link to this call
-              </button>
+              </>
+            )}
+          </KebabMenu>
+        </td>
+      </tr>
+
+      {confirmCancel && (
+        <ConfirmDialog
+          title={`Stop processing “${call.title}”?`}
+          body={
+            <>
+              <p>
+                Transcription and analysis stop where they are. The Knowledge Box resource already created for
+                this call is <strong>not</strong> removed — the call stays in the list and shows as
+                incomplete.
+              </p>
+              <p>To get rid of it entirely, delete the call instead.</p>
             </>
-          )}
-        </KebabMenu>
-      </td>
-    </tr>
+          }
+          confirmLabel="Cancel processing"
+          danger
+          busy={cancelling}
+          onConfirm={() => void cancel()}
+          onCancel={() => setConfirmCancel(false)}
+        />
+      )}
+    </>
   );
 }
 

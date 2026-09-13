@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { AdminShell, JsonView, Panel, StateBlock, useAdminData } from "@/components/admin/AdminShell";
+import {
+  AdminShell,
+  adminFetch,
+  JsonView,
+  Panel,
+  StateBlock,
+  useAdminData,
+} from "@/components/admin/AdminShell";
+import { IconRefresh, IconStop } from "@/components/icons";
+import { ConfirmDialog, StateChip, type StateTone, useToast } from "@/components/kit";
 
 type JobEvent = { ts: string; stage: string; status: string; message?: string; ms?: number };
 type Job = {
@@ -19,86 +28,174 @@ type Job = {
   durationsMs: Record<string, number>;
 };
 
-const STATUS_STYLE: Record<string, string> = {
-  succeeded: "bg-accent-fill-soft text-accent-fg-light",
-  running: "bg-warn-bg text-warn-fg",
-  queued: "bg-brand-50 text-brand-700",
-  failed: "bg-danger-bg text-danger-fg",
-  cancelled: "bg-slate-100 text-slate-600",
+const TONE: Record<string, StateTone> = {
+  succeeded: "ok",
+  running: "warn",
+  queued: "neutral",
+  failed: "error",
+  cancelled: "muted",
 };
 
+/** A job that has not finished can still be stopped. */
+const isLive = (status: string) => status === "queued" || status === "running";
+
 export default function AdminJobsPage() {
-  const { data, error, loading } = useAdminData<{ items: Job[] }>("/api/v1/jobs?limit=50", 5_000);
+  const { data, error, loading, reload } = useAdminData<{ items: Job[] }>("/api/v1/jobs?limit=50", 5_000);
   const [selected, setSelected] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<Job | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { toast, show } = useToast();
   const job = data?.items.find((j) => j.id === selected) ?? null;
 
+  const cancel = async (target: Job) => {
+    setBusy(true);
+    try {
+      await adminFetch(`/api/v1/jobs/${target.id}`, { method: "DELETE" });
+      show(`${target.kind} cancelled`);
+      reload();
+    } catch (e) {
+      // A job that finished between the click and the request returns 409; the operator needs to
+      // see that, not a generic failure.
+      show((e as Error).message, "error");
+    } finally {
+      setBusy(false);
+      setConfirming(null);
+    }
+  };
+
   return (
-    <AdminShell title="Jobs" description="Call ingestion and provisioning runs, with per-stage timings.">
+    <AdminShell
+      title="Jobs"
+      description="Call ingestion and provisioning runs, with per-stage timings."
+      actions={
+        <button type="button" className="arag-btn secondary sm" onClick={reload}>
+          <IconRefresh size={14} /> Refresh
+        </button>
+      }
+    >
       <StateBlock loading={loading} error={error} empty={data?.items.length === 0}>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="arag-split">
           <Panel title="Recent jobs">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-                  <th className="pb-2">Kind</th>
-                  <th className="pb-2">Status</th>
-                  <th className="pb-2">Stage</th>
-                  <th className="pb-2">Started</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.items ?? []).map((j) => (
-                  <tr
-                    key={j.id}
-                    onClick={() => setSelected(j.id)}
-                    className={`cursor-pointer border-b border-brand-50 last:border-0 hover:bg-brand-50/60 ${
-                      selected === j.id ? "bg-brand-50" : ""
-                    }`}
-                  >
-                    <td className="py-1.5 font-mono text-xs">{j.kind}</td>
-                    <td className="py-1.5">
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[j.status] ?? ""}`}
-                      >
-                        {j.status}
-                      </span>
-                    </td>
-                    <td className="py-1.5 text-xs text-slate-500">{j.stage ?? "—"}</td>
-                    <td className="py-1.5 text-xs text-slate-400">
-                      {new Date(j.createdAt).toISOString().slice(11, 19)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="arag-datatable" data-testid="jobs-table">
+              <div className="scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Kind</th>
+                      <th scope="col" style={{ width: 108 }}>
+                        Status
+                      </th>
+                      <th scope="col">Stage</th>
+                      <th scope="col" style={{ width: 84 }}>
+                        Started
+                      </th>
+                      <th scope="col" style={{ width: 92 }}>
+                        <span className="arag sr-only">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.items ?? []).map((j) => (
+                      <tr key={j.id} aria-selected={selected === j.id}>
+                        <td>
+                          <button
+                            type="button"
+                            className="cell-title"
+                            style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}
+                            onClick={() => setSelected(j.id)}
+                          >
+                            {j.kind}
+                          </button>
+                          {j.ref && <div className="cell-sub mono">{j.ref.slice(0, 12)}…</div>}
+                        </td>
+                        <td>
+                          <StateChip tone={TONE[j.status] ?? "neutral"} busy={j.status === "running"}>
+                            {j.status}
+                          </StateChip>
+                        </td>
+                        <td className="cell-sub">{j.stage ?? "—"}</td>
+                        <td className="cell-sub mono">{new Date(j.createdAt).toISOString().slice(11, 19)}</td>
+                        <td>
+                          {isLive(j.status) && (
+                            <button
+                              type="button"
+                              className="arag-btn ghost sm"
+                              onClick={() => setConfirming(j)}
+                              data-testid={`cancel-${j.id}`}
+                            >
+                              <IconStop size={13} /> Cancel
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </Panel>
           <Panel title={job ? `Job ${job.id.slice(0, 8)}…` : "Select a job"}>
             {job ? (
-              <div className="space-y-3">
+              <div className="arag-stack">
                 {job.error && (
-                  <div className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger-fg">
-                    {job.error.message}
+                  <div className="arag-alert error" role="alert">
+                    <div>{job.error.message}</div>
                   </div>
                 )}
-                <ol className="space-y-1.5">
+                <ol className="arag-timeline">
                   {job.events.map((e, i) => (
-                    <li key={`${e.ts}-${i}`} className="flex items-baseline gap-2 text-sm">
-                      <span className="font-mono text-[11px] text-slate-400">{e.ts.slice(11, 19)}</span>
-                      <span className="font-medium text-ink-950">{e.stage}</span>
-                      <span className="text-xs text-slate-500">{e.status}</span>
-                      {typeof e.ms === "number" && <span className="text-xs text-slate-400">{e.ms} ms</span>}
-                      {e.message && <span className="truncate text-xs text-slate-500">{e.message}</span>}
+                    <li key={`${e.ts}-${i}`}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                        <span className="mono" style={{ fontSize: 11, color: "var(--arag-text-subtle)" }}>
+                          {e.ts.slice(11, 19)}
+                        </span>
+                        <strong style={{ fontSize: 13 }}>{e.stage}</strong>
+                        <span className="small" style={{ color: "var(--arag-text-muted)" }}>
+                          {e.status}
+                        </span>
+                        {typeof e.ms === "number" && (
+                          <span className="small" style={{ color: "var(--arag-text-subtle)" }}>
+                            {e.ms} ms
+                          </span>
+                        )}
+                      </div>
+                      {e.message && (
+                        <div className="small" style={{ color: "var(--arag-text-muted)" }}>
+                          {e.message}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ol>
                 <JsonView data={job} />
               </div>
             ) : (
-              <p className="text-sm text-slate-400">Pick a job on the left to see its stages.</p>
+              <p className="small" style={{ color: "var(--arag-text-subtle)" }}>
+                Pick a job on the left to see its stages.
+              </p>
             )}
           </Panel>
         </div>
       </StateBlock>
+
+      {confirming && (
+        <ConfirmDialog
+          title={`Cancel this ${confirming.kind} job?`}
+          body={
+            <p>
+              The job stops at its current stage. Work already committed upstream is not undone — a cancelled
+              ingestion leaves the Knowledge Box resource it had already created, and the call will show as
+              incomplete rather than disappearing.
+            </p>
+          }
+          confirmLabel="Cancel the job"
+          danger
+          busy={busy}
+          onConfirm={() => cancel(confirming)}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
+      {toast}
     </AdminShell>
   );
 }

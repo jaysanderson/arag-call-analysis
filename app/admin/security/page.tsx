@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { AdminShell, KeyValues, Panel, StateBlock, useAdminData } from "@/components/admin/AdminShell";
 import { StateChip } from "@/components/kit";
 
@@ -86,13 +88,22 @@ export default function AdminSecurityPage() {
 
             <Panel title="API keys">
               <p className="small" style={{ marginTop: 0 }}>
-                Keys come from the <code className="mono">API_KEYS</code> environment variable. Issuing and
-                revoking them from inside the product is not implemented yet; rotate them by changing the
-                variable and restarting.
+                Keys are issued, named and revoked in the product and stored as SHA-256 digests — the key
+                material is shown once, on creation, and never again. <code className="mono">API_KEYS</code>{" "}
+                is a one-time seed for a fresh deployment: each value is imported as a managed key on first
+                boot, after which it is managed like any other.
               </p>
-              <a href="/api/v1/docs" className="arag-btn secondary sm">
-                API reference
-              </a>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Link href="/settings?tab=api-keys" className="arag-btn secondary sm">
+                  Manage API keys
+                </Link>
+                <Link href="/admin/audit" className="arag-btn secondary sm">
+                  Audit trail
+                </Link>
+                <a href="/api/v1/docs" className="arag-btn secondary sm">
+                  API reference
+                </a>
+              </div>
             </Panel>
           </div>
         )}
