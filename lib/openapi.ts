@@ -614,6 +614,7 @@ const schemas: Record<string, unknown> = {
       lastUsedISO: { type: "string", description: "Recorded at most once a minute per key." },
       revoked: { type: "boolean" },
       fromEnv: { type: "boolean", description: "Imported from the `API_KEYS` seed." },
+      purged: { type: "boolean", description: "Present on a purge: the record was deleted too." },
       createdBy: { type: "string" },
     },
   },
@@ -1455,9 +1456,17 @@ const paths: Record<string, Record<string, unknown>> = {
       tags: ["API keys"],
       summary: "Revoke an API key",
       description:
-        "Revokes rather than deletes: the record of a key that once had access, and when it was last used, is exactly what an incident review needs.",
+        "Revokes rather than deletes: the record of a key that once had access, and when it was last used, is exactly what an incident review needs. `purge=true` removes the row as well — which destroys that record, and is also the only way to reopen an API that keys have closed, because enforcement is sticky once a deployment has ever had a key.",
       security: [{ AdminToken: [] }],
-      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } }],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", maxLength: 64 } },
+        {
+          name: "purge",
+          in: "query",
+          schema: { type: "boolean", default: false },
+          description: "Also delete the record, reopening the API if this was the last key.",
+        },
+      ],
       responses: { 200: jsonResponse(ref("ApiKey"), "The revoked key"), ...problemResponses },
     },
   },

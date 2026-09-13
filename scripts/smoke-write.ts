@@ -295,14 +295,18 @@ async function main(): Promise<void> {
 
     // ── 6. share link: created, resolved, revoked ───────────────────────────
     if (createdCallId) {
+      // Credentialed: issuing a key above closed the API to anonymous callers, which is the
+      // point of sticky enforcement (D-CA-46). Resolving a token stays public — the token is the
+      // credential — so that read is deliberately left unauthenticated.
       const share = await api<{ token: string }>("POST", `/api/v1/calls/${createdCallId}/shares`, {
         json: { ttlDays: 1, note: "live write smoke" },
+        admin: true,
       });
       const resolved = await api("GET", `/api/v1/shares/${share.json?.token}`);
       share.status === 201 && resolved.status === 200
         ? ok("share link created and resolved")
         : bad(`share link: create ${share.status}, resolve ${resolved.status}`);
-      await api("DELETE", `/api/v1/shares/${share.json?.token}`);
+      await api("DELETE", `/api/v1/shares/${share.json?.token}`, { admin: true });
     }
 
     // ── 7. retention preview (read-only; the purge itself is never run live) ─

@@ -56,7 +56,12 @@ test: build
 coverage: build
 	$(BUN)x vitest run --coverage
 
+# The Playwright fixture directory is wiped first: `DATA_DIR=./data/e2e` persists settings, API
+# keys, saved views and share links between runs, so a suite that inherited them would be testing
+# the previous run rather than the product. The specs clean up after themselves as well — this is
+# the belt to that pair of braces.
 e2e: build
+	rm -rf data/e2e
 	PW_DISABLE_TS_ESM=1 $(BUN)x playwright test
 
 lint:

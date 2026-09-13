@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { onScreen, settled } from "./helpers";
 
 /**
  * The calls list's saved views, column picker, density toggle and date window.
@@ -13,21 +14,32 @@ import { expect, type Page, test } from "@playwright/test";
  */
 
 const PREFIX = "e2e-view-";
+const ADMIN_TOKEN = "e2e-admin-token";
 const NEGATIVE = "sentiment/Negative";
 
+/**
+ * Saved views are shared server-side state on a persistent `DATA_DIR`, so a run that leaves one
+ * behind changes what the next run is testing — starting with the "there is nothing to show yet"
+ * empty state.
+ *
+ * Authenticated as the operator rather than anonymously: another spec may have issued an API key,
+ * and key enforcement is sticky (D-CA-46), so an unauthenticated sweep would silently 401 and
+ * leave everything in place. Every view goes, not only this spec's, because `data/e2e` is a test
+ * fixture rather than anyone's data.
+ */
 async function sweepViews(request: import("@playwright/test").APIRequestContext) {
-  const res = await request.get("/api/v1/views");
+  const auth = { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } };
+  const res = await request.get("/api/v1/views", auth);
   if (!res.ok()) return;
   const body = (await res.json()) as { items: Array<{ id: string; name: string }> };
-  for (const v of body.items ?? []) {
-    if (v.name.startsWith(PREFIX)) await request.delete(`/api/v1/views/${v.id}`);
-  }
+  for (const v of body.items ?? []) await request.delete(`/api/v1/views/${v.id}`, auth);
 }
 
 /** Open the calls table and wait for the first page of rows. */
 async function openCalls(page: Page, query = "") {
   await page.goto(`/calls${query}`);
   await expect(page.getByTestId("calls-table")).toBeVisible({ timeout: 30_000 });
+  await settled(page);
 }
 
 const viewsButton = (page: Page) => page.getByRole("button", { name: /^Saved views/ });
@@ -53,7 +65,7 @@ test.describe("saved views", () => {
   }) => {
     const name = `${PREFIX}negative`;
     await openCalls(page, `?label=${encodeURIComponent(NEGATIVE)}`);
-    await expect(page.getByTestId("filter-chips")).toContainText("Negative");
+    await expect(onScreen(page, "filter-chips")).toContainText("Negative");
     const filtered = await page.getByTestId("calls-table").locator("tbody tr").count();
 
     await viewsButton(page).click();
@@ -70,7 +82,7 @@ test.describe("saved views", () => {
     await page.getByRole("button", { name: new RegExp(`^${name}$`) }).click();
 
     await expect(page).toHaveURL(/label=sentiment/);
-    await expect(page.getByTestId("filter-chips")).toContainText("Negative");
+    await expect(onScreen(page, "filter-chips")).toContainText("Negative");
     await expect
       .poll(async () => page.getByTestId("calls-table").locator("tbody tr").count(), { timeout: 20_000 })
       .toBe(filtered);
@@ -267,7 +279,12 @@ test.describe("the date window", () => {
 
   test("a date window drilled through from elsewhere arrives as removable chips", async ({ page }) => {
     await openCalls(page, "?from=2020-01-01T00:00:00.000Z&to=2035-01-01T00:00:00.000Z");
-    const chips = page.getByTestId("filter-chips");
+    // `.last()` because Next keeps the outgoing tree mounted for a few frames during an App Router
+    // transition, so a strict locator can briefly match the old copy as well as the new one. The
+    // rendered page holds exactly one chip row — confirmed by screenshot and by polling the DOM
+    // for three seconds — so this is the assertion tolerating a transition, not the screen being
+    // wrong. The last match is always the tree React is committing to.
+    const chips = page.getByTestId("filter-chips").last();
     await expect(chips).toContainText("From 1 Jan 2020");
     await expect(chips).toContainText("To 1 Jan 2035");
     await chips.getByRole("button", { name: /^Remove filter From/ }).click();

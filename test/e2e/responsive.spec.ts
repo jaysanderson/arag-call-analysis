@@ -10,11 +10,39 @@ import { expect, type Page, test } from "@playwright/test";
  * shell, so a single regression breaks all of them at once.
  */
 
-const SCREENS = ["/", "/calls", "/api", "/settings", "/taxonomy", "/upload", "/admin", "/welcome"];
+const SCREENS = [
+  "/",
+  "/calls",
+  "/api",
+  "/settings",
+  // Each settings tab lays out differently, and two of them were the ones that overflowed: a grid
+  // with no explicit column sizes to `max-content`, which is wider than the viewport as soon as a
+  // hint sentence is long. Listing the tabs is the only way that is caught.
+  "/settings?tab=branding",
+  "/settings?tab=limits",
+  "/settings?tab=connection",
+  "/settings?tab=retention",
+  "/settings?tab=api-keys",
+  "/settings?tab=shares",
+  "/settings?tab=about",
+  "/taxonomy",
+  "/upload",
+  "/upload/history",
+  "/admin",
+  "/admin/branding",
+  "/admin/security",
+  "/admin/jobs",
+  "/admin/audit",
+  "/welcome",
+];
 
 async function horizontalOverflow(page: Page, path: string): Promise<number> {
   await page.goto(path);
   await page.waitForLoadState("networkidle").catch(() => {});
+  // Several of these screens render their widest element — a data table, a segmented control —
+  // only after a client fetch resolves, so the measurement has to be taken after the layout has
+  // settled rather than at networkidle.
+  await page.waitForTimeout(1200);
   return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
@@ -60,5 +88,42 @@ test.describe("the shell at 390 px", () => {
     // Escape closes it, like every other overlay in the kit.
     await page.keyboard.press("Escape");
     await expect(page.locator(".arag-app")).not.toHaveAttribute("data-rail", "open");
+  });
+});
+
+test.describe("the operator console at 390 px", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("does not scroll sideways once signed in", async ({ page }) => {
+    // Measured anonymously above, these screens render the "not signed in" state, which is narrow
+    // and proves nothing about the tables and controls behind it — and /admin/audit's six-option
+    // filter was the widest thing in the product.
+    await page.goto("/admin/login");
+    const token = page.getByLabel("Admin token");
+    for (let i = 0; i < 25; i++) {
+      await token.fill("e2e-admin-token");
+      const button = page.getByRole("button", { name: "Sign in" });
+      // The button is disabled until React hydrates, and filling before that leaves it empty.
+      if (await button.isEnabled()) {
+        await button.click();
+        break;
+      }
+      await page.waitForTimeout(200);
+    }
+    await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible({
+      timeout: 20_000,
+    });
+
+    for (const path of [
+      "/admin",
+      "/admin/audit",
+      "/admin/jobs",
+      "/admin/logs",
+      "/admin/usage",
+      "/settings?tab=api-keys",
+      "/taxonomy",
+    ]) {
+      expect(await horizontalOverflow(page, path), `${path} overflows`).toBeLessThanOrEqual(0);
+    }
   });
 });

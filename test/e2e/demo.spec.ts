@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { go, onScreen, settled, text } from "./helpers";
 
 /**
  * The product journey end to end: shell → dashboard → calls table → filters → workspace → ask →
@@ -8,7 +9,7 @@ import { expect, test } from "@playwright/test";
 
 test.describe("the workspace", () => {
   test("every screen sits in one shell with the Progress band and the left navigation", async ({ page }) => {
-    await page.goto("/");
+    await go(page, "/");
     await expect(page.getByTestId("powered-by-band")).toBeVisible();
     await expect(page.getByAltText("Progress Agentic RAG").first()).toBeVisible();
 
@@ -39,7 +40,7 @@ test.describe("the workspace", () => {
    * so the honest state of step 3 is "done" and the call to action is "See the analysis".
    */
   test("first-run onboarding reports real state and leads into the product", async ({ page }) => {
-    await page.goto("/welcome");
+    await go(page, "/welcome");
     await expect(page.getByRole("heading", { name: "Get started" })).toBeVisible();
 
     for (const step of ["connect", "taxonomy", "calls", "analysis"]) {
@@ -69,27 +70,30 @@ test.describe("the workspace", () => {
   });
 
   test("the dashboard aggregates live metrics and drills through to the calls table", async ({ page }) => {
-    await page.goto("/");
+    await go(page, "/");
     await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 
-    const strip = page.getByTestId("stat-strip");
+    const strip = onScreen(page, "stat-strip");
     await expect(strip).toBeVisible();
     await expect(strip).not.toContainText("NaN");
     await expect(strip.getByText("First-call resolution")).toBeVisible();
 
-    await expect(page.getByText("Calls by reason")).toBeVisible();
-    await expect(page.getByText("Sentiment mix")).toBeVisible();
+    await expect(text(page, "Calls by reason")).toBeVisible();
+    await expect(text(page, "Sentiment mix")).toBeVisible();
     // The per-agent breakdown is the "who is driving this" answer.
     await expect(page.getByRole("group", { name: "Break down by" })).toBeVisible();
 
     // Every stat tile is a drill-through into the filtered table, not a dead number.
     await strip.getByText("Complaint rate").click();
     await expect(page).toHaveURL(/\/calls\?label=disposition_flags/);
-    await expect(page.getByTestId("filter-chips")).toBeVisible();
+    // The click is a soft navigation, so wait for the transition to commit before asserting on the
+    // destination — otherwise the locator can match the dashboard's outgoing tree as well.
+    await settled(page);
+    await expect(onScreen(page, "filter-chips")).toBeVisible();
   });
 
   test("the calls list is a data table with search, facets, sorting and pagination", async ({ page }) => {
-    await page.goto("/calls");
+    await go(page, "/calls");
     await expect(page.getByRole("heading", { name: "Calls", exact: true })).toBeVisible();
 
     const table = page.getByTestId("calls-table");
@@ -125,7 +129,7 @@ test.describe("the workspace", () => {
   });
 
   test("selecting rows reveals the bulk actions", async ({ page }) => {
-    await page.goto("/calls");
+    await go(page, "/calls");
     const table = page.getByTestId("calls-table");
     await expect(table).toBeVisible({ timeout: 30_000 });
 
@@ -145,21 +149,21 @@ test.describe("the workspace", () => {
   });
 
   test("browse mode keeps the category rails", async ({ page }) => {
-    await page.goto("/calls?mode=browse");
+    await go(page, "/calls?mode=browse");
     await expect(page.getByRole("group", { name: "View mode" })).toBeVisible();
     await expect(page.locator('a[href^="/calls/"]').first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("link", { name: /See all/ }).first()).toBeVisible();
   });
 
   test("search finds a call by what was said in it", async ({ page }) => {
-    await page.goto("/calls");
-    await page.getByLabel("Search transcripts").fill("premium");
+    await go(page, "/calls");
+    await page.getByLabel("Search transcripts").last().fill("premium");
     await expect(page).toHaveURL(/q=premium/, { timeout: 20_000 });
     await expect(page.locator('a[href^="/calls/"]').first()).toBeVisible({ timeout: 20_000 });
   });
 
   test("the call workspace shows the moments track, transcript and inspector", async ({ page }) => {
-    await page.goto("/calls");
+    await go(page, "/calls");
     await page.locator('a[href^="/calls/"]').first().click();
 
     await expect(page.getByRole("heading", { name: "Transcript" })).toBeVisible();
@@ -187,7 +191,7 @@ test.describe("the workspace", () => {
   test("the hero moment: ask a question, get a cited answer, click the citation to scrub", async ({
     page,
   }) => {
-    await page.goto("/calls");
+    await go(page, "/calls");
     await page.locator('a[href^="/calls/"]').first().click();
     const inspector = page.getByRole("complementary", { name: "Call inspector" });
     await inspector.getByRole("tab", { name: "Ask" }).click();
@@ -209,7 +213,7 @@ test.describe("the workspace", () => {
   });
 
   test("a moment chip filters the transcript", async ({ page }) => {
-    await page.goto("/calls");
+    await go(page, "/calls");
     await page.locator('a[href^="/calls/"]').first().click();
     const transcript = page.getByTestId("transcript");
     const count = transcript.getByText(/\d+ of \d+ blocks|\d+ blocks/).first();
@@ -227,20 +231,20 @@ test.describe("the workspace", () => {
     expect(created.status()).toBe(201);
     const share = await created.json();
 
-    await page.goto(share.url);
-    await expect(page.getByText(/shared, read-only copy/)).toBeVisible();
+    await go(page, share.url);
+    await expect(page.getByText(/shared, read-only copy/).locator("visible=true")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Transcript" })).toBeVisible();
     // Read-only means no write affordances at all.
     await expect(page.getByRole("button", { name: "Share" })).toHaveCount(0);
     await expect(page.getByRole("tab", { name: "Ask" })).toHaveCount(0);
 
     await request.delete(`/api/v1/shares/${share.token}`);
-    await page.goto(share.url);
+    await go(page, share.url);
     await expect(page.getByRole("heading", { name: "Call not found" })).toBeVisible();
   });
 
   test("upload offers a dropzone, a metadata form and a progress stepper", async ({ page }) => {
-    await page.goto("/upload");
+    await go(page, "/upload");
     await expect(page.getByRole("heading", { name: "Upload a call" })).toBeVisible();
     await expect(page.getByTestId("upload-stepper")).toBeVisible();
     await expect(page.getByText("Drop a recording or transcript here")).toBeVisible();
@@ -251,7 +255,7 @@ test.describe("the workspace", () => {
   });
 
   test("agents and taxonomy report what is actually provisioned", async ({ page }) => {
-    await page.goto("/taxonomy");
+    await go(page, "/taxonomy");
     await expect(page.getByRole("heading", { name: "Agents & Taxonomy" })).toBeVisible();
     const labelsets = page.getByTestId("labelsets-table");
     await expect(labelsets).toBeVisible({ timeout: 20_000 });
@@ -268,7 +272,7 @@ test.describe("the workspace", () => {
   });
 
   test("settings explain the connection, the branding and the limits", async ({ page }) => {
-    await page.goto("/settings");
+    await go(page, "/settings");
     await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Knowledge Box" })).toBeVisible();
     await expect(page.getByText("Sample data").first()).toBeVisible();
@@ -297,17 +301,17 @@ test.describe("the workspace", () => {
     expect(spec.openapi).toBe("3.1.0");
     expect(spec.info.title).toBe("Call Analysis API");
 
-    await page.goto("/api/v1/docs");
+    await go(page, "/api/v1/docs");
     await expect(page).toHaveTitle(/API reference/);
   });
 
   test("a not-found call renders an empty state, not a stack trace", async ({ page }) => {
-    await page.goto("/calls/definitely-not-a-real-id");
+    await go(page, "/calls/definitely-not-a-real-id");
     await expect(page.getByRole("heading", { name: "Call not found" })).toBeVisible();
   });
 
   test("a search that matches nothing explains what search covers", async ({ page }) => {
-    await page.goto("/calls?q=zzzzznotarealtranscriptphrase");
+    await go(page, "/calls?q=zzzzznotarealtranscriptphrase");
     const empty = page.getByTestId("empty-state");
     await expect(empty).toBeVisible({ timeout: 20_000 });
     // A fruitless search gets search advice, not generic filter advice.

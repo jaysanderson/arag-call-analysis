@@ -582,13 +582,14 @@ Auth: AdminToken
 
 ### `DELETE /api/v1/api-keys/{id}`
 
-**Revoke an API key** — Revokes rather than deletes: the record of a key that once had access, and when it was last used, is exactly what an incident review needs.
+**Revoke an API key** — Revokes rather than deletes: the record of a key that once had access, and when it was last used, is exactly what an incident review needs. `purge=true` removes the row as well — which destroys that record, and is also the only way to reopen an API that keys have closed, because enforcement is sticky once a deployment has ever had a key.
 
 Parameters:
 
 | Name | In | Type | Required | Description |
 |---|---|---|---|---|
 | `id` | path | string | yes |  |
+| `purge` | query | boolean |  | Also delete the record, reopening the API if this was the last key. |
 
 Responses:
 
@@ -1760,6 +1761,7 @@ A patch for one settings section. Only the keys present are changed; the rest of
 | `lastUsedISO` | string |  | Recorded at most once a minute per key. |
 | `revoked` | boolean | yes |  |
 | `fromEnv` | boolean | yes | Imported from the `API_KEYS` seed. |
+| `purged` | boolean |  | Present on a purge: the record was deleted too. |
 | `createdBy` | string |  |  |
 
 ### ApiKeyList

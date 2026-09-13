@@ -142,4 +142,20 @@ test.describe("white label", () => {
     await expect(page.getByText(BRAND.BRAND_PRODUCT_NAME).first()).toBeVisible();
     await expect(page.getByText("hidden")).toBeVisible();
   });
+
+  test("a white-labelled deployment still has navigation on a phone", async ({ page }) => {
+    // `BRAND_POWERED_BY=0` removes the Progress band, and the drawer trigger used to live only
+    // inside it: below 900px that left seven nav links with nothing to open them. The trigger has
+    // to survive the band's removal, and there must be exactly one of it either way.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${baseUrl}/calls`);
+    await expect(page.getByTestId("powered-by-band")).toHaveCount(0);
+
+    const toggle = page.getByRole("button", { name: "Open navigation" });
+    await expect(toggle).toHaveCount(1);
+    await toggle.click();
+    await expect(page.getByTestId("app-sidebar").getByRole("link", { name: "Dashboard" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".arag-app")).not.toHaveAttribute("data-rail", "open");
+  });
 });

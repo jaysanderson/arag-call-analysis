@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { onScreen, settled } from "./helpers";
 
 /**
  * The Settings area: every tab, and — the point of the whole screen — that an edit persists and
@@ -47,6 +48,7 @@ async function openTab(page: Page, tab: string): Promise<void> {
   await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible({
     timeout: 20_000,
   });
+  await settled(page);
 }
 
 /**
@@ -60,9 +62,13 @@ async function openTab(page: Page, tab: string): Promise<void> {
 async function revokeAllApiKeys(page: Page): Promise<void> {
   const res = await page.request.get("/api/v1/api-keys", AS_OPERATOR);
   expect(res.ok(), await res.text()).toBeTruthy();
-  const body = (await res.json()) as { items: Array<{ id: string; revoked: boolean }> };
-  for (const key of body.items.filter((k) => !k.revoked)) {
-    await page.request.delete(`/api/v1/api-keys/${key.id}`, AS_OPERATOR);
+  const body = (await res.json()) as { items: Array<{ id: string }> };
+  // Purged, not merely revoked. Key enforcement is sticky once a deployment has ever had a key
+  // (D-CA-46), so a revoked row left behind here closes the API for every later test in every
+  // other spec — which is how the share-link journey started failing with a 401 it had nothing to
+  // do with. Removing the row is the documented way to reopen it.
+  for (const key of body.items) {
+    await page.request.delete(`/api/v1/api-keys/${key.id}?purge=true`, AS_OPERATOR);
   }
 }
 
@@ -73,6 +79,16 @@ async function resetSection(page: Page, section: string): Promise<void> {
 }
 
 test.describe("settings", () => {
+  // `DATA_DIR` persists between runs and between specs, and a surviving key row closes the API for
+  // everything after it — including specs that have nothing to do with keys. The sweep therefore
+  // runs after the suite as well as before the key test, because the run that leaves one behind is
+  // by definition the run that did not reach its own cleanup.
+  test.afterAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    await revokeAllApiKeys(page).catch(() => {});
+    await page.close();
+  });
+
   test("every tab is a route of its own, and names the endpoint that fed it", async ({ page }) => {
     await openTab(page, "connection");
     for (const label of [
@@ -91,17 +107,17 @@ test.describe("settings", () => {
 
     await page.getByRole("tab", { name: "Limits" }).click();
     await expect(page).toHaveURL(/tab=limits/);
-    await expect(page.getByTestId("api-meta")).toContainText("PUT /api/v1/settings/limits");
+    await expect(onScreen(page, "api-meta")).toContainText("PUT /api/v1/settings/limits");
 
     await page.getByRole("tab", { name: "Share links" }).click();
     await expect(page).toHaveURL(/tab=shares/);
-    await expect(page.getByTestId("api-meta")).toContainText("GET /api/v1/shares");
+    await expect(onScreen(page, "api-meta")).toContainText("GET /api/v1/shares");
   });
 
   test("a viewer who is not an operator sees the values read-only, with a way in", async ({ page }) => {
     await openTab(page, "branding");
-    await expect(page.getByTestId("read-only-notice")).toContainText("Sign in as an operator");
-    await expect(page.getByTestId("branding-name")).toBeDisabled();
+    await expect(onScreen(page, "read-only-notice")).toContainText("Sign in as an operator");
+    await expect(onScreen(page, "branding-name")).toBeDisabled();
     await expect(page.getByTestId("save-branding")).toHaveCount(0);
     await expect(
       page.getByTestId("read-only-notice").getByRole("link", { name: "Sign in as an operator" }),
@@ -261,9 +277,16 @@ test.describe("settings", () => {
       "Revoked",
     );
 
-    // With no active key left, the API is open again — which is how the rest of the suite runs.
-    const settings = await (await page.request.get("/api/v1/settings")).json();
+    // Revoking leaves no key that can authenticate — but it does NOT reopen the API, because
+    // enforcement is sticky once a deployment has ever had a key (D-CA-46). Reopening means
+    // purging the row, which the sweep below does.
+    const settings = await (await page.request.get("/api/v1/settings", AS_OPERATOR)).json();
     expect(settings.apiKeys.active).toBe(0);
+    expect(settings.apiKeys.configured).toBeGreaterThan(0);
+
+    await revokeAllApiKeys(page);
+    const reopened = await (await page.request.get("/api/v1/settings", AS_OPERATOR)).json();
+    expect(reopened.apiKeys.configured).toBe(0);
   });
 
   test("share links: the register lists, filters and revokes", async ({ page }) => {
